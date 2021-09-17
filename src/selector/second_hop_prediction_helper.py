@@ -10,7 +10,6 @@ def prediction_evaluate(args,
     all_count = 0
     new_para_result = {}
     for k, v in paragraph_results.items():
-        # TODO: delete try caught
         q_id, context_id = k.split('_')
         context_id = int(context_id)
         if q_id not in new_para_result:

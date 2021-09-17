@@ -19,3 +19,4 @@ python -u first_hop_selector.py \
     --save_model_step 50000 \
     --num_train_epochs 3.0
 echo "train first hop selector done!"
+echo "----------------------------------------------------"

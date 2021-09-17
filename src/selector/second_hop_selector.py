@@ -310,7 +310,7 @@ def run_train(args):
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
-    global_step = 0
+    global_steps = 0
     if not os.path.exists(args.feature_cache_path):
         os.makedirs(args.feature_cache_path)
     cached_train_features_file = "{}/selector_second_train_{}_{}_{}".format(args.feature_cache_path,
@@ -336,7 +336,6 @@ def run_train(args):
     max_train_data_size = 100000
     start_idxs = list(range(0, example_num, max_train_data_size))
     end_idxs = [x + max_train_data_size for x in start_idxs]
-    end_idxs[-1] = example_num
     end_idxs[-1] = example_num
     logger.info('{} examples and {} example file(s)'.format(example_num, start_idxs));
     random.shuffle(train_examples)
