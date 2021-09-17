@@ -1506,7 +1506,6 @@ class BertForQuestionAnsweringGraph(BertPreTrainedModel):
             return start_logits, end_logits,sent_logits
 
 
-
 class BertForQuestionAnsweringForward(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForQuestionAnsweringForward, self).__init__(config)
@@ -1526,7 +1525,7 @@ class BertForQuestionAnsweringForward(BertPreTrainedModel):
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent=nn.Linear(config.hidden_size,1)
+        self.sent = nn.Linear(config.hidden_size,1)
         self.init_weights()
 
     def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None,mask=None):
@@ -1639,7 +1638,7 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
         sequence_output=self.dropout(sequence_output)
         ones_mask = torch.ones_like(attention_mask).cuda()
         context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask=token_type_ids*attention_mask
+        ques_mask = token_type_ids*attention_mask
         coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
         # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
         # import pdb; pdb.set_trace()
@@ -1717,20 +1716,20 @@ class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
 
     def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None,mask=None):
         if len(input_ids.shape) < 2:
-            input_ids=input_ids.unsqueeze(0)
+            input_ids = input_ids.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
             if start_positions is not None and len(start_positions.shape)<2:
-                start_positions=start_positions.unsqueeze(0)
-                end_positions=end_positions.unsqueeze(0)
-                sent_mask=sent_mask.unsqueeze(0)
-                sent_lbs=sent_lbs.unsqueeze(0)
-                sent_weight=sent_weight.unsqueeze(0)
+                start_positions = start_positions.unsqueeze(0)
+                end_positions = end_positions.unsqueeze(0)
+                sent_mask = sent_mask.unsqueeze(0)
+                sent_lbs = sent_lbs.unsqueeze(0)
+                sent_weight = sent_weight.unsqueeze(0)
         sequence_output = self.bert(input_ids, attention_mask=attention_mask,token_type_ids=token_type_ids)[0]
-        sequence_output=self.dropout(sequence_output)
+        sequence_output = self.dropout(sequence_output)
         ones_mask = torch.ones_like(attention_mask).cuda()
         context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask=token_type_ids*attention_mask
+        ques_mask = token_type_ids*attention_mask
         coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
         # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
         # import pdb; pdb.set_trace()
