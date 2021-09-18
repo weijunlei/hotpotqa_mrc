@@ -26,14 +26,16 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
 logger = logging.getLogger(__name__)
 
 
-def dev_evaluate(args, model, tokenizer, n_gpu, device):
+def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelatedSentence'):
     dev_examples, dev_features, dev_dataloader = dev_feature_getter(args, tokenizer=tokenizer)
     model.eval()
     all_results = []
     total_loss = 0
     RawResult = collections.namedtuple("RawResult",
                                        ["unique_id", "logit"])
-
+    has_sentence_result = True
+    if model_name == 'BertForParagraphClassification':
+        has_sentence_result = False
     with torch.no_grad():
         for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Iteration")):
             d_example_indices = d_batch[-1]
@@ -52,13 +54,22 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device):
             for i, example_index in enumerate(d_example_indices):
                 # start_position = start_positions[i].detach().cpu().tolist()
                 # end_position = end_positions[i].detach().cpu().tolist()
-                dev_logit = dev_logits[i].detach().cpu().tolist()
+                if has_sentence_result:
+                    dev_logit = dev_logits[i].detach().cpu().tolist()
+                    dev_logit.reverse()
+                else:
+                    dev_logit = dev_logits[i].detach().cpu().tolist()
                 dev_feature = dev_features[example_index.item()]
                 unique_id = dev_feature.unique_id
                 all_results.append(RawResult(unique_id=unique_id,
                                              logit=dev_logit))
 
-    acc, prec, em, rec = write_predictions(args, dev_examples, dev_features, all_results)
+    acc, prec, em, rec = write_predictions(args,
+                                           dev_examples,
+                                           dev_features,
+                                           all_results,
+                                           is_training='train',
+                                           has_sentence_result=has_sentence_result)
     # pickle.dump(all_results, open('all_results.pkl', 'wb'))
     model.train()
     del dev_examples, dev_features, dev_dataloader
@@ -195,14 +206,15 @@ def train_iterator(args,
 
                 if (global_steps + 1) % 100 == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
                     logger.info(
-                        "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, start_idx, global_step, train_loss))
+                        "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, start_idx, global_steps, train_loss))
                     train_loss = 0
                 if (global_steps + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
                     acc, prec, em, rec, total_loss = dev_evaluate(args=args,
                                                                   model=model,
                                                                   tokenizer=tokenizer,
                                                                   n_gpu=n_gpu,
-                                                                  device=device)
+                                                                  device=device,
+                                                                  model_name=args.model_name)
                     logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
                     logger.info(
                         "acc: {} precision: {} em: {} recall: {} total loss: {}".format(acc, prec, em, rec, total_loss))
@@ -234,7 +246,12 @@ def train_iterator(args,
                     global_steps += 1
             del train_features, all_input_ids, all_input_mask, all_segment_ids, all_cls_label, all_cls_mask, all_cls_weight, train_data, train_dataloader
             gc.collect()
-    acc, prec, em, rec, total_loss = dev_evaluate(args=args, model=model, tokenizer=tokenizer, n_gpu=n_gpu, device=device)
+    acc, prec, em, rec, total_loss = dev_evaluate(args=args,
+                                                  model=model,
+                                                  tokenizer=tokenizer,
+                                                  n_gpu=n_gpu,
+                                                  device=device,
+                                                  model_name=args.model_name)
     logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
     logger.info("acc: {} precision: {} em: {} recall: {} total loss: {}".format(acc, prec, em, rec, total_loss))
 

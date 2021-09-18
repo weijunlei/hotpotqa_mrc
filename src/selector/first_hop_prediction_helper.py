@@ -155,8 +155,9 @@ def write_predictions(all_examples, all_features, all_results, is_training='trai
             paragraph_results[id] = paragraph_result
             sentence_results[id] = sentence_result
             labels[id] = sentence_all_labels
-            assert len(sentence_result) + overlap == mask1
-            assert len(sentence_all_labels) + overlap == mask1 + 1
+            if has_sentence_result:
+                assert len(sentence_result) + overlap == mask1
+                assert len(sentence_all_labels) + overlap == mask1 + 1
     if is_training == 'test':
         return 0, 0, 0, 0
     else:

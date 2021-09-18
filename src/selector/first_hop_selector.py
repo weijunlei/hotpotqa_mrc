@@ -126,16 +126,27 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
             dev_logits = torch.sigmoid(dev_logits)
             total_loss += dev_loss
             for i, example_index in enumerate(d_example_indices):
-                dev_logit = dev_logits[i].detach().cpu().tolist()
                 if model_name == 'BertForParagraphClassification':
                     dev_logit = dev_logits[i].detach().cpu().tolist()
                     dev_logit.reverse()
+                else:
+                    dev_logit = dev_logits[i].detach().cpu().tolist()
                 dev_feature = dev_features[example_index.item()]
                 unique_id = dev_feature.unique_id
                 all_results.append(RawResult(unique_id=unique_id,
                                              logit=dev_logit))
-
-    acc, prec, em, rec = write_predictions(dev_examples, dev_features, all_results)
+    if model_name == 'BertForParagraphClassification':
+        acc, prec, em, rec = write_predictions(dev_examples,
+                                               dev_features,
+                                               all_results,
+                                               is_training='train',
+                                               has_sentence_result=False)
+    else:
+        acc, prec, em, rec = write_predictions(dev_examples,
+                                               dev_features,
+                                               all_results,
+                                               is_training='train',
+                                               has_sentence_result=True)
     model.train()
     del dev_examples, dev_features, dev_dataloader
     gc.collect()
