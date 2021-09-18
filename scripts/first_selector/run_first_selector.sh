@@ -5,7 +5,7 @@ cd ../../src/selector
 python -u first_hop_selector.py \
     --bert_model bert-base-uncased \
     --over_write_result True \
-    --output_dir ../../data/checkpoints/selector/first_hop_related_paragraph_selector \
+    --output_dir ../../data/checkpoints/selector/first_hop_just_paragraph_selector \
     --feature_cache_path ../../data/cache/selector/first_hop_selector \
     --feature_cache_path ../data/cache/selector/first_hop_selector \
     --model_name BertForParagraphClassification \
