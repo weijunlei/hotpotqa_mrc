@@ -248,4 +248,5 @@ def reader_read_examples(input_file, related_paragraph_file, tokenizer, is_train
     print("fail num: {}".format(fail_count))
     print("diff num: {}".format(diff_num))
     print("get example num: {}".format(len(examples)))
+    import pdb; pdb.set_trace()
     return examples

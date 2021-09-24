@@ -22,20 +22,21 @@ from collections import Counter
 import string
 import gc
 
-from origin_reader_helper import HotpotQAReaderExample,\
-    HotpotQAInputFeatures,\
-    cut_sent,\
-    fix_span,\
-    find_nearest,\
-    _improve_answer_span,\
-    _check_is_max_context,\
-    get_final_text,\
-    _get_best_indexes,\
+from origin_reader_helper import HotpotQAReaderExample, \
+    HotpotQAInputFeatures, \
+    cut_sent, \
+    fix_span, \
+    find_nearest, \
+    _improve_answer_span, \
+    _check_is_max_context, \
+    get_final_text, \
+    _get_best_indexes, \
     _compute_softmax, \
     evaluate
 
 from origin_read_examples import reader_read_examples
 from origin_convert_example_to_features import convert_examples_to_features
+
 sys.path.append("../pretrain_model")
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
@@ -46,6 +47,7 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 
 def write_predictions(all_examples,
@@ -76,7 +78,8 @@ def write_predictions(all_examples,
             start_indexes = _get_best_indexes(result.start_logit, n_best_size=n_best_size)
             end_indexes = _get_best_indexes(result.end_logit, n_best_size=n_best_size)
             for sentence_logit_idx, sentence_logit in enumerate(result.sent_logit):
-                if feature.sentence_mask[sentence_logit_idx] == 1 and feature.token_is_max_context.get(sentence_logit_idx, False):
+                if feature.sentence_mask[sentence_logit_idx] == 1 and feature.token_is_max_context.get(
+                        sentence_logit_idx, False):
                     sentence_pred_logit[feature.token2origin_map[sentence_logit_idx]] = sentence_logit
             for start_index in start_indexes:
                 for end_index in end_indexes:
@@ -102,7 +105,8 @@ def write_predictions(all_examples,
                             end_index=end_index,
                             start_logit=result.start_logit[start_index],
                             end_logit=result.end_logit[end_index]))
-        sentence_pred_logit = [spl for ind_spl, spl in enumerate(sentence_pred_logit) if ind_spl in example.sentence_cls]
+        sentence_pred_logit = [spl for ind_spl, spl in enumerate(sentence_pred_logit) if
+                               ind_spl in example.sentence_cls]
         sp_preds = []
         new_sentence_idx = 0
         for fsm in example.full_sentences_mask:
@@ -162,9 +166,9 @@ def write_predictions(all_examples,
             )
         # 是否是判断句判断
         n_best_results.append(_NbestPrediction(start=1, end=1, text="yes", start_logit=result.start_logit[1],
-                                      end_logit=result.end_logit[1]))
+                                               end_logit=result.end_logit[1]))
         n_best_results.append(_NbestPrediction(start=2, end=2, text="no", start_logit=result.start_logit[2],
-                                      end_logit=result.end_logit[2]))
+                                               end_logit=result.end_logit[2]))
         # 对所有结果排序
         n_best_results = sorted(n_best_results, key=lambda x: (x.start_logit + x.end_logit), reverse=True)
         total_scores = []
@@ -222,7 +226,7 @@ def convert_examples2file(train_examples,
                     pickle.dump(train_features, writer)
                 logger.info("saving features done!")
         total_feature_num += len(train_features)
-    logger.info('train feature_num:', total_feature_num)
+    logger.info('train feature_num: {}'.format(total_feature_num))
     return total_feature_num
 
 
@@ -276,10 +280,12 @@ def train_iterator(args,
                     loss = loss / args.gradient_accumulation_steps
 
                 if (global_steps + 1) % 100 == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
-                    logger.info("epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, start_idx, global_steps,
-                                                                                           train_loss))
+                    logger.info("epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, start_idx,
+                                                                                               global_steps,
+                                                                                               train_loss))
                     train_loss = 0
-                if (global_steps + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
+                if (global_steps + 1) % args.save_model_step == 0 and (
+                        step + 1) % args.gradient_accumulation_steps == 0:
                     all_results = []
                     total_loss = 0
                     # start dev evaluate
@@ -289,15 +295,17 @@ def train_iterator(args,
                                                                                     n_gpu=n_gpu,
                                                                                     device=device)
                     logger.info(
-                        "epoch={:3d}, data={:3d},step = {:6d},ans_f1={:4.8f},ans_em={:4.8f},sp_f1={:4.8f},sp_em={:4.8f},joint_f1={:4.8f},joint_em={:4.8f},max_f1={:4.8f},total_loss={:8.3f}" \
-                            .format(epoch_idx, start_idx, global_steps, ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em, max_f1,
+                        "epoch={:3d}, data={:3d},step = {:6d},ans_f1={:4.8f},ans_em={:4.8f},sp_f1={:4.8f},sp_em={:4.8f},joint_f1={:4.8f},joint_em={:4.8f},best_predict_f1={:4.8f},total_loss={:8.3f}" \
+                            .format(epoch_idx, start_idx, global_steps, ans_f1, ans_em, sp_f1, sp_em, joint_f1,
+                                    joint_em, best_predict_f1,
                                     total_loss))
-                    logger.info("ans_f1: {},ans_em: {},sp_f1: {},sp_em: {},joint_f1: {},joint_em: {}".format(ans_f1, ans_em,
-                                                                                                       sp_f1, sp_em,
-                                                                                                       joint_f1,
-                                                                                                       joint_em))
+                    logger.info(
+                        "ans_f1: {},ans_em: {},sp_f1: {},sp_em: {},joint_f1: {},joint_em: {}".format(ans_f1, ans_em,
+                                                                                                     sp_f1, sp_em,
+                                                                                                     joint_f1,
+                                                                                                     joint_em))
                     if joint_f1 > best_predict_f1:
-                        max_f1 = joint_f1
+                        best_predict_f1 = joint_f1
                         model_to_save = model.module if hasattr(model,
                                                                 'module') else model  # Only save the model it-self
                         output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
@@ -333,12 +341,12 @@ def train_iterator(args,
                                                                     tokenizer=tokenizer,
                                                                     n_gpu=n_gpu,
                                                                     device=device)
-    logging(
-        "epoch={:3d}, data={:3d},step = {:6d},ans_f1={:4.8f},ans_em={:4.8f},sp_f1={:4.8f},sp_em={:4.8f},joint_f1={:4.8f},joint_em={:4.8f},max_f1={:4.8f},total_loss={:8.3f}" \
-            .format(epoch_idx, start_idx, global_steps, ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em, max_f1,
-                    total_loss), args)
-    if joint_f1 >= max_f1:
-        max_f1 = joint_f1
+    logger.info(
+        "step = {:6d},ans_f1={:4.8f},ans_em={:4.8f},sp_f1={:4.8f},sp_em={:4.8f},joint_f1={:4.8f},joint_em={:4.8f},best_predict_f1={:4.8f},total_loss={:8.3f}" \
+            .format(global_steps, ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em, best_predict_f1,
+                    total_loss))
+    if joint_f1 >= best_predict_f1:
+        best_predict_f1 = joint_f1
         model_to_save = model.module if hasattr(model,
                                                 'module') else model  # Only save the model it-self
         output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
@@ -393,8 +401,8 @@ def run_train(args):
     # Prepare model
     models_dict = {
         # 'BertForQuestionAnsweringGraph': BertForQuestionAnsweringGraph,
-            'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
-            'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention, }
+        'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
+        'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention, }
     model = models_dict[args.model_name].from_pretrained(args.bert_model)
 
     if args.fp16:
@@ -431,7 +439,8 @@ def run_train(args):
         args.feature_suffix)
     model.train()
     train_examples = reader_read_examples(
-        input_file=args.train_file, related_paragraph_file=args.train_filter_file, tokenizer=tokenizer, is_training='train')
+        input_file=args.train_file, related_paragraph_file=args.train_filter_file, tokenizer=tokenizer,
+        is_training='train')
     example_num = len(train_examples)
     logger.info('train example_num: {}'.format(example_num))
     max_train_data_size = 100000
@@ -473,6 +482,15 @@ def run_train(args):
                              lr=args.learning_rate,
                              warmup=args.warmup_proportion,
                              t_total=num_train_optimization_steps)
+    train_iterator(args,
+                   start_idxs,
+                   cached_train_features_file,
+                   tokenizer,
+                   n_gpu,
+                   model,
+                   device,
+                   optimizer,
+                   num_train_optimization_steps)
 
 
 def dev_evaluate(args, model, tokenizer, n_gpu, device):
@@ -542,10 +560,10 @@ def dev_feature_getter(args, tokenizer):
         os.makedirs(args.feature_cache_path)
     # TODO: check suffix
     dev_feature_file = '{}/reader_dev_{}_{}_{}_{}'.format(args.feature_cache_path,
-                                                              list(filter(None, args.bert_model.split('/'))).pop(),
-                                                              str(args.max_seq_length),
-                                                              str(args.doc_stride),
-                                                              str(args.feature_suffix))
+                                                          list(filter(None, args.bert_model.split('/'))).pop(),
+                                                          str(args.max_seq_length),
+                                                          str(args.doc_stride),
+                                                          str(args.feature_suffix))
     if os.path.exists(dev_feature_file) and args.use_file_cache:
         with open(dev_feature_file, "rb") as dev_f:
             dev_features = pickle.load(dev_f)
@@ -594,22 +612,23 @@ if __name__ == '__main__':
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
                              "bert-base-multilingual-cased, bert-base-chinese.")
-    parser.add_argument("--output_dir", default='../checkpoints/qa_base_20210607_coattention_v2', type=str,
+    parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20210923_coattention', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
     parser.add_argument("--model_name", type=str, default='BertForQuestionAnsweringCoAttention',
                         help="The output directory where the model checkpoints and predictions will be written.")
 
     ## Other parameters
-    parser.add_argument("--train_file", default='../data/hotpot_data/hotpot_train_labeled_data_v2.json', type=str,
+    parser.add_argument("--train_file", default='../../data/hotpot_data/hotpot_train_labeled_data_v3.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--dev_file", default='../data/hotpot_data/hotpot_dev_labeled_data_v2.json', type=str,
+    parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_distractor_v1.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--train_filter_file", default='../data/selector/second_hop_result/train_related.json', type=str,
+    parser.add_argument("--train_filter_file", default='../../data/selector/second_hop_related_paragraph_result/train_related.json',
+                        type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--dev_filter_file", default='../data/selector/second_hop_result/dev_related.json', type=str,
+    parser.add_argument("--dev_filter_file", default='../../data/selector/second_hop_related_paragraph_result/dev_related.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--use_file_cache", dest='use_file_cache', action='store_true', help="use cache file or not")
-    parser.add_argument("--feature_cache_path", default="../data/cache/reader_cache_0607_coattention")
+    parser.add_argument("--feature_cache_path", default="../../data/cache/qa_base_20210923_coattention")
     parser.add_argument("--train_graph_file", default=None, type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--dev_graph_file", default=None, type=str,
@@ -664,11 +683,3 @@ if __name__ == '__main__':
                         help="The proportion of the validation set")
     args = parser.parse_args()
     run_train(args=args)
-
-
-
-
-
-
-
-

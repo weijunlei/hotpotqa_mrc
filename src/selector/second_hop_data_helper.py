@@ -77,6 +77,9 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
     get_qas_id = {}
     for example_index, example in enumerate(tqdm(examples, desc="convert examples to features...")):
         query_tokens = tokenizer.tokenize(example.question_tokens)
+        # 当query+第一段结果长度大于512时的处理方法
+        if len(query_tokens) >= 400:
+            query_tokens = query_tokens[:300]
         # special tokens ['CLS'] ['SEP'] ['SEP']
         max_context_length = max_seq_length - len(query_tokens) - 3
         cur_context_length = 0
@@ -119,14 +122,17 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
                         roll_back = 2
                     elif pre_sent1_length + len(sentence_tokens) + 1 <= max_context_length:
                         roll_back = 1
-                elif not pre_sent1_length and pre_sent1_length + len(sentence_tokens) + 1 <= max_context_length:
+                elif pre_sent1_length is not None and pre_sent1_length + len(sentence_tokens) + 1 <= max_context_length:
                     roll_back = 1
                 sent_idx -= roll_back
                 # 判断是否有支撑句，若无则新判别为非支撑段落
                 real_related = int(bool(sum(cls_label) - cls_label[0]))
                 if real_related != cls_label[0]:
                     cls_label[0] = real_related
-                assert len(cls_mask) == max_seq_length
+                try:
+                    assert len(cls_mask) == max_seq_length
+                except Exception as e:
+                    import pdb; pdb.set_trace()
                 assert len(cls_label) == max_seq_length
                 assert len(cls_weight) == max_seq_length
                 assert len(input_ids) == max_seq_length

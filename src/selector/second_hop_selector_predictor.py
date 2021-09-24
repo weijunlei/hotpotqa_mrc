@@ -242,6 +242,7 @@ def run_predict(args):
                 break
 
     for start_idx in range(len(start_idxs)):
+        logger.info("start idx: {} all idx length: {}".format(start_idx, len(start_idxs)))
         truly_examples = dev_examples[start_idxs[start_idx]: end_idxs[start_idx]]
         truly_features = convert_examples_to_second_features(
             examples=truly_examples,

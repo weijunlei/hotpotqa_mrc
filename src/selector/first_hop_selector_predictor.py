@@ -212,15 +212,13 @@ def run_predict(args):
     total = 0
     max_len = 0
 
-    has_sentence_result = False
+    has_sentence_result = True
 
     if args.model_name == 'BertForParagraphClassification':
-        has_sentence_result = True
+        has_sentence_result = False
 
     for idx in range(len(start_idxs)):
         logger.info("predict idx: {} all length: {}".format(idx, len(start_idxs)))
-        if idx == 1:
-            break
         truly_examples = dev_examples[start_idxs[idx]: end_idxs[idx]]
         truly_features = convert_examples_to_features(
             examples=truly_examples,

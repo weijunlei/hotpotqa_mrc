@@ -1201,11 +1201,11 @@ class BertForParagraphClassification(BertPreTrainedModel):
 
         cls_output = outputs[1]
         cls_output = self.dropout(cls_output)
-        # 选择第一个标记结果
-        cls_label = torch.index_select(cls_label, dim=1, index=torch.tensor([0, ]).cuda())
         logits = self.classifier(cls_output).squeeze(-1)
         if cls_label is None:
             return logits
+        # 选择第一个标记结果
+        cls_label = torch.index_select(cls_label, dim=1, index=torch.tensor([0, ]).cuda())
         loss_fct = CrossEntropyLoss()
         loss = loss_fct(logits.view(-1, self.config.num_labels), cls_label.view(-1))
         return loss, logits  # (loss), scores, (hidden_states), (attentions)
@@ -1768,8 +1768,8 @@ class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
-            total_loss=ans_loss+0.2*sent_loss
-            return total_loss,start_logits,end_logits,sent_logits
+            total_loss = ans_loss + 0.2 * sent_loss
+            return total_loss, start_logits, end_logits, sent_logits
         else:
             # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
             # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
@@ -2237,15 +2237,15 @@ class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
-            total_loss=ans_loss+0.2*sent_loss
-            return total_loss,start_logits,end_logits,sent_logits
+            total_loss = ans_loss + 0.2 * sent_loss
+            return total_loss, start_logits, end_logits, sent_logits
         else:
             # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
             # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
             start_logits = nn.Softmax(dim=-1)(start_logits)
             end_logits = nn.Softmax(dim=-1)(end_logits)
             sent_logits=torch.sigmoid(sent_logits)
-            return start_logits, end_logits,sent_logits
+            return start_logits, end_logits, sent_logits
 
 
 class BertForQuestionAnsweringTransformer(BertPreTrainedModel):
@@ -2256,8 +2256,6 @@ class BertForQuestionAnsweringTransformer(BertPreTrainedModel):
         # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
 
         self.coatt1=CoattentionModel(config)
-        # self.coatt2 = CoattentionModel(config)
-        # self.coatt3 = CoattentionModel(config)
 
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)

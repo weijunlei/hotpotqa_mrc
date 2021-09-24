@@ -13,6 +13,7 @@ def convert_examples_to_features(examples,
     """ 将实例类转化为模型可处理输入 """
     unique_id = 1000000000
     features = []
+    import pdb; pdb.set_trace()
     if graph_file is not None:
         full_graph = json.load(open(graph_file, 'r'))
     for example_index, example in enumerate(examples):
@@ -134,4 +135,5 @@ def convert_examples_to_features(examples,
                 )
             )
             unique_id += 1
+    import pdb; pdb.set_trace()
     return features
