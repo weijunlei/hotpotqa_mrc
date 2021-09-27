@@ -748,8 +748,8 @@ class BertModel(BertPreTrainedModel):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         # TODO: 将torch.nn.DataParallel 改为 DDP模式而不是直接改类型
-        # extended_attention_mask = extended_attention_mask.to(dtype=torch.float32)
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=torch.float32)
+        # extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
@@ -1252,7 +1252,6 @@ class BertForRelatedSentence(BertPreTrainedModel):
         return loss1, logits
 
 
-
 class BertCoattention(nn.Module):
     def __init__(self, config):
         super(BertCoattention, self).__init__()
@@ -1346,8 +1345,8 @@ class CoattentionModel(BertPreTrainedModel):
         # pooled_output = self.pooler(encoded_layer)
         return  encoded_layer
 
+
 class BertForQuestionAnsweringGraph(BertPreTrainedModel):
-    #不expand可以吗 mask应该乘还是加
     def __init__(self, config):
         super(BertForQuestionAnsweringGraph, self).__init__(config)
         self.bert = BertModel(config)
@@ -1512,58 +1511,26 @@ class BertForQuestionAnsweringForward(BertPreTrainedModel):
         self.bert = BertModel(config)
         # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
 
-        # self.Wq3_1 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        # self.Wq3_2 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        # # self.Wq4_1 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # # self.Wq4_2 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # self.Wq5_1 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # self.Wq5_2 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # self.coatt1=CoattentionModel(config)
-        # # self.coatt2 = CoattentionModel(config)
-        # self.coatt3 = CoattentionModel(config)
-
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.sent = nn.Linear(config.hidden_size,1)
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None,mask=None):
+    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None, sent_mask=None, sent_lbs=None, sent_weight=None):
         if len(input_ids.shape) < 2:
             input_ids=input_ids.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
             if start_positions is not None and len(start_positions.shape)<2:
-                start_positions=start_positions.unsqueeze(0)
-                end_positions=end_positions.unsqueeze(0)
-                sent_mask=sent_mask.unsqueeze(0)
-                sent_lbs=sent_lbs.unsqueeze(0)
-                sent_weight=sent_weight.unsqueeze(0)
-        sequence_output = self.bert(input_ids, attention_mask=attention_mask,token_type_ids=token_type_ids)[0]
-        # sequence_output=self.dropout(sequence_output)
-        # ones_mask = torch.ones_like(attention_mask).cuda()
-        # context_mask = (ones_mask - token_type_ids) * attention_mask
-        # ques_mask=token_type_ids*attention_mask
-        # coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
-        # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
-        # s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
-        # s1=self.Wq3_1(torch.cat([s1, sequence_output], dim=-1))*context_mask.unsqueeze(-1)+ \
-        #    self.Wq3_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1)+sequence_output
-        # s2 = self.coatt1(s1, s1, coattention_mask)
-        # # s2 = self.Wq4_1(torch.cat([s2, s1], dim=-1))*context_mask.unsqueeze(-1)+ \
-        # #    self.Wq4_2(torch.cat([s2, s1], dim=-1)) * ques_mask.unsqueeze(-1)+s1
-        # # # s3 = self.coatt2(s2, s2, coattention_mask)
-        # s2 = self.Wq5_1(torch.cat([s2, s1], dim=-1)) * context_mask.unsqueeze(-1) + \
-        #      self.Wq5_2(torch.cat([s2, s1], dim=-1)) * ques_mask.unsqueeze(-1) + s1
-        # s4 = self.coatt3(s2, s2, coattention_mask)
-
-
-
-        # extended_context_mask = (1.0 - context_mask) * -10000.0
-        start_logits=self.start_logits(sequence_output).squeeze(-1)#+extended_context_mask#*context_mask.float()
-        end_logits = self.end_logits(sequence_output).squeeze(-1)#+extended_context_mask#*context_mask.float()
-        # start_logits=self.start_logits(co1).squeeze(-1)
-        # end_logits = self.end_logits(co1).squeeze(-1)
+                start_positions = start_positions.unsqueeze(0)
+                end_positions = end_positions.unsqueeze(0)
+                sent_mask = sent_mask.unsqueeze(0)
+                sent_lbs = sent_lbs.unsqueeze(0)
+                sent_weight = sent_weight.unsqueeze(0)
+        sequence_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0]
+        start_logits = self.start_logits(sequence_output).squeeze(-1) #+extended_context_mask#*context_mask.float()
+        end_logits = self.end_logits(sequence_output).squeeze(-1) #+extended_context_mask#*context_mask.float()
 
         sent_logits = self.sent(sequence_output).squeeze(-1)# *context_mask.float()
         if len(sent_logits) > 1:
@@ -1590,15 +1557,15 @@ class BertForQuestionAnsweringForward(BertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
-            total_loss=ans_loss+0.2*sent_loss
-            return total_loss,start_logits,end_logits,sent_logits
+            total_loss = ans_loss+0.2*sent_loss
+            return total_loss, start_logits, end_logits, sent_logits
         else:
             # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
             # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
             start_logits = nn.Softmax(dim=-1)(start_logits)
             end_logits = nn.Softmax(dim=-1)(end_logits)
             sent_logits=torch.sigmoid(sent_logits)
-            return start_logits, end_logits,sent_logits
+            return start_logits, end_logits, sent_logits
 
 
 class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
@@ -1607,23 +1574,13 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
         self.bert = BertModel(config)
         # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
 
-        # self.Wq3_1 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        # self.Wq3_2 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        # # self.Wq4_1 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # # self.Wq4_2 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # self.Wq5_1 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # self.Wq5_2 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # self.coatt1=CoattentionModel(config)
-        # # self.coatt2 = CoattentionModel(config)
-        # self.coatt3 = CoattentionModel(config)
-
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent=nn.Linear(config.hidden_size,1)
+        self.sent = nn.Linear(config.hidden_size, 1)
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None,mask=None):
+    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None):
         if len(input_ids.shape) < 2:
             input_ids=input_ids.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
@@ -1640,26 +1597,9 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
         context_mask = (ones_mask - token_type_ids) * attention_mask
         ques_mask = token_type_ids*attention_mask
         coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
-        # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
-        # import pdb; pdb.set_trace()
-        # s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
-        # s1=self.Wq3_1(torch.cat([s1, sequence_output], dim=-1))*context_mask.unsqueeze(-1)+ \
-        #    self.Wq3_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1)+sequence_output
-        # s2 = self.coatt1(s1, s1, coattention_mask)
-        # # s2 = self.Wq4_1(torch.cat([s2, s1], dim=-1))*context_mask.unsqueeze(-1)+ \
-        # #    self.Wq4_2(torch.cat([s2, s1], dim=-1)) * ques_mask.unsqueeze(-1)+s1
-        # # # s3 = self.coatt2(s2, s2, coattention_mask)
-        # s2 = self.Wq5_1(torch.cat([s2, s1], dim=-1)) * context_mask.unsqueeze(-1) + \
-        #      self.Wq5_2(torch.cat([s2, s1], dim=-1)) * ques_mask.unsqueeze(-1) + s1
-        # s4 = self.coatt3(s2, s2, coattention_mask)
-
-
-
         extended_context_mask = (1.0 - context_mask) * -10000.0
         start_logits=self.start_logits(sequence_output).squeeze(-1)+extended_context_mask#*context_mask.float()
         end_logits = self.end_logits(sequence_output).squeeze(-1)+extended_context_mask#*context_mask.float()
-        # start_logits=self.start_logits(co1).squeeze(-1)
-        # end_logits = self.end_logits(co1).squeeze(-1)
 
         sent_logits = self.sent(sequence_output).squeeze(-1)*context_mask.float()
         if len(sent_logits) > 1:
@@ -1698,7 +1638,6 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
 
 
 class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
-    #不expand可以吗 mask应该乘还是加
     def __init__(self, config):
         super(BertForQuestionAnsweringCoAttention, self).__init__(config)
         self.bert = BertModel(config)
@@ -1706,15 +1645,15 @@ class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
 
         self.Wq3_1 = nn.Linear(2*config.hidden_size, config.hidden_size)
         self.Wq3_2 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        self.coatt1=CoattentionModel(config)
+        self.coatt1 = CoattentionModel(config)
 
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent=nn.Linear(config.hidden_size,1)
+        self.sent = nn.Linear(config.hidden_size,1)
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None,mask=None):
+    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None):
         if len(input_ids.shape) < 2:
             input_ids = input_ids.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
@@ -1731,17 +1670,13 @@ class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
         context_mask = (ones_mask - token_type_ids) * attention_mask
         ques_mask = token_type_ids*attention_mask
         coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
-        # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
-        # import pdb; pdb.set_trace()
         s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
-        s1=self.Wq3_1(torch.cat([s1, sequence_output], dim=-1))*context_mask.unsqueeze(-1)+ \
+        s1 = self.Wq3_1(torch.cat([s1, sequence_output], dim=-1))*context_mask.unsqueeze(-1)+ \
            self.Wq3_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1)+sequence_output
         s2 = self.coatt1(s1, s1, coattention_mask)
         extended_context_mask = (1.0 - context_mask) * -10000.0
         start_logits=self.start_logits(s2).squeeze(-1)+extended_context_mask#*context_mask.float()
         end_logits = self.end_logits(s2).squeeze(-1)+extended_context_mask#*context_mask.float()
-        # start_logits=self.start_logits(co1).squeeze(-1)
-        # end_logits = self.end_logits(co1).squeeze(-1)
 
         sent_logits = self.sent(s2).squeeze(-1)*context_mask.float()
         if len(sent_logits) > 1:
@@ -1771,12 +1706,10 @@ class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
             total_loss = ans_loss + 0.2 * sent_loss
             return total_loss, start_logits, end_logits, sent_logits
         else:
-            # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
-            # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
             start_logits = nn.Softmax(dim=-1)(start_logits)
             end_logits = nn.Softmax(dim=-1)(end_logits)
-            sent_logits=torch.sigmoid(sent_logits)
-            return start_logits, end_logits,sent_logits
+            sent_logits = torch.sigmoid(sent_logits)
+            return start_logits, end_logits, sent_logits
 
 
 class BertForQuestionAnsweringTwoCoAttention(BertPreTrainedModel):

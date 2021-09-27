@@ -3,16 +3,14 @@ import collections
 from origin_reader_helper import InputFeatures, _check_is_max_context
 
 
-def convert_examples_to_features(examples, tokenizer,graph, max_seq_length,
+def convert_examples_to_features(examples, tokenizer, max_seq_length,
                                  doc_stride,  is_training):
     """Loads a data file into a list of `InputBatch`s."""
-    # full_graph=json.load(open(graph,'r'))
     unique_id = 1000000000
     features = []
     for (example_index, example) in enumerate(examples):
         query_tokens = tokenizer.tokenize(example.question_text)
         all_doc_tokens = example.doc_tokens
-        # graph=full_graph[example.qas_id]
         # The -5 accounts for '<s>','yes','no', </s> and </s>
         max_tokens_for_doc = max_seq_length - len(query_tokens) - 5
 
@@ -34,8 +32,8 @@ def convert_examples_to_features(examples, tokenizer,graph, max_seq_length,
             tokens = ["[CLS]","yes","no"]
             token_to_orig_map = {}
             token_is_max_context = {}
-            segment_ids = [0,0,0]
-            matrix=[0,0,0]
+            segment_ids = [0, 0, 0]
+            matrix = [0, 0, 0]
 
             for i in range(doc_span.length):
                 split_token_index = doc_span.start + i
@@ -45,7 +43,7 @@ def convert_examples_to_features(examples, tokenizer,graph, max_seq_length,
                 tokens.append(all_doc_tokens[split_token_index])
                 matrix.append(example.subwords_to_matrix[split_token_index])
                 segment_ids.append(0)
-            content_len=len(tokens)
+            content_len = len(tokens)
             tokens.append("[SEP]")
             segment_ids.append(0)
             matrix.append(0)
@@ -73,43 +71,10 @@ def convert_examples_to_features(examples, tokenizer,graph, max_seq_length,
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
-            assert len(matrix)==max_seq_length
+            assert len(matrix) == max_seq_length
 
-            # mask = []
-            # last = -1
-            # for mi in range(max_seq_length):
-            #     if matrix[mi] == -1:
-            #         continue
-            #     if matrix[mi] == last:
-            #         mask[-1][-1] += 1
-            #         continue
-            #     last = matrix[mi]
-            #     cur_mask = []
-            #     prev = False
-            #     for mj in range(max_seq_length):
-            #         if matrix[mi] == -1 or matrix[mj] == -1:
-            #             prev = False
-            #             continue
-            #         if graph[matrix[mi]][matrix[mj]] == 1:
-            #             if not prev:
-            #                 cur_mask.append([mi, mj, 1])
-            #             else:
-            #                 cur_mask[-1][-1] += 1
-            #             prev = True
-            #         else:
-            #             prev = False
-            #     cur_mask.append(1)
-            #     mask.append(cur_mask)
-            new_mask = []
-            # for ma in mask:
-            #     for maa in ma:
-            #         if isinstance(maa, list):
-            #             new_mask.append(maa + [ma[-1]])
-            # while len(new_mask) < max_seq_length:
-            #     new_mask.append([0, 0, 0, 0])
-
-            start_position_f=None
-            end_position_f=None
+            start_position_f = None
+            end_position_f = None
             if is_training:
                 # For training, if our document chunk does not contain an annotation
                 # we throw it out, since there is nothing to predict.
@@ -122,13 +87,13 @@ def convert_examples_to_features(examples, tokenizer,graph, max_seq_length,
                     start_position_f=2
                     end_position_f=2
                 else:
-                    if example.start_position>=doc_start and example.end_position<=doc_end:
-                        start_position_f=example.start_position-doc_start+3
-                        end_position_f=example.end_position-doc_start+2
+                    if example.start_position >= doc_start and example.end_position <= doc_end:
+                        start_position_f = example.start_position-doc_start+3
+                        end_position_f = example.end_position-doc_start+2
                     else:
-                        start_position_f=0
-                        end_position_f=0
-                sent_mask=[0]*max_seq_length
+                        start_position_f = 0
+                        end_position_f = 0
+                sent_mask= [0] * max_seq_length
                 sent_lbs=[0]*max_seq_length
                 sent_weight=[0]*max_seq_length
                 for ind_cls,orig_cls in enumerate(example.sent_cls):
@@ -156,14 +121,13 @@ def convert_examples_to_features(examples, tokenizer,graph, max_seq_length,
                     sent_mask=sent_mask,
                     sent_lbs=sent_lbs,
                     sent_weight=sent_weight,
-                    mask=new_mask,
                     content_len=content_len
                     ))
             unique_id += 1
     return features
 
 
-def convert_dev_examples_to_features(examples, tokenizer,graph, max_seq_length,
+def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                                  doc_stride,  is_training):
     """Loads a data file into a list of `InputBatch`s."""
     # full_graph = json.load(open(graph, 'r'))
@@ -191,11 +155,11 @@ def convert_dev_examples_to_features(examples, tokenizer,graph, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
-            tokens = ["[CLS]","yes","no"]
+            tokens = ["[CLS]", "yes", "no"]
             token_to_orig_map = {}
             token_is_max_context = {}
-            segment_ids = [0,0,0]
-            matrix=[0,0,0]
+            segment_ids = [0, 0, 0]
+            matrix = [0, 0, 0]
 
             for i in range(doc_span.length):
                 split_token_index = doc_span.start + i
@@ -240,40 +204,6 @@ def convert_dev_examples_to_features(examples, tokenizer,graph, max_seq_length,
             for ind_cls, orig_cls in enumerate(example.sent_cls):
                 if orig_cls >= doc_start and orig_cls < doc_end:
                     sent_mask[orig_cls - doc_start + 3] = 1
-
-            mask=[]
-            # last=-1
-            # for mi in range(max_seq_length):
-            #     if matrix[mi]==-1:
-            #         continue
-            #     if matrix[mi]==last:
-            #         mask[-1][-1]+=1
-            #         continue
-            #     last=matrix[mi]
-            #     cur_mask=[]
-            #     prev = False
-            #     for mj in range(max_seq_length):
-            #         if matrix[mi] == -1 or matrix[mj] == -1:
-            #             prev=False
-            #             continue
-            #         if graph[matrix[mi]][matrix[mj]] == 1:
-            #             if not prev:
-            #                 cur_mask.append([mi, mj, 1])
-            #             else:
-            #                 cur_mask[-1][-1] += 1
-            #             prev=True
-            #         else:
-            #             prev=False
-            #     cur_mask.append(1)
-            #     mask.append(cur_mask)
-            new_mask=[]
-            # for ma in mask:
-            #     for maa in ma:
-            #         if isinstance(maa,list):
-            #             new_mask.append(maa+[ma[-1]])
-            # while len(new_mask) < max_seq_length:
-            #     new_mask.append([0,0,0,0])
-
             features.append(
                 InputFeatures(
                     unique_id=unique_id,
@@ -286,7 +216,6 @@ def convert_dev_examples_to_features(examples, tokenizer,graph, max_seq_length,
                     input_mask=input_mask,
                     segment_ids=segment_ids,
                     sent_mask=sent_mask,
-                    mask=new_mask,
                     content_len=content_len))
             unique_id += 1
     return features

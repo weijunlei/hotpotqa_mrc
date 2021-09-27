@@ -164,6 +164,7 @@ def fix_span(para, offsets, span):
     assert best_indices is not None
     return parastr[best_indices[0]:best_indices[1]], best_indices, best_dist
 
+
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
                          orig_answer_text):
     """Returns tokenized answer spans that better match the annotated answer."""
@@ -368,7 +369,8 @@ def _compute_softmax(scores):
         probs.append(score / total_sum)
     return probs
 
-def write_predictions_(tokenizer,all_examples, all_features, all_results, n_best_size=20,
+
+def write_predictions(tokenizer,all_examples, all_features, all_results, n_best_size=20,
                       max_answer_length=20, do_lower_case=True):
     """Write final predictions to the json file and log-odds of null if needed."""
     # logger.info("Writing predictions to: %s" % (output_prediction_file))
@@ -435,10 +437,6 @@ def write_predictions_(tokenizer,all_examples, all_features, all_results, n_best
                             end_index=end_index,
                             start_logit=result.start_logit[start_index],
                             end_logit=result.end_logit[end_index]))
-        # prelim_predictions = sorted(
-        #     prelim_predictions,
-        #     key=lambda x: (x.start_logit + x.end_logit),
-        #     reverse=True)
 
         sent_pred_logit=[spl for ind_spl,spl in enumerate(sent_pred_logit) if ind_spl in example.sent_cls]
         sp_pred=[]
@@ -539,8 +537,8 @@ def write_predictions_(tokenizer,all_examples, all_features, all_results, n_best
 
     return nbest_json,all_predictions,sp_preds
 
-def normalize_answer(s):
 
+def normalize_answer(s):
     def remove_articles(text):
         return re.sub(r'\b(a|an|the)\b', ' ', text)
 
@@ -593,6 +591,7 @@ def update_answer(metrics, prediction, gold):
     metrics['recall'] += recall
     return em, prec, recall
 
+
 def update_sp(prediction, gold):
     tp, fp, fn = 0, 0, 0
     for p,g in zip(prediction,gold):
@@ -617,6 +616,7 @@ def update_sp(prediction, gold):
     f1 = 2 * prec * recall / (prec + recall) if prec + recall > 0 else 0.0
     em = 1.0 if fp + fn == 0 else 0.0
     return f1,em, prec, recall
+
 
 def eval(prediction_file, gold_file):
     with open(prediction_file) as f:
@@ -660,11 +660,11 @@ def eval(prediction_file, gold_file):
     N = len(gold)
     for k in metrics.keys():
         metrics[k] /= N
-
     print(metrics)
 
-def evaluate(eval_examples, answer_dict,sp_preds):
 
+def evaluate(eval_examples, answer_dict,sp_preds):
+    """ 评估结果 """
     ans_f1 = ans_em = sp_f1=sp_em=joint_f1=joint_em=total = 0
     for ee in eval_examples:
         pred=answer_dict[ee.qas_id]['text']

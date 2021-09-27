@@ -148,7 +148,7 @@ def convert_example2file(examples,
                 is_training='train')
             logger.info("features gotten!")
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
-                logger.info("  Saving train features into cached file {}".format(cached_train_features_file))
+                logger.info("  Saving train features into cached file {}".format(new_train_cache_file))
                 logger.info("start saving features...")
                 with open(cached_train_features_file + '_' + str(idx), "wb") as writer:
                     pickle.dump(train_features, writer)

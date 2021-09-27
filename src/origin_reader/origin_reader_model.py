@@ -51,7 +51,8 @@ import gc
 
 from origin_read_examples import read_examples, read_dev_examples
 from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
-from origin_reader_helper import write_predictions_, evaluate
+from origin_reader_helper import write_predictions, evaluate
+from config import get_config
 sys.path.append("../pretrain_model")
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
@@ -61,94 +62,23 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
-os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 
 def logging(s, config, print_=True, log_=True):
     if print_:
         print(s)
     if log_:
-        with open( config.output_log, 'a+') as f_log:
+        with open(config.output_log, 'a+') as f_log:
             f_log.write(s + '\n')
 
 
 def run_train():
-    parser = argparse.ArgumentParser()
-
-    ## Required parameters
-    parser.add_argument("--bert_model", default='bert-base-cased', type=str,
-                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                             "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
-                             "bert-base-multilingual-cased, bert-base-chinese.")
-    parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20210923_origin_coattention_v2', type=str,
-                        help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--model_name", type=str, default='BertForQuestionAnsweringCoAttention',
-                        help="The output directory where the model checkpoints and predictions will be written.")
-
-    ## Other parameters
-    parser.add_argument("--train_file", default='../../data/hotpot_data/hotpot_train_labeled_data_v3.json', type=str,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_distractor_v1.json', type=str,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--train_filter_file", default='../../data/selector/second_hop_related_paragraph_result/train_related.json', type=str,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--dev_filter_file", default='../../data/selector/second_hop_related_paragraph_result/dev_related.json', type=str,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--train_graph_file", default='../../data/graph_base/train_graph.json', type=str,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--dev_graph_file", default='../../data/graph_base/dev_graph.json', type=str,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--feature_suffix", default='graph3oqsur', type=str,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--max_seq_length", default=512, type=int,
-                        help="The maximum total input sequence length after WordPiece tokenization. Sequences "
-                             "longer than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--doc_stride", default=256, type=int,
-                        help="When splitting up a long document into chunks, how much stride to take between chunks.")
-    parser.add_argument("--train_batch_size", default=16, type=int, help="Total batch size for training.")
-    parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
-    parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--num_train_epochs", default=5.0, type=float,
-                        help="Total number of training epochs to perform.")
-    parser.add_argument("--warmup_proportion", default=0.1, type=float,
-                        help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10%% "
-                             "of training.")
-    parser.add_argument("--verbose_logging", action='store_true',
-                        help="If true, all of the warnings related to data processing will be printed. "
-                             "A number of warnings are expected for a normal SQuAD evaluation.")
-    parser.add_argument("--output_log", type=str, default='gra36e-5_full_.txt', )
-    parser.add_argument("--no_cuda",
-                        action='store_true',
-                        help="Whether not to use CUDA when available")
-    parser.add_argument('--seed',
-                        type=int,
-                        default=42,
-                        help="random seed for initialization")
-    parser.add_argument('--gradient_accumulation_steps',
-                        type=int,
-                        default=1,
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")
-    parser.add_argument("--do_lower_case",
-                        action='store_true', default=True,
-                        help="Whether to lower case the input text. True for uncased models, False for cased models.")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
-    parser.add_argument('--fp16',
-                        action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--loss_scale',
-                        type=float, default=0,
-                        help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
-                             "0 (default value): dynamic loss scaling.\n"
-                             "Positive power of 2: static loss scaling value.\n")
-    parser.add_argument('--save_model_step',
-                        type=int, default=1000,
-                        help="The proportion of the validation set")
-    args = parser.parse_args()
-    #output_dir,train_file,max_seq_length,doc_stride,max_query_length,validate_proportion, train_batch_size,val_train_size,learning_rate,warmup_proportion,save_model_step
-
+    args = get_config()
+    # 配置随机数
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
@@ -167,9 +97,6 @@ def run_train():
 
     args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
     if n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
@@ -182,19 +109,19 @@ def run_train():
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    # preprocess_data
-
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
+    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
     train_examples = None
     num_train_optimization_steps = None
 
     # Prepare model
-    models={'BertForQuestionAnsweringGraph': BertForQuestionAnsweringGraph,
+    model_dict = {
             'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention,
             'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
-            'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention}
-    model = models[args.model_name].from_pretrained('bert-base-uncased')
+            'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
+            'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
+    }
+    model = model_dict[args.model_name].from_pretrained('bert-base-uncased')
 
     if args.fp16:
         model.half()
@@ -244,7 +171,6 @@ def run_train():
         dev_features = convert_dev_examples_to_features(
             examples=dev_examples,
             tokenizer=tokenizer,
-            graph=args.dev_graph_file,
             max_seq_length=args.max_seq_length,
             doc_stride=args.doc_stride,
             is_training=True)
@@ -257,7 +183,6 @@ def run_train():
     d_all_input_mask = torch.tensor([f.input_mask for f in dev_features], dtype=torch.long)
     d_all_segment_ids = torch.tensor([f.segment_ids for f in dev_features], dtype=torch.long)
     d_all_sent_mask = torch.tensor([f.sent_mask for f in dev_features], dtype=torch.long)
-    # d_all_mask = torch.tensor([f.mask for f in dev_features], dtype=torch.long)
     d_all_example_index = torch.arange(d_all_input_ids.size(0), dtype=torch.long)
     d_all_content_len = torch.tensor([f.content_len for f in dev_features], dtype=torch.long)
     dev_data = TensorDataset(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
@@ -269,23 +194,25 @@ def run_train():
     dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.val_batch_size)
 
     cached_train_features_file = args.train_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
-        list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride),args.feature_suffix)
+        list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride), args.feature_suffix)
     # cached_train_features_file_ = args.train_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
     #     list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride), 'shi')
     train_features = None
     model.train()
     train_examples = read_examples(
-        input_file=args.train_file,filter_file=args.train_filter_file, tokenizer=tokenizer,is_training=True)
+        input_file=args.train_file,
+        filter_file=args.train_filter_file,
+        tokenizer=tokenizer,
+        is_training=True)
     example_num = len(train_examples)
-    # example_num=86034#fake_train
     print('train example_num:', example_num)
-    start = list(range(0, example_num, 215000))
+    max_train_num = 215000
+    start = list(range(0, example_num, max_train_num))
     end = []
     for i in start:
-        end.append(i + 215000)
+        end.append(i + max_train_num)
     end[-1] = example_num
     print(len(start))
-    total_feature_num = 90001
     total_feature_num = 0
     random.shuffle(train_examples)
     for i in range(len(start)):
@@ -299,7 +226,6 @@ def run_train():
             train_features = convert_examples_to_features(
                 examples=train_examples_,
                 tokenizer=tokenizer,
-                graph=args.train_graph_file,
                 max_seq_length=args.max_seq_length,
                 doc_stride=args.doc_stride,
                 is_training=True)
@@ -334,8 +260,6 @@ def run_train():
                              lr=args.learning_rate,
                              warmup=args.warmup_proportion,
                              t_total=num_train_optimization_steps)
-    # RawResult = collections.namedtuple("RawResult",
-    #                                    ["unique_id", "start_pos", "end_pos", "start_logit", "end_logit"])
     RawResult = collections.namedtuple("RawResult",
                                        ["unique_id", "start_logit","end_logit","sent_logit"])
     max_f1 = 0
@@ -361,37 +285,30 @@ def run_train():
                 train_sampler = RandomSampler(train_data)
             else:
                 train_sampler = DistributedSampler(train_data)
-            train_dataloader = DataLoader(train_data, sampler=train_sampler,batch_size=args.train_batch_size)
+            train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
-                input_ids, input_mask, segment_ids,start_position,end_position, sent_mask,sent_lbs,sent_weight ,content_len = batch
-
-                # if len(masks.shape)!=3:
-                #     masks=masks.unsqueeze(0)
-                # bsz = input_ids.shape[0]
-                # real_masks=np.zeros((bsz,args.max_seq_length,args.max_seq_length))
-                # stop=torch.zeros((1,4)).long()
-                # for iter in range(bsz):
-                #     for indm in range(args.max_seq_length):
-                #         if torch.sum(stop.eq(masks[iter][indm])).item()==4:
-                #             break
-                #         real_masks[iter][masks[iter][indm][0].item():masks[iter][indm][0].item()+masks[iter][indm][-1].item(),masks[iter][indm][1].item():masks[iter][indm][1].item()+masks[iter][indm][-2].item()]=1
-                # real_masks=torch.from_numpy(real_masks).cuda()
-
-                loss, _, _, _ = model(input_ids, input_mask,segment_ids, start_positions=start_position,end_positions=end_position,
-                              sent_mask=sent_mask,sent_lbs=sent_lbs,sent_weight=sent_weight,mask=None)
+                input_ids, input_mask, segment_ids,start_position,end_position, sent_mask,sent_lbs,sent_weight,content_len = batch
+                loss, _, _, _ = model(input_ids,
+                                      input_mask,
+                                      segment_ids,
+                                      start_positions=start_position,
+                                      end_positions=end_position,
+                                      sent_mask=sent_mask,
+                                      sent_lbs=sent_lbs,
+                                      sent_weight=sent_weight)
                 if n_gpu > 1:
-                    loss = loss.sum() # mean() to average on multi-gpu.
-                logger.info("  step = %d, train_loss=%f", global_step, loss)
+                    loss = loss.sum()  # mean() to average on multi-gpu.
+                logger.info("step = %d, train_loss=%f", global_step, loss)
                 printloss += loss
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
 
-                if (global_step+1)%100==0 and (step + 1) % args.gradient_accumulation_steps == 0:
-                    logging("epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(ee,ind,global_step,printloss),args)
-                    printloss=0
-                if (global_step+1)%args.save_model_step==0 and (step + 1) % args.gradient_accumulation_steps == 0:
+                if (global_step+1) % 100 == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
+                    logging("epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(ee, ind, global_step, printloss), args)
+                    printloss = 0
+                if (global_step+1)%args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
                     model.eval()
                     all_results = []
                     total_loss = 0
@@ -405,20 +322,7 @@ def run_train():
                                 d_batch=d_batch[:-1]
                             d_all_input_ids, d_all_input_mask, d_all_segment_ids, \
                             d_all_cls_mask,d_all_content_len=d_batch
-                            d_real_masks = []
-                            # d_masks = d_all_mask.detach().cpu().tolist()
-                            # d_content_len = d_all_content_len.detach().cpu().tolist()
-                            # for indm,d_mask in enumerate(d_masks):
-                            #     d_real_mask = np.zeros((args.max_seq_length, args.max_seq_length))
-                            #     for ma in d_mask:
-                            #         # print(ma)
-                            #         if ma == [0, 0, 0, 0]:
-                            #             break
-                            #         d_real_mask[ma[0]: ma[0]+ ma[-1], ma[1]:ma[1] + ma[-2]] = 1
-                            #     # d_real_mask[0:d_content_len[indm], 0:3] = 1 - d_real_mask[0:d_content_len[indm], 0:3]
-                            #     d_real_masks.append(d_real_mask)
-                            # d_real_masks = torch.tensor(d_real_masks, dtype=torch.long).cuda()
-                            dev_start_logits,dev_end_logits,dev_sent_logits= model(d_all_input_ids,d_all_input_mask,d_all_segment_ids,sent_mask=d_all_cls_mask,mask=None)
+                            dev_start_logits, dev_end_logits,dev_sent_logits= model(d_all_input_ids, d_all_input_mask, d_all_segment_ids, sent_mask=d_all_cls_mask)
                             # total_loss += dev_loss
                             for i, example_index in enumerate(d_example_indices):
                                 # start_position = start_positions[i].detach().cpu().tolist()
@@ -430,8 +334,8 @@ def run_train():
                                 unique_id = dev_feature.unique_id
                                 all_results.append(RawResult(unique_id=unique_id,start_logit=dev_start_logit,end_logit=dev_end_logit,sent_logit=dev_sent_logit))
 
-                    _,preds,sp_pred = write_predictions_(tokenizer,dev_examples, dev_features, all_results)
-                    ans_f1,ans_em,sp_f1,sp_em,joint_f1,joint_em=evaluate(dev_examples,preds,sp_pred)
+                    _, preds, sp_pred = write_predictions(tokenizer,dev_examples, dev_features, all_results)
+                    ans_f1, ans_em, sp_f1, sp_em, joint_f1,joint_em=evaluate(dev_examples,preds,sp_pred)
                     # pickle.dump(all_results, open('all_results.pkl', 'wb'))
                     logging("epoch={:3d}, data={:3d},step = {:6d},ans_f1={:4.8f},ans_em={:4.8f},sp_f1={:4.8f},sp_em={:4.8f},joint_f1={:4.8f},joint_em={:4.8f},max_f1={:4.8f},total_loss={:8.3f}" \
                             .format(ee, ind, global_step,ans_f1,ans_em,sp_f1,sp_em,joint_f1,joint_em,max_f1,total_loss) ,args)
@@ -460,9 +364,11 @@ def run_train():
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
-            del train_features,all_input_ids,all_input_mask,all_segment_ids,all_start_position,all_end_position,all_sent_lbs,all_sent_mask,all_sent_weight,train_data,train_dataloader
+            # 内存清除
+            del train_features, all_input_ids, all_input_mask, all_segment_ids
+            del all_start_position, all_end_position, all_sent_lbs, all_sent_mask
+            del all_sent_weight, train_data, train_dataloader
             gc.collect()
-
 
 
 if __name__ == "__main__":
