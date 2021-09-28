@@ -12,11 +12,17 @@ def get_config():
     parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20210927_origin_forward', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
     parser.add_argument("--model_name", type=str, default='BertForQuestionAnsweringForward',
-                        help="The output directory where the model checkpoints and predictions will be written.")
-
-    ## Other parameters
+                        help="must be BertForQuestionAnsweringCoAttention"
+                             "\BertForQuestionAnsweringThreeCoAttention"
+                             "\BertForQuestionAnsweringThreeSameCoAttention"
+                             "\BertForQuestionAnsweringForward")
     parser.add_argument("--train_file", default='../../data/hotpot_data/hotpot_train_labeled_data_v3.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
+    # 设置是否重新写入结果
+    parser.add_argument("--overwrite_result", dest='overwrite_result', action='store_true')
+    parser.add_argument("--no-over_write_result", dest='overwrite_result', action='store_false')
+    parser.add_argument("--log_prefix", default="20210927_just_forward_log", type=str)
+    parser.add_argument("--log_path", default="../../log", type=str)
     parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_distractor_v1.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--train_filter_file",
@@ -75,5 +81,5 @@ def get_config():
     parser.add_argument('--save_model_step',
                         type=int, default=1000,
                         help="The proportion of the validation set")
-    args = parser.parse_args()
-    return args
+
+    return parser

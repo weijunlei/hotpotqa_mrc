@@ -36,11 +36,12 @@ from io import open
 import re
 import torch
 import numpy as np
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,Sampler,
+from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 import bisect
+
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
@@ -52,33 +53,186 @@ import gc
 from origin_read_examples import read_examples, read_dev_examples
 from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
 from origin_reader_helper import write_predictions, evaluate
+from lazy_dataloader import LazyLoadTensorDataset
 from config import get_config
+
 sys.path.append("../pretrain_model")
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
-from tokenization import (BasicTokenizer,BertTokenizer,whitespace_tokenize)
+from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
 
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+logger = None
 
 
-def logging(s, config, print_=True, log_=True):
-    if print_:
-        print(s)
-    if log_:
-        with open(config.output_log, 'a+') as f_log:
-            f_log.write(s + '\n')
+def logger_config(log_path, log_prefix='lwj'):
+    """
+    日志配置
+    :param log_path: 输出的日志路径
+    :param log_prefix: 记录中的日志前缀
+    :return:
+    """
+    logger = logging.getLogger(log_prefix)
+    logger.setLevel(level=logging.DEBUG)
+    handler = logging.FileHandler(log_path, encoding='UTF-8')
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    # console相当于控制台输出，handler文件输出。获取流句柄并设置日志级别，第二层过滤
+    console = logging.StreamHandler()
+    console.setLevel(logging.DEBUG)
+    # 为logger对象添加句柄
+    logger.addHandler(handler)
+    logger.addHandler(console)
+    return logger
+
+
+def get_dev_data(args, tokenizer, logger=None):
+    """ 获取验证集数据 """
+    dev_examples = read_dev_examples(
+        input_file=args.dev_file, filter_file=args.dev_filter_file, tokenizer=tokenizer, is_training=True)
+    logger.info('dev examples: {}'.format(len(dev_examples)))
+    dev_feature_file = args.dev_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
+        list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride),
+        args.feature_suffix)
+    if os.path.exists(dev_feature_file):
+        with open(dev_feature_file, "rb") as reader:
+            dev_features = pickle.load(reader)
+    else:
+        dev_features = convert_dev_examples_to_features(
+            examples=dev_examples,
+            tokenizer=tokenizer,
+            max_seq_length=args.max_seq_length,
+            doc_stride=args.doc_stride,
+            is_training=True)
+        if args.local_rank == -1 or torch.distributed.get_rank() == 0:
+            logger.info("  Saving dev features into cached file %s", dev_feature_file)
+            with open(dev_feature_file, "wb") as writer:
+                pickle.dump(dev_features, writer)
+    logger.info('dev feature_num: {}'.format(len(dev_features)))
+    # d_all_input_ids = torch.tensor([f.input_ids for f in dev_features], dtype=torch.long)
+    # d_all_input_mask = torch.tensor([f.input_mask for f in dev_features], dtype=torch.long)
+    # d_all_segment_ids = torch.tensor([f.segment_ids for f in dev_features], dtype=torch.long)
+    # d_all_sent_mask = torch.tensor([f.sent_mask for f in dev_features], dtype=torch.long)
+    # d_all_example_index = torch.arange(d_all_input_ids.size(0), dtype=torch.long)
+    # d_all_content_len = torch.tensor([f.content_len for f in dev_features], dtype=torch.long)
+    # dev_data = TensorDataset(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
+    #                          d_all_sent_mask, d_all_content_len, d_all_example_index)
+
+    dev_data = LazyLoadTensorDataset(dev_features, is_training=False)
+    if args.local_rank == -1:
+        dev_sampler = RandomSampler(dev_data)
+    else:
+        dev_sampler = DistributedSampler(dev_data)
+    dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.val_batch_size)
+    return dev_examples, dev_dataloader, dev_features
+
+
+def get_train_data(args, tokenizer, logger=None):
+    """ 获取训练数据 """
+    cached_train_features_file = '{}/train_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
+                                                                            args.bert_model.split('/')[-1],
+                                                                            str(args.max_seq_length),
+                                                                            str(args.doc_stride),
+                                                                            args.feature_suffix)
+    if not os.path.exists(args.feature_cache_path):
+        os.makedirs(args.feature_cache_path)
+    tmp_cache_file = cached_train_features_file + '_' + str(0)
+    if not os.path.exists(tmp_cache_file):
+        train_examples = read_examples(
+            input_file=args.train_file,
+            filter_file=args.train_filter_file,
+            tokenizer=tokenizer,
+            is_training=True)
+        # 当数据配置不变时可以设置为定值
+        example_num = len(train_examples) # 89899
+        random.shuffle(train_examples)
+    else:
+        example_num = 89541
+    logger.info("train example num: {}".format(example_num))
+    max_train_num = 200000
+    start_idxs = list(range(0, example_num, max_train_num))
+    end_idxs = [x + max_train_num for x in start_idxs]
+    end_idxs[-1] = example_num
+    total_feature_num = 0
+
+    for i in range(len(start_idxs)):
+        new_cache_file = cached_train_features_file + '_' + str(i)
+        if os.path.exists(new_cache_file):
+            with open(new_cache_file, "rb") as f:
+                train_features = pickle.load(f)
+        else:
+            train_examples_ = train_examples[start_idxs[i]: end_idxs[i]]
+            train_features = convert_examples_to_features(
+                examples=train_examples_,
+                tokenizer=tokenizer,
+                max_seq_length=args.max_seq_length,
+                doc_stride=args.doc_stride,
+                is_training=True)
+            if args.local_rank == -1 or torch.distributed.get_rank() == 0:
+                logger.info("Saving train features into cached file {}".format(cached_train_features_file))
+                with open(new_cache_file, "wb") as writer:
+                    pickle.dump(train_features, writer)
+        total_feature_num += len(train_features)
+    logger.info('train feature_num: {}'.format(total_feature_num))
+    return total_feature_num, start_idxs, cached_train_features_file
+
+
+def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, dev_examples):
+    """ 模型验证 """
+    model.eval()
+    all_results = []
+    RawResult = collections.namedtuple("RawResult",
+                                       ["unique_id", "start_logit", "end_logit", "sent_logit"])
+
+    with torch.no_grad():
+        for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Iteration")):
+            d_example_indices = d_batch[-1].squeeze()
+            if n_gpu == 1:
+                d_batch = tuple(
+                    t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
+            else:
+                d_batch = d_batch[:-1]
+            d_all_input_ids, d_all_input_mask, d_all_segment_ids, \
+            d_all_cls_mask, d_all_content_len = d_batch
+            dev_start_logits, dev_end_logits, dev_sent_logits = model(d_all_input_ids, d_all_input_mask,
+                                                                      d_all_segment_ids,
+                                                                      sent_mask=d_all_cls_mask)
+            for idx, example_index in enumerate(d_example_indices):
+                dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
+                dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
+                dev_sent_logit = dev_sent_logits[idx].detach().cpu().tolist()
+                dev_feature = dev_features[example_index.item()]
+                unique_id = dev_feature.unique_id
+                all_results.append(
+                    RawResult(unique_id=unique_id, start_logit=dev_start_logit, end_logit=dev_end_logit,
+                              sent_logit=dev_sent_logit))
+
+    _, preds, sp_pred = write_predictions(tokenizer, dev_examples, dev_features, all_results)
+    ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = evaluate(dev_examples, preds, sp_pred)
+    model.train()
+    return ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
 
 
 def run_train():
-    args = get_config()
-    # 配置随机数
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    parser = get_config()
+    args = parser.parse_args()
+    # 配置日志文件
+    if not os.path.exists(args.log_path):
+        os.makedirs(args.log_path)
+    log_path = os.path.join(args.log_path, 'log_{}_{}_{}_{}_{}_{}.log'.format(args.log_prefix,
+                                                                          args.bert_model.split('/')[-1],
+                                                                          args.output_dir.split('/')[-1],
+                                                                          args.train_batch_size,
+                                                                          args.max_seq_length,
+                                                                          args.doc_stride))
+    logger = logger_config(log_path=log_path, log_prefix='')
+    logger.info('-' * 15 + '所有配置' + '-' * 15)
+    logger.info("所有参数配置如下：")
+    for arg in vars(args):
+        logger.info('{}: {}'.format(arg, getattr(args, arg)))
+    logger.info('-' * 30)
+
+    # 分布式训练设置
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
@@ -94,17 +248,17 @@ def run_train():
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
             args.gradient_accumulation_steps))
-
-    args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
-
+    # 配置随机数
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
     if n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
-
-    if not args.train_file:
-        raise ValueError(
-            "If `do_train` is True, then `train_file` must be specified.")
-
-    if os.path.exists(args.output_dir) and os.listdir(args.output_dir):
+    # 梯度积累设置
+    args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
+    if not os.path.exists(args.train_file):
+        raise ValueError("train file not exists! please set train file!")
+    if not args.overwrite_result and os.path.exists(args.output_dir) and os.listdir(args.output_dir):
         raise ValueError("Output directory () already exists and is not empty.")
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -114,15 +268,15 @@ def run_train():
     train_examples = None
     num_train_optimization_steps = None
 
-    # Prepare model
+    # 自定义好的模型
     model_dict = {
-            'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention,
-            'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
-            'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
-            'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
+        'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention,
+        'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
+        'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
+        'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
     }
-    model = model_dict[args.model_name].from_pretrained('bert-base-uncased')
-
+    model = model_dict[args.model_name].from_pretrained(args.bert_model)
+    # 半精度和并行化使用设置
     if args.fp16:
         model.half()
     model.to(device)
@@ -137,13 +291,11 @@ def run_train():
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
 
-    # Prepare optimizer
+    # 参数配置
     param_optimizer = list(model.named_parameters())
-
     # hack to remove pooler, which is not used
     # thus it produce None grad that break apex
     param_optimizer = [n for n in param_optimizer if 'pooler' not in n[0]]
-
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
@@ -152,89 +304,9 @@ def run_train():
 
     global_step = 0
 
-    dev_examples = read_dev_examples(
-        input_file=args.dev_file,filter_file=args.dev_filter_file, tokenizer=tokenizer,is_training=True)
-    print('dev example_num:',len(dev_examples))#3243
-    dev_feature_file = args.dev_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
-        list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride),args.feature_suffix)
-    # dev_feature_file_ = args.dev_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
-    #     list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride), 'shi')
-    try:
-        with open(dev_feature_file, "rb") as reader:
-            dev_features = pickle.load(reader)
-        # print(dev_feature_file_)
-        # with open(dev_feature_file_, "rb") as reader:
-        #     dev_features_ = pickle.load(reader)
-        # print('fine')
-        # assert dev_features==dev_features_
-    except:
-        dev_features = convert_dev_examples_to_features(
-            examples=dev_examples,
-            tokenizer=tokenizer,
-            max_seq_length=args.max_seq_length,
-            doc_stride=args.doc_stride,
-            is_training=True)
-        if args.local_rank == -1 or torch.distributed.get_rank() == 0:
-            logger.info("  Saving dev features into cached file %s", dev_feature_file)
-            with open(dev_feature_file, "wb") as writer:
-                pickle.dump(dev_features, writer)
-    print('dev feature_num:', len(dev_features))
-    d_all_input_ids = torch.tensor([f.input_ids for f in dev_features], dtype=torch.long)
-    d_all_input_mask = torch.tensor([f.input_mask for f in dev_features], dtype=torch.long)
-    d_all_segment_ids = torch.tensor([f.segment_ids for f in dev_features], dtype=torch.long)
-    d_all_sent_mask = torch.tensor([f.sent_mask for f in dev_features], dtype=torch.long)
-    d_all_example_index = torch.arange(d_all_input_ids.size(0), dtype=torch.long)
-    d_all_content_len = torch.tensor([f.content_len for f in dev_features], dtype=torch.long)
-    dev_data = TensorDataset(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-                             d_all_sent_mask, d_all_content_len,d_all_example_index)
-    if args.local_rank == -1:
-        dev_sampler = RandomSampler(dev_data)
-    else:
-        dev_sampler = DistributedSampler(dev_data)
-    dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.val_batch_size)
-
-    cached_train_features_file = args.train_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
-        list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride), args.feature_suffix)
-    # cached_train_features_file_ = args.train_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
-    #     list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride), 'shi')
-    train_features = None
+    # 获取训练集数据
+    total_feature_num, start_idxs, cached_train_features_file = get_train_data(args, tokenizer=tokenizer, logger=logger)
     model.train()
-    train_examples = read_examples(
-        input_file=args.train_file,
-        filter_file=args.train_filter_file,
-        tokenizer=tokenizer,
-        is_training=True)
-    example_num = len(train_examples)
-    print('train example_num:', example_num)
-    max_train_num = 215000
-    start = list(range(0, example_num, max_train_num))
-    end = []
-    for i in start:
-        end.append(i + max_train_num)
-    end[-1] = example_num
-    print(len(start))
-    total_feature_num = 0
-    random.shuffle(train_examples)
-    for i in range(len(start)):
-        try:
-            with open(cached_train_features_file + '_' + str(i), "rb") as reader:
-                train_features = pickle.load(reader)
-            # with open(cached_train_features_file_ + '_' + str(i), "rb") as reader:
-            #     train_features_ = pickle.load(reader)
-        except:
-            train_examples_ = train_examples[start[i]:end[i]]
-            train_features = convert_examples_to_features(
-                examples=train_examples_,
-                tokenizer=tokenizer,
-                max_seq_length=args.max_seq_length,
-                doc_stride=args.doc_stride,
-                is_training=True)
-            if args.local_rank == -1 or torch.distributed.get_rank() == 0:
-                logger.info("  Saving train features into cached file %s", cached_train_features_file)
-                with open(cached_train_features_file + '_' + str(i), "wb") as writer:
-                    pickle.dump(train_features, writer)
-        total_feature_num+=len(train_features)
-    print('train feature_num:', total_feature_num)
     num_train_optimization_steps = int(
         total_feature_num / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
     if args.local_rank != -1:
@@ -260,95 +332,63 @@ def run_train():
                              lr=args.learning_rate,
                              warmup=args.warmup_proportion,
                              t_total=num_train_optimization_steps)
-    RawResult = collections.namedtuple("RawResult",
-                                       ["unique_id", "start_logit","end_logit","sent_logit"])
+
     max_f1 = 0
-    printloss = 0
-    ls=len(start)
-    for ee in trange(int(args.num_train_epochs), desc="Epoch"):
-        for ind in trange(ls,desc='Data'):
-            with open(cached_train_features_file+'_'+str(ind), "rb") as reader:
+    print_loss = 0
+    for epoch_idx in trange(int(args.num_train_epochs), desc="Epoch"):
+        for ind in trange(len(start_idxs), desc='Data'):
+            new_cache_file = cached_train_features_file + '_' + str(ind)
+            logger.info("loading file: {}".format(new_cache_file))
+            with open(new_cache_file, "rb") as reader:
                 train_features = pickle.load(reader)
-            all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-            all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-            all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
-            all_start_position = torch.tensor([f.start_position for f in train_features], dtype=torch.long)
-            all_end_position = torch.tensor([f.end_position for f in train_features], dtype=torch.long)
-            all_sent_mask = torch.tensor([f.sent_mask for f in train_features], dtype=torch.long)
-            all_sent_lbs = torch.tensor([f.sent_lbs for f in train_features], dtype=torch.long)
-            all_sent_weight = torch.tensor([f.sent_weight for f in train_features], dtype=torch.float)
-            # all_mask = torch.tensor([f.mask for f in train_features], dtype=torch.long)
-            all_content_len=torch.tensor([f.content_len for f in train_features], dtype=torch.long)
-            train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,all_start_position,all_end_position,
-                                       all_sent_mask,all_sent_lbs,all_sent_weight,all_content_len)
+            logger.info("load file: {} done!".format(new_cache_file))
+            # all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
+            # all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
+            # all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
+            # all_sent_mask = torch.tensor([f.sent_mask for f in train_features], dtype=torch.long)
+            # all_sent_weight = torch.tensor([f.sent_weight for f in train_features], dtype=torch.float)
+            # all_content_len = torch.tensor([f.content_len for f in train_features], dtype=torch.long)
+            # all_start_position = torch.tensor([f.start_position for f in train_features], dtype=torch.long)
+            # all_end_position = torch.tensor([f.end_position for f in train_features], dtype=torch.long)
+            # all_sent_lbs = torch.tensor([f.sent_lbs for f in train_features], dtype=torch.long)
+            # train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_sent_mask,
+            #                            all_sent_weight, all_content_len, all_start_position,
+            #                            all_end_position, all_sent_lbs)
+            train_data = LazyLoadTensorDataset(features=train_features, is_training=True)
             if args.local_rank == -1:
                 train_sampler = RandomSampler(train_data)
             else:
                 train_sampler = DistributedSampler(train_data)
-            train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
+
+            train_dataloader = DataLoader(train_data,
+                                          sampler=train_sampler,
+                                          batch_size=args.train_batch_size,
+                                          num_workers=4)
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
-                input_ids, input_mask, segment_ids,start_position,end_position, sent_mask,sent_lbs,sent_weight,content_len = batch
+                batch = tuple(t.to(device) for t in batch)
+                input_ids, input_mask, segment_ids, sent_mask, content_len, start_positions, end_positions, sent_lbs, sent_weight = batch
                 loss, _, _, _ = model(input_ids,
                                       input_mask,
                                       segment_ids,
-                                      start_positions=start_position,
-                                      end_positions=end_position,
+                                      start_positions=start_positions,
+                                      end_positions=end_positions,
                                       sent_mask=sent_mask,
                                       sent_lbs=sent_lbs,
                                       sent_weight=sent_weight)
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
-                logger.info("step = %d, train_loss=%f", global_step, loss)
-                printloss += loss
+                logger.debug("step = %d, train_loss=%f", global_step, loss)
+                print_loss += loss
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
 
-                if (global_step+1) % 100 == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
-                    logging("epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(ee, ind, global_step, printloss), args)
-                    printloss = 0
-                if (global_step+1)%args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
-                    model.eval()
-                    all_results = []
-                    total_loss = 0
-
-                    with torch.no_grad():
-                        for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Iteration")):
-                            d_example_indices=d_batch[-1].squeeze()
-                            if n_gpu == 1:
-                                d_batch = tuple(t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
-                            else:
-                                d_batch=d_batch[:-1]
-                            d_all_input_ids, d_all_input_mask, d_all_segment_ids, \
-                            d_all_cls_mask,d_all_content_len=d_batch
-                            dev_start_logits, dev_end_logits,dev_sent_logits= model(d_all_input_ids, d_all_input_mask, d_all_segment_ids, sent_mask=d_all_cls_mask)
-                            # total_loss += dev_loss
-                            for i, example_index in enumerate(d_example_indices):
-                                # start_position = start_positions[i].detach().cpu().tolist()
-                                # end_position = end_positions[i].detach().cpu().tolist()
-                                dev_start_logit = dev_start_logits[i].detach().cpu().tolist()
-                                dev_end_logit = dev_end_logits[i].detach().cpu().tolist()
-                                dev_sent_logit = dev_sent_logits[i].detach().cpu().tolist()
-                                dev_feature = dev_features[example_index.item()]
-                                unique_id = dev_feature.unique_id
-                                all_results.append(RawResult(unique_id=unique_id,start_logit=dev_start_logit,end_logit=dev_end_logit,sent_logit=dev_sent_logit))
-
-                    _, preds, sp_pred = write_predictions(tokenizer,dev_examples, dev_features, all_results)
-                    ans_f1, ans_em, sp_f1, sp_em, joint_f1,joint_em=evaluate(dev_examples,preds,sp_pred)
-                    # pickle.dump(all_results, open('all_results.pkl', 'wb'))
-                    logging("epoch={:3d}, data={:3d},step = {:6d},ans_f1={:4.8f},ans_em={:4.8f},sp_f1={:4.8f},sp_em={:4.8f},joint_f1={:4.8f},joint_em={:4.8f},max_f1={:4.8f},total_loss={:8.3f}" \
-                            .format(ee, ind, global_step,ans_f1,ans_em,sp_f1,sp_em,joint_f1,joint_em,max_f1,total_loss) ,args)
-                    if joint_f1 > max_f1:
-                        max_f1=joint_f1
-                        model_to_save = model.module if hasattr(model,'module') else model  # Only save the model it-self
-                        output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
-                        torch.save(model_to_save.state_dict(), output_model_file)
-                        output_config_file = os.path.join(args.output_dir, 'config.json')
-                        with open(output_config_file, 'w') as f:
-                            f.write(model_to_save.config.to_json_string())
-                        logger.info('saving model')
-                    model.train()
+                if (global_step + 1) % 100 == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
+                    logger.info(
+                        "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, ind, global_step,
+                                                                                       print_loss))
+                    print_loss = 0
                 if args.fp16:
                     optimizer.backward(loss)
                 else:
@@ -364,6 +404,35 @@ def run_train():
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
+                # 保存以及验证模型结果
+                if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
+                    # 获取验证集数据
+                    dev_examples, dev_dataloader, dev_features = get_dev_data(args, tokenizer=tokenizer, logger=logger)
+                    ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
+                                                                                    dev_dataloader,
+                                                                                    n_gpu,
+                                                                                    device,
+                                                                                    dev_features,
+                                                                                    tokenizer,
+                                                                                    dev_examples)
+                    logger.info("epoch:{} data: {} step: {}".format(epoch_idx, ind, global_step))
+                    logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
+                        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
+                    ))
+                    del dev_examples, dev_dataloader, dev_features
+                    gc.collect()
+                    logger.info("max_f1: {}".format(max_f1))
+                    if joint_f1 > max_f1:
+                        logger.info("get better model in step: {} with joint f1: {}".format(global_step, joint_f1))
+                        max_f1 = joint_f1
+                        model_to_save = model.module if hasattr(model,
+                                                                'module') else model  # Only save the model it-self
+                        output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
+                        torch.save(model_to_save.state_dict(), output_model_file)
+                        output_config_file = os.path.join(args.output_dir, 'config.json')
+                        with open(output_config_file, 'w') as f:
+                            f.write(model_to_save.config.to_json_string())
+                        logger.info('saving step: {} model'.format(global_step))
             # 内存清除
             del train_features, all_input_ids, all_input_mask, all_segment_ids
             del all_start_position, all_end_position, all_sent_lbs, all_sent_mask
