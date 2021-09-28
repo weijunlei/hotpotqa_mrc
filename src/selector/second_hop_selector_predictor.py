@@ -27,7 +27,6 @@ else:
 from collections import Counter
 import string
 import gc
-os.environ["CUDA_VISIBLE_DEVICES"]="2,3"
 
 from second_hop_data_helper import (HotpotQAExample,
                                        HotpotInputFeatures,

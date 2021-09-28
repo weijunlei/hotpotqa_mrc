@@ -57,7 +57,8 @@ from lazy_dataloader import LazyLoadTensorDataset
 from config import get_config
 
 sys.path.append("../pretrain_model")
-from modeling_bert import *
+from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward
+# from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
 
@@ -434,9 +435,9 @@ def run_train():
                             f.write(model_to_save.config.to_json_string())
                         logger.info('saving step: {} model'.format(global_step))
             # 内存清除
-            del train_features, all_input_ids, all_input_mask, all_segment_ids
-            del all_start_position, all_end_position, all_sent_lbs, all_sent_mask
-            del all_sent_weight, train_data, train_dataloader
+            del train_features, input_ids, input_mask, segment_ids
+            del start_positions, end_positions, sent_lbs, sent_mask
+            del sent_weight, train_data, train_dataloader
             gc.collect()
 
 
