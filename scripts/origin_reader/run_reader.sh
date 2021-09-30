@@ -1,6 +1,6 @@
 echo "----------------------------------------------------"
 echo "start train reader model"
-export CUDA_VISIBLE_DEVICES="0"
+export CUDA_VISIBLE_DEVICES="0,2"
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
                # BertForQuestionAnsweringThreeSameCoAttention,
@@ -9,9 +9,9 @@ export CUDA_VISIBLE_DEVICES="0"
 cd ../../src/origin_reader
 python -u origin_reader_model.py \
   --bert_model bert-base-uncased \
-  --output_dir ../../data/checkpoints/qa_base_20210930_threesameCoattention \
-  --model_name BertForQuestionAnsweringThreeSameCoAttention \
-  --log_prefix qa_base_20210930_threesameCoattention \
+  --output_dir ../../data/checkpoints/qa_base_20210930_three_coattention \
+  --model_name BertForQuestionAnsweringThreeCoAttention \
+  --log_prefix qa_base_20210930_three_coattention \
   --overwrite_result \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \

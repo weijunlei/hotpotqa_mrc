@@ -257,11 +257,11 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
         sequence_output=self.dropout(sequence_output)
         ones_mask = torch.ones_like(attention_mask).cuda()
         context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask = token_type_ids*attention_mask
+        ques_mask = token_type_ids * attention_mask
         coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
         extended_context_mask = (1.0 - context_mask) * -10000.0
-        start_logits = self.start_logits(sequence_output).squeeze(-1)+extended_context_mask#*context_mask.float()
-        end_logits = self.end_logits(sequence_output).squeeze(-1)+extended_context_mask#*context_mask.float()
+        start_logits = self.start_logits(sequence_output).squeeze(-1)+extended_context_mask #*context_mask.float()
+        end_logits = self.end_logits(sequence_output).squeeze(-1)+extended_context_mask #*context_mask.float()
 
         sent_logits = self.sent(sequence_output).squeeze(-1)*context_mask.float()
         if len(sent_logits) > 1:
