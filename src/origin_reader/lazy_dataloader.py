@@ -2,14 +2,6 @@ import torch
 from torch.utils.data import Dataset
 
 
-# 特征展开
-def flat_feature_list(input_):
-    index = []
-    for item_ in input_:
-        index += [item_[0]] * item_[1]
-    return index
-
-
 class LazyLoadTensorDataset(Dataset):
 
     def __init__(self, features, is_training):
