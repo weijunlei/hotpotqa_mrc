@@ -4,9 +4,9 @@ export CUDA_VISIBLE_DEVICES="0,1"
 cd ../../src/origin_reader
 python -u origin_reader_model.py \
   --bert_model bert-base-uncased \
-  --output_dir ../../data/checkpoints/qa_base_20210927_3coattention \
-  --model_name BertForQuestionAnsweringThreeCoAttention \
-  --log_prefix qa_base_20210927_3coattention \
+  --output_dir ../../data/checkpoints/qa_base_20210929_forward_best \
+  --model_name BertForQuestionAnsweringForwardBest \
+  --log_prefix qa_base_20210929_forward_best \
   --overwrite_result \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \

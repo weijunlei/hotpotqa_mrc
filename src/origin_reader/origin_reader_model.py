@@ -57,7 +57,7 @@ from lazy_dataloader import LazyLoadTensorDataset
 from config import get_config
 
 sys.path.append("../pretrain_model")
-from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward
+from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward,BertForQuestionAnsweringForwardBest
 # from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
@@ -275,6 +275,7 @@ def run_train():
         'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
         'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
         'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
+        'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest
     }
     model = model_dict[args.model_name].from_pretrained(args.bert_model)
     # 半精度和并行化使用设置
