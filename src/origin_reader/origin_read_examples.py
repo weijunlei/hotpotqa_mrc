@@ -75,8 +75,6 @@ def read_examples(input_file, filter_file, tokenizer, is_training):
                     if con[0] == answer_label[0]:
                         if answer_label[1] >= offset and answer_label[1] < offset+len(sent):
                             start_position = length+answer_label[1]-offset#+5
-                        # if answer_label[2]>=offset-white1 and answer_label[2]<=offset:
-                        #     end_position=length
                         if answer_label[2] > offset and answer_label[2]<=offset+len(sent):
                             end_position = length+answer_label[2]-offset #+5
                     length += len(sent) # + 5

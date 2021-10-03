@@ -59,7 +59,7 @@ from config import get_config
 sys.path.append("../pretrain_model")
 from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, \
     BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward, BertForQuestionAnsweringForwardBest,\
-    BertSelfAttentionAndCoAttention, BertTransformer
+    BertSelfAttentionAndCoAttention, BertTransformer, BertSkipConnectTransformer
 # from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
@@ -280,6 +280,7 @@ def run_train():
         'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
         'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest,
         'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention,
+        'BertSkipConnectTransformer': BertSkipConnectTransformer,
         'BertTransformer': BertTransformer,
     }
     model = model_dict[args.model_name].from_pretrained(args.bert_model)
