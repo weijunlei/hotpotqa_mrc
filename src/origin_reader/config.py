@@ -9,6 +9,7 @@ def str2bool(v):
     if v == 'False':
         return False
 
+
 def get_config():
     """ 模型配置 """
     parser = argparse.ArgumentParser()

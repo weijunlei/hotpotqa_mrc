@@ -33,7 +33,7 @@ from second_hop_data_helper import (HotpotQAExample,
                                        read_second_hotpotqa_examples,
                                        convert_examples_to_second_features)
 sys.path.append("../pretrain_model")
-from changed_model import BertForParagraphClassification, BertForRelatedSentence
+from changed_model import BertForRelatedSentence, BertForParagraphClassification
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 from tokenization import BertTokenizer
@@ -366,7 +366,8 @@ def run_predict(args):
                 all_tokens = tokenizer.tokenize(cur_all_text)
                 if not has_sentence_result and len(all_tokens) > 256:
                     all_tokens = all_tokens[:256]
-                del_idx += 1
+                if has_sentence_result:
+                    del_idx += 1
         all_tokens_len = len(tokenizer.tokenize(cur_all_text))
         total += all_tokens_len
         if all_tokens_len > 256:

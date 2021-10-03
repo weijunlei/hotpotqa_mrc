@@ -370,7 +370,7 @@ def _compute_softmax(scores):
     return probs
 
 
-def write_predictions(tokenizer,all_examples, all_features, all_results, n_best_size=20,
+def write_predictions(tokenizer, all_examples, all_features, all_results, n_best_size=20,
                       max_answer_length=20, do_lower_case=True):
     """Write final predictions to the json file and log-odds of null if needed."""
     # logger.info("Writing predictions to: %s" % (output_prediction_file))
@@ -390,7 +390,7 @@ def write_predictions(tokenizer,all_examples, all_features, all_results, n_best_
     all_predictions = collections.OrderedDict()
     all_nbest_json = collections.OrderedDict()
     scores_diff_json = collections.OrderedDict()
-    sp_preds={}
+    sp_preds = {}
     for (example_index, example) in enumerate(all_examples):
         features = example_index_to_features[example_index]
         prelim_predictions = []
@@ -399,15 +399,14 @@ def write_predictions(tokenizer,all_examples, all_features, all_results, n_best_
         min_null_feature_index = 0  # the paragraph slice with min null score
         null_start_logit = 0  # the start logit at the slice with min null score
         null_end_logit = 0  # the end logit at the slice with min null score
-        sent_pred_logit=[0.0]*len(example.doc_tokens)
+        sent_pred_logit = [0.0] * len(example.doc_tokens)
         for (feature_index, feature) in enumerate(features):
             result = unique_id_to_result[feature.unique_id]
-            # offset=feature.input_ids.index(102)+1
             start_indexes = _get_best_indexes(result.start_logit, n_best_size)
             end_indexes = _get_best_indexes(result.end_logit, n_best_size)
-            for ind_rsl,rsl in enumerate(result.sent_logit):
-                if feature.sent_mask[ind_rsl]==1 and feature.token_is_max_context.get(ind_rsl,False):
-                    sent_pred_logit[feature.token_to_orig_map[ind_rsl]]=rsl
+            for ind_rsl, rsl in enumerate(result.sent_logit):
+                if feature.sent_mask[ind_rsl] == 1 and feature.token_is_max_context.get(ind_rsl, False):
+                    sent_pred_logit[feature.token_to_orig_map[ind_rsl]] = rsl
             for start_index in start_indexes:
                 for end_index in end_indexes:
                     # We could hypothetically create invalid predictions, e.g., predict
@@ -437,19 +436,17 @@ def write_predictions(tokenizer,all_examples, all_features, all_results, n_best_
                             end_index=end_index,
                             start_logit=result.start_logit[start_index],
                             end_logit=result.end_logit[end_index]))
-
-        sent_pred_logit=[spl for ind_spl,spl in enumerate(sent_pred_logit) if ind_spl in example.sent_cls]
-        sp_pred=[]
-        pointer=0
-        # print(len(sent_pred_logit))
-        # print(sum(example.full_sents_mask))
+        # sent cls 是每个句子的标记位
+        sent_pred_logit = [spl for ind_spl, spl in enumerate(sent_pred_logit) if ind_spl in example.sent_cls]
+        sp_pred = []
+        pointer = 0
         for fsm in example.full_sents_mask:
-            if fsm==0:
+            if fsm == 0:
                 sp_pred.append(0.0)
             else:
                 sp_pred.append(sent_pred_logit[pointer])
-                pointer+=1
-        sp_preds[example.qas_id]=sp_pred
+                pointer += 1
+        sp_preds[example.qas_id] = sp_pred
         _NbestPrediction = collections.namedtuple(  # pylint: disable=invalid-name
             "NbestPrediction", ["start", "end", "text", "start_logit",'end_logit'])
 
@@ -459,7 +456,7 @@ def write_predictions(tokenizer,all_examples, all_features, all_results, n_best_
             feature = features[pred.feature_index]
             if pred.start_index > 0:  # this is a non-null prediction
                 tok_tokens = feature.tokens[pred.start_index:(pred.end_index + 1)]
-                tok_tokens=[tt for tt in tok_tokens if tt!='[UNK]']
+                tok_tokens = [tt for tt in tok_tokens if tt != '[UNK]']
                 orig_doc_start = example.sub_to_orig_index[feature.token_to_orig_map[pred.start_index]]
                 orig_doc_end = example.sub_to_orig_index[feature.token_to_orig_map[pred.end_index]]
                 orig_tokens = example.orig_tokens[orig_doc_start:(orig_doc_end + 1)]
@@ -511,7 +508,7 @@ def write_predictions(tokenizer,all_examples, all_features, all_results, n_best_
         # nbest.append(_NbestPrediction(start=0, end=0, text="", logit=result.start_logit[0]+result.end_logit[0]))
         nbest.append(_NbestPrediction(start=1, end=1, text="yes", start_logit=result.start_logit[1],end_logit= result.end_logit[1]))
         nbest.append(_NbestPrediction(start=2, end=2, text="no", start_logit=result.start_logit[2],end_logit=result.end_logit[2]))
-        nbest = sorted(nbest,key=lambda x: (x.start_logit+x.end_logit),reverse=True)
+        nbest = sorted(nbest, key=lambda x: (x.start_logit+x.end_logit),reverse=True)
 
         # assert len(nbest) >= 1
         total_scores = []
@@ -535,7 +532,7 @@ def write_predictions(tokenizer,all_examples, all_features, all_results, n_best_
 
         all_predictions[example.qas_id] = nbest_json[0]
 
-    return nbest_json,all_predictions,sp_preds
+    return nbest_json, all_predictions, sp_preds
 
 
 def normalize_answer(s):

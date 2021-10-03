@@ -57,11 +57,9 @@ from lazy_dataloader import LazyLoadTensorDataset
 from config import get_config
 
 sys.path.append("../pretrain_model")
-from changed_model import BertForQuestionAnsweringCoAttention, \
-    BertForQuestionAnsweringThreeCoAttention, \
-    BertForQuestionAnsweringThreeSameCoAttention, \
-    BertForQuestionAnsweringForward, \
-    BertForQuestionAnsweringForwardBest
+from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, \
+    BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward, BertForQuestionAnsweringForwardBest,\
+    BertSelfAttentionAndCoAttention
 # from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
@@ -96,11 +94,16 @@ def get_dev_data(args, tokenizer, logger=None):
     dev_examples = read_dev_examples(
         input_file=args.dev_file, filter_file=args.dev_filter_file, tokenizer=tokenizer, is_training=True)
     logger.info('dev examples: {}'.format(len(dev_examples)))
-    dev_feature_file = args.dev_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
-        list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride),
-        args.feature_suffix)
-    if os.path.exists(dev_feature_file):
-        with open(dev_feature_file, "rb") as reader:
+    # dev_feature_file = args.dev_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
+    #     list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride),
+    #     args.feature_suffix)
+    cached_dev_features_file = '{}/dev_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
+                                                                      args.bert_model.split('/')[-1],
+                                                                      str(args.max_seq_length),
+                                                                      str(args.doc_stride),
+                                                                      args.feature_suffix)
+    if os.path.exists(cached_dev_features_file):
+        with open(cached_dev_features_file, "rb") as reader:
             dev_features = pickle.load(reader)
     else:
         dev_features = convert_dev_examples_to_features(
@@ -110,19 +113,10 @@ def get_dev_data(args, tokenizer, logger=None):
             doc_stride=args.doc_stride,
             is_training=True)
         if args.local_rank == -1 or torch.distributed.get_rank() == 0:
-            logger.info("  Saving dev features into cached file %s", dev_feature_file)
-            with open(dev_feature_file, "wb") as writer:
+            logger.info("  Saving dev features into cached file %s", cached_dev_features_file)
+            with open(cached_dev_features_file, "wb") as writer:
                 pickle.dump(dev_features, writer)
     logger.info('dev feature_num: {}'.format(len(dev_features)))
-    # d_all_input_ids = torch.tensor([f.input_ids for f in dev_features], dtype=torch.long)
-    # d_all_input_mask = torch.tensor([f.input_mask for f in dev_features], dtype=torch.long)
-    # d_all_segment_ids = torch.tensor([f.segment_ids for f in dev_features], dtype=torch.long)
-    # d_all_sent_mask = torch.tensor([f.sent_mask for f in dev_features], dtype=torch.long)
-    # d_all_example_index = torch.arange(d_all_input_ids.size(0), dtype=torch.long)
-    # d_all_content_len = torch.tensor([f.content_len for f in dev_features], dtype=torch.long)
-    # dev_data = TensorDataset(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-    #                          d_all_sent_mask, d_all_content_len, d_all_example_index)
-
     dev_data = LazyLoadTensorDataset(dev_features, is_training=False)
     if args.local_rank == -1:
         dev_sampler = RandomSampler(dev_data)
@@ -149,7 +143,7 @@ def get_train_data(args, tokenizer, logger=None):
             tokenizer=tokenizer,
             is_training=True)
         # 当数据配置不变时可以设置为定值
-        example_num = len(train_examples) # 89899
+        example_num = len(train_examples)  # 89899
         random.shuffle(train_examples)
     else:
         example_num = 89541
@@ -225,11 +219,11 @@ def run_train():
     if not os.path.exists(args.log_path):
         os.makedirs(args.log_path)
     log_path = os.path.join(args.log_path, 'log_{}_{}_{}_{}_{}_{}.log'.format(args.log_prefix,
-                                                                          args.bert_model.split('/')[-1],
-                                                                          args.output_dir.split('/')[-1],
-                                                                          args.train_batch_size,
-                                                                          args.max_seq_length,
-                                                                          args.doc_stride))
+                                                                              args.bert_model.split('/')[-1],
+                                                                              args.output_dir.split('/')[-1],
+                                                                              args.train_batch_size,
+                                                                              args.max_seq_length,
+                                                                              args.doc_stride))
     logger = logger_config(log_path=log_path, log_prefix='')
     logger.info('-' * 15 + '所有配置' + '-' * 15)
     logger.info("所有参数配置如下：")
@@ -279,7 +273,8 @@ def run_train():
         'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
         'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
         'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
-        'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest
+        'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest,
+        'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention
     }
     model = model_dict[args.model_name].from_pretrained(args.bert_model)
     # 半精度和并行化使用设置
@@ -348,18 +343,6 @@ def run_train():
             with open(new_cache_file, "rb") as reader:
                 train_features = pickle.load(reader)
             logger.info("load file: {} done!".format(new_cache_file))
-            # all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-            # all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-            # all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
-            # all_sent_mask = torch.tensor([f.sent_mask for f in train_features], dtype=torch.long)
-            # all_sent_weight = torch.tensor([f.sent_weight for f in train_features], dtype=torch.float)
-            # all_content_len = torch.tensor([f.content_len for f in train_features], dtype=torch.long)
-            # all_start_position = torch.tensor([f.start_position for f in train_features], dtype=torch.long)
-            # all_end_position = torch.tensor([f.end_position for f in train_features], dtype=torch.long)
-            # all_sent_lbs = torch.tensor([f.sent_lbs for f in train_features], dtype=torch.long)
-            # train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_sent_mask,
-            #                            all_sent_weight, all_content_len, all_start_position,
-            #                            all_end_position, all_sent_lbs)
             train_data = LazyLoadTensorDataset(features=train_features, is_training=True)
             if args.local_rank == -1:
                 train_sampler = RandomSampler(train_data)
@@ -433,7 +416,8 @@ def run_train():
                         max_f1 = joint_f1
                         model_to_save = model.module if hasattr(model,
                                                                 'module') else model  # Only save the model it-self
-                        output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
+                        output_model_file = os.path.join(args.output_dir, 'pytorch_model_best.bin')
+                        # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
                         torch.save(model_to_save.state_dict(), output_model_file)
                         output_config_file = os.path.join(args.output_dir, 'config.json')
                         with open(output_config_file, 'w') as f:
@@ -444,6 +428,16 @@ def run_train():
             del start_positions, end_positions, sent_lbs, sent_mask
             del sent_weight, train_data, train_dataloader
             gc.collect()
+    # 保存最后的模型
+    model_to_save = model.module if hasattr(model,
+                                            'module') else model  # Only save the model it-self
+    output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
+    # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
+    torch.save(model_to_save.state_dict(), output_model_file)
+    output_config_file = os.path.join(args.output_dir, 'config.json')
+    with open(output_config_file, 'w') as f:
+        f.write(model_to_save.config.to_json_string())
+    logger.info('saving step: {} model'.format(global_step))
 
 
 if __name__ == "__main__":

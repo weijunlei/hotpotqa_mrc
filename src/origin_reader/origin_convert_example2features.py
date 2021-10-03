@@ -29,7 +29,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
-            tokens = ["[CLS]","yes","no"]
+            tokens = ["[CLS]", "yes", "no"]
             token_to_orig_map = {}
             token_is_max_context = {}
             segment_ids = [0, 0, 0]
@@ -80,12 +80,12 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 # we throw it out, since there is nothing to predict.
                 doc_start = doc_span.start
                 doc_end = doc_span.start + doc_span.length
-                if example.start_position==-1 and example.end_position==-1:
-                    start_position_f=1
-                    end_position_f=1
-                elif example.start_position==-2 and example.end_position==-2:
-                    start_position_f=2
-                    end_position_f=2
+                if example.start_position == -1 and example.end_position == -1:
+                    start_position_f = 1
+                    end_position_f = 1
+                elif example.start_position ==- 2 and example.end_position == -2:
+                    start_position_f = 2
+                    end_position_f = 2
                 else:
                     if example.start_position >= doc_start and example.end_position <= doc_end:
                         start_position_f = example.start_position-doc_start+3
@@ -164,12 +164,12 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
             for i in range(doc_span.length):
                 split_token_index = doc_span.start + i
                 token_to_orig_map[len(tokens)] = split_token_index
-                is_max_context = _check_is_max_context(doc_spans, doc_span_index,split_token_index)
+                is_max_context = _check_is_max_context(doc_spans, doc_span_index, split_token_index)
                 token_is_max_context[len(tokens)] = is_max_context
                 tokens.append(all_doc_tokens[split_token_index])
                 segment_ids.append(0)
                 matrix.append(example.subwords_to_matrix[split_token_index])
-            content_len=len(tokens)
+            content_len = len(tokens)
             tokens.append("[SEP]")
             segment_ids.append(0)
             matrix.append(-1)
@@ -197,7 +197,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
-            assert len(matrix)==max_seq_length
+            assert len(matrix) == max_seq_length
             sent_mask = [0] * max_seq_length
             doc_start = doc_span.start
             doc_end = doc_span.start + doc_span.length
