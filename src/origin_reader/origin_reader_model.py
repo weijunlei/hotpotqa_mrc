@@ -59,7 +59,7 @@ from config import get_config
 sys.path.append("../pretrain_model")
 from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, \
     BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward, BertForQuestionAnsweringForwardBest,\
-    BertSelfAttentionAndCoAttention
+    BertSelfAttentionAndCoAttention, BertTransformer
 # from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
@@ -215,6 +215,11 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
 def run_train():
     parser = get_config()
     args = parser.parse_args()
+    # 模型缓存文件
+    pretrained_model_path = "/home/leiwj/mydata/pretrained_models/"
+    new_model_path = os.path.join(pretrained_model_path, args.bert_model)
+    if os.path.exists(new_model_path):
+        args.bert_model = new_model_path
     # 配置日志文件
     if not os.path.exists(args.log_path):
         os.makedirs(args.log_path)
@@ -274,7 +279,8 @@ def run_train():
         'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
         'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
         'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest,
-        'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention
+        'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention,
+        'BertTransformer': BertTransformer,
     }
     model = model_dict[args.model_name].from_pretrained(args.bert_model)
     # 半精度和并行化使用设置

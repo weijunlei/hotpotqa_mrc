@@ -5,7 +5,6 @@ import torch.nn as nn
 
 class MultiHeadAttention(nn.Module):
     """ 多头注意力 """
-
     def __init__(self, hidden_size, head_num, dropout):
         super(MultiHeadAttention, self).__init__()
         self.hidden_size = hidden_size
@@ -21,7 +20,7 @@ class MultiHeadAttention(nn.Module):
         :param key: [batch_size * seq_length * hidden_size]
         :param value: [batch_size * seq_length * hidden_size]
         :param query: [batch_size * seq_length * hidden_size]
-        :param mask: [batch_size * 1 * seq_length * hidden_size]
+        :param mask: [batch_size * 1 * seq_length * seq_length]
         :return: [batch_size * seq_length * hidden_size]
         """
         batch_size, seq_length, hidden_size = key.size()
@@ -36,6 +35,6 @@ class MultiHeadAttention(nn.Module):
         probs = nn.Softmax(dim=1)(scores)
         probs = self.dropout(probs)
         output = torch.matmul(probs, value)
-        output = output.transpose(1, 2).contignous().view(batch_size, seq_length, hidden_size)
+        output = output.transpose(1, 2).contiguous().view(batch_size, seq_length, hidden_size)
         output = self.output(output)
         return output

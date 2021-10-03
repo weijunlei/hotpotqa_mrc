@@ -20,7 +20,7 @@ def get_config():
                              "bert-base-multilingual-cased, bert-base-chinese.")
     parser.add_argument("--output_dir", default='../../data/checkpoints/test', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--model_name", type=str, default='BertForQuestionAnsweringCoAttention',
+    parser.add_argument("--model_name", type=str, default='BertSelfAttentionAndCoAttention',
                         help="must be BertForQuestionAnsweringCoAttention"
                              "\BertForQuestionAnsweringThreeCoAttention"
                              "\BertForQuestionAnsweringThreeSameCoAttention"
@@ -50,7 +50,7 @@ def get_config():
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
     parser.add_argument("--doc_stride", default=256, type=int,
                         help="When splitting up a long document into chunks, how much stride to take between chunks.")
-    parser.add_argument("--train_batch_size", default=16, type=int, help="Total batch size for training.")
+    parser.add_argument("--train_batch_size", default=4, type=int, help="Total batch size for training.")
     parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--num_train_epochs", default=5.0, type=float,

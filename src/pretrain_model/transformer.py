@@ -7,6 +7,7 @@ from position_ffn import PositionWiseFeedForward
 
 class TransformerLayer(nn.Module):
     def __init__(self, hidden_size, head_num, dropout, feedforward_size):
+        super(TransformerLayer, self).__init__()
         self.self_attention = MultiHeadAttention(hidden_size, head_num, dropout)
         self.dropout_1 = nn.Dropout(dropout)
         self.layer_norm_1 = LayerNormalization(hidden_size)
@@ -18,7 +19,7 @@ class TransformerLayer(nn.Module):
         """
         forward
         :param x: sequence input [batch_size * seq_length * hidden_size]
-        :param mask: mask: [batch_size * 1 * 1 * seq_length * seq_length]
+        :param mask: mask: [batch_size * 1 * seq_length * seq_length]
         :return: [batch_size * seq_length * hidden_size]
         """
         inner = self.dropout_1(self.self_attention(x, x, x, mask))
