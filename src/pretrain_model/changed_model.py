@@ -495,7 +495,7 @@ class BertSelfAttentionAndCoAttention(BertPreTrainedModel):
         batch_size, seq_length, hidden_size = sequence_output.size()
         sequence_output = self.dropout(sequence_output)
         self_mask = attention_mask.unsqueeze(1).repeat(1, seq_length, 1).unsqueeze(1)
-        sequence_output = sequence_output + self.transformer(sequence_output, mask=self_mask)
+        sequence_output = self.transformer(sequence_output, mask=self_mask)
         sequence_output = self.dropout(sequence_output)
 
         ones_mask = torch.ones_like(attention_mask).cuda()
