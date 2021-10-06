@@ -1,6 +1,15 @@
 import argparse
 
 
+def str2bool(v):
+    if isinstance(v,bool):
+        return v
+    if v == 'True':
+        return True
+    if v == 'False':
+        return False
+
+
 def get_config():
     """ 模型配置 """
     parser = argparse.ArgumentParser()
@@ -9,9 +18,9 @@ def get_config():
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
                              "bert-base-multilingual-cased, bert-base-chinese.")
-    parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20210927_origin_forward', type=str,
+    parser.add_argument("--output_dir", default='../../data/checkpoints/test', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--model_name", type=str, default='BertForQuestionAnsweringForward',
+    parser.add_argument("--model_name", type=str, default='BertSelfAttentionAndCoAttention',
                         help="must be BertForQuestionAnsweringCoAttention"
                              "\BertForQuestionAnsweringThreeCoAttention"
                              "\BertForQuestionAnsweringThreeSameCoAttention"
@@ -19,11 +28,12 @@ def get_config():
     parser.add_argument("--train_file", default='../../data/hotpot_data/hotpot_train_labeled_data_v3.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     # 设置是否重新写入结果
-    parser.add_argument("--overwrite_result", dest='overwrite_result', action='store_true')
-    parser.add_argument("--no-over_write_result", dest='overwrite_result', action='store_false')
-    parser.add_argument("--log_prefix", default="20210927_just_forward_log", type=str)
+    # parser.add_argument("--overwrite_result", dest='overwrite_result', action='store_true')
+    # parser.add_argument("--no-over_write_result", dest='overwrite_result', action='store_false')
+    parser.add_argument("--overwrite_result", type=str2bool, default=True)
+    parser.add_argument("--log_prefix", default="test", type=str)
     parser.add_argument("--log_path", default="../../log", type=str)
-    parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_distractor_v1.json', type=str,
+    parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_labeled_data_v3.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--train_filter_file",
                         default='../../data/selector/second_hop_related_paragraph_result/train_related.json', type=str,
@@ -31,7 +41,7 @@ def get_config():
     parser.add_argument("--dev_filter_file",
                         default='../../data/selector/second_hop_related_paragraph_result/dev_related.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--feature_cache_path", default='../../data/cache/origin', type=str,
+    parser.add_argument("--feature_cache_path", default='../../data/cache/test', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--feature_suffix", default="origin_model", type=str,
                         help="cache feature suffix")
@@ -40,7 +50,7 @@ def get_config():
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
     parser.add_argument("--doc_stride", default=256, type=int,
                         help="When splitting up a long document into chunks, how much stride to take between chunks.")
-    parser.add_argument("--train_batch_size", default=16, type=int, help="Total batch size for training.")
+    parser.add_argument("--train_batch_size", default=4, type=int, help="Total batch size for training.")
     parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--num_train_epochs", default=5.0, type=float,

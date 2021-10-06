@@ -4,6 +4,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 import math
 
 from modeling_bert import BertPreTrainedModel, BertModel, BertOutput, BertSelfOutput, BertIntermediate
+from transformer import TransformerLayer
 
 
 class BertForParagraphClassification(BertPreTrainedModel):
@@ -171,7 +172,6 @@ class BertForQuestionAnsweringForward(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForQuestionAnsweringForward, self).__init__(config)
         self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
 
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
@@ -234,7 +234,7 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForQuestionAnsweringForwardBest, self).__init__(config)
         self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
+        
 
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
@@ -257,11 +257,11 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
         sequence_output=self.dropout(sequence_output)
         ones_mask = torch.ones_like(attention_mask).cuda()
         context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask = token_type_ids*attention_mask
+        ques_mask = token_type_ids * attention_mask
         coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
         extended_context_mask = (1.0 - context_mask) * -10000.0
-        start_logits = self.start_logits(sequence_output).squeeze(-1)+extended_context_mask#*context_mask.float()
-        end_logits = self.end_logits(sequence_output).squeeze(-1)+extended_context_mask#*context_mask.float()
+        start_logits = self.start_logits(sequence_output).squeeze(-1)+extended_context_mask #*context_mask.float()
+        end_logits = self.end_logits(sequence_output).squeeze(-1)+extended_context_mask #*context_mask.float()
 
         sent_logits = self.sent(sequence_output).squeeze(-1)*context_mask.float()
         if len(sent_logits) > 1:
@@ -299,23 +299,29 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
             return start_logits, end_logits, sent_logits
 
 
-class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
+class BertTransformer(BertPreTrainedModel):
     def __init__(self, config):
-        super(BertForQuestionAnsweringCoAttention, self).__init__(config)
+        super(BertTransformer, self).__init__(config)
         self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
-
-        self.Wq3_1 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        self.Wq3_2 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        self.coatt1 = CoattentionModel(config)
-
+        self.transformer = TransformerLayer(hidden_size=config.hidden_size,
+                                            head_num=6,
+                                            dropout=config.hidden_dropout_prob,
+                                            feedforward_size=config.hidden_size * 3)
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent = nn.Linear(config.hidden_size,1)
+        self.sent = nn.Linear(config.hidden_size, 1)
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None):
+    def forward(self,
+                input_ids,
+                attention_mask,
+                token_type_ids,
+                start_positions=None,
+                end_positions=None,
+                sent_mask=None,
+                sent_lbs=None,
+                sent_weight=None):
         if len(input_ids.shape) < 2:
             input_ids = input_ids.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
@@ -326,21 +332,186 @@ class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
                 sent_mask = sent_mask.unsqueeze(0)
                 sent_lbs = sent_lbs.unsqueeze(0)
                 sent_weight = sent_weight.unsqueeze(0)
-        sequence_output = self.bert(input_ids, attention_mask=attention_mask,token_type_ids=token_type_ids)[0]
+        sequence_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0]
+        batch_size, seq_length, hidden_size = sequence_output.size()
+        sequence_output = self.dropout(sequence_output)
+        self_mask = attention_mask.unsqueeze(1).repeat(1, seq_length, 1).unsqueeze(1)
+        sequence_output = self.transformer(sequence_output, mask=self_mask)
         sequence_output = self.dropout(sequence_output)
         ones_mask = torch.ones_like(attention_mask).cuda()
         context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask = token_type_ids*attention_mask
-        coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
-        s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
-        s1 = self.Wq3_1(torch.cat([s1, sequence_output], dim=-1))*context_mask.unsqueeze(-1)+ \
-           self.Wq3_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1)+sequence_output
-        s2 = self.coatt1(s1, s1, coattention_mask)
+        ques_mask = token_type_ids * attention_mask
         extended_context_mask = (1.0 - context_mask) * -10000.0
-        start_logits=self.start_logits(s2).squeeze(-1)+extended_context_mask#*context_mask.float()
-        end_logits = self.end_logits(s2).squeeze(-1)+extended_context_mask#*context_mask.float()
+        start_logits = self.start_logits(sequence_output).squeeze(-1) + extended_context_mask # *context_mask.float()
+        end_logits = self.end_logits(sequence_output).squeeze(-1) + extended_context_mask # *context_mask.float()
 
-        sent_logits = self.sent(s2).squeeze(-1)*context_mask.float()
+        sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
+        if len(sent_logits) > 1:
+            sent_logits.squeeze(-1)
+        loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
+        sent_logits = sent_logits * sent_mask.float()
+        if start_positions is not None and end_positions is not None:
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1)
+            sent_loss = loss_fn1(sent_logits, sent_lbs.float())
+            sent_loss = (sent_loss * sent_mask.float()) * sent_weight
+            sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
+            # sometimes the start/end positions are outside our model inputs, we ignore these terms
+            ignored_index = start_logits.size(1)
+            start_positions.clamp_(0, ignored_index)
+            end_positions.clamp_(0, ignored_index)
+
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
+            end_loss = loss_fct(end_logits, end_positions)
+            ans_loss = start_loss + end_loss
+            total_loss = ans_loss + 0.2*sent_loss
+            return total_loss, start_logits, end_logits, sent_logits
+        else:
+            start_logits = nn.Softmax(dim=-1)(start_logits)
+            end_logits = nn.Softmax(dim=-1)(end_logits)
+            sent_logits = torch.sigmoid(sent_logits)
+            return start_logits, end_logits, sent_logits
+
+
+class BertSkipConnectTransformer(BertPreTrainedModel):
+    def __init__(self, config):
+        super(BertSkipConnectTransformer, self).__init__(config)
+        self.bert = BertModel(config)
+        self.transformer = TransformerLayer(hidden_size=config.hidden_size,
+                                            head_num=12,
+                                            dropout=config.hidden_dropout_prob,
+                                            feedforward_size=config.hidden_size * 3)
+        self.start_logits = nn.Linear(config.hidden_size, 1)
+        self.end_logits = nn.Linear(config.hidden_size, 1)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.sent = nn.Linear(config.hidden_size, 1)
+        self.init_weights()
+
+    def forward(self,
+                input_ids,
+                attention_mask,
+                token_type_ids,
+                start_positions=None,
+                end_positions=None,
+                sent_mask=None,
+                sent_lbs=None,
+                sent_weight=None):
+        if len(input_ids.shape) < 2:
+            input_ids = input_ids.unsqueeze(0)
+            token_type_ids = token_type_ids.unsqueeze(0)
+            attention_mask = attention_mask.unsqueeze(0)
+            if start_positions is not None and len(start_positions.shape)<2:
+                start_positions = start_positions.unsqueeze(0)
+                end_positions = end_positions.unsqueeze(0)
+                sent_mask = sent_mask.unsqueeze(0)
+                sent_lbs = sent_lbs.unsqueeze(0)
+                sent_weight = sent_weight.unsqueeze(0)
+        sequence_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0]
+        batch_size, seq_length, hidden_size = sequence_output.size()
+        sequence_output = self.dropout(sequence_output)
+        self_mask = attention_mask.unsqueeze(1).repeat(1, seq_length, 1).unsqueeze(1)
+        sequence_output = sequence_output + self.transformer(sequence_output, mask=self_mask)
+        sequence_output = self.dropout(sequence_output)
+        ones_mask = torch.ones_like(attention_mask).cuda()
+        context_mask = (ones_mask - token_type_ids) * attention_mask
+        ques_mask = token_type_ids * attention_mask
+        extended_context_mask = (1.0 - context_mask) * -10000.0
+        start_logits = self.start_logits(sequence_output).squeeze(-1) + extended_context_mask # *context_mask.float()
+        end_logits = self.end_logits(sequence_output).squeeze(-1) + extended_context_mask # *context_mask.float()
+
+        sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
+        if len(sent_logits) > 1:
+            sent_logits.squeeze(-1)
+        loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
+        sent_logits = sent_logits * sent_mask.float()
+        if start_positions is not None and end_positions is not None:
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1)
+            sent_loss = loss_fn1(sent_logits, sent_lbs.float())
+            sent_loss = (sent_loss * sent_mask.float()) * sent_weight
+            sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
+            # sometimes the start/end positions are outside our model inputs, we ignore these terms
+            ignored_index = start_logits.size(1)
+            start_positions.clamp_(0, ignored_index)
+            end_positions.clamp_(0, ignored_index)
+
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
+            end_loss = loss_fct(end_logits, end_positions)
+            ans_loss = start_loss + end_loss
+            total_loss = ans_loss + 0.2 * sent_loss
+            return total_loss, start_logits, end_logits, sent_logits
+        else:
+            start_logits = nn.Softmax(dim=-1)(start_logits)
+            end_logits = nn.Softmax(dim=-1)(end_logits)
+            sent_logits = torch.sigmoid(sent_logits)
+            return start_logits, end_logits, sent_logits
+
+
+class BertSelfAttentionAndCoAttention(BertPreTrainedModel):
+    def __init__(self, config):
+        super(BertSelfAttentionAndCoAttention, self).__init__(config)
+        self.bert = BertModel(config)
+        self.transformer = TransformerLayer(hidden_size=config.hidden_size,
+                                            head_num=12,
+                                            dropout=config.hidden_dropout_prob,
+                                            feedforward_size=config.hidden_size * 3)
+        self.Wq1_1 = nn.Linear(2 * config.hidden_size, config.hidden_size)
+        self.Wq1_2 = nn.Linear(2 * config.hidden_size, config.hidden_size)
+        self.coatt1 = CoattentionModel(config)
+        self.start_logits = nn.Linear(config.hidden_size, 1)
+        self.end_logits = nn.Linear(config.hidden_size, 1)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.sent = nn.Linear(config.hidden_size, 1)
+        self.init_weights()
+
+    def forward(self,
+                input_ids,
+                attention_mask,
+                token_type_ids,
+                start_positions=None,
+                end_positions=None,
+                sent_mask=None,
+                sent_lbs=None,
+                sent_weight=None):
+        if len(input_ids.shape) < 2:
+            input_ids = input_ids.unsqueeze(0)
+            token_type_ids = token_type_ids.unsqueeze(0)
+            attention_mask = attention_mask.unsqueeze(0)
+            if start_positions is not None and len(start_positions.shape)<2:
+                start_positions = start_positions.unsqueeze(0)
+                end_positions = end_positions.unsqueeze(0)
+                sent_mask = sent_mask.unsqueeze(0)
+                sent_lbs = sent_lbs.unsqueeze(0)
+                sent_weight = sent_weight.unsqueeze(0)
+        sequence_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0]
+        batch_size, seq_length, hidden_size = sequence_output.size()
+        sequence_output = self.dropout(sequence_output)
+        self_mask = attention_mask.unsqueeze(1).repeat(1, seq_length, 1).unsqueeze(1)
+        sequence_output = self.transformer(sequence_output, mask=self_mask)
+        sequence_output = self.dropout(sequence_output)
+
+        ones_mask = torch.ones_like(attention_mask).cuda()
+        context_mask = (ones_mask - token_type_ids) * attention_mask
+        ques_mask = token_type_ids * attention_mask
+        extended_context_mask = (1.0 - context_mask) * -10000.0
+        coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(), ques_mask.unsqueeze(1).float())
+        # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
+        s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
+        s1 = self.Wq1_1(torch.cat([s1, sequence_output], dim=-1)) * context_mask.unsqueeze(-1) + \
+             self.Wq1_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1) + sequence_output
+        s2 = self.coatt1(s1, s1, coattention_mask)
+        start_logits = self.start_logits(s2).squeeze(-1) + extended_context_mask # *context_mask.float()
+        end_logits = self.end_logits(s2).squeeze(-1) + extended_context_mask # *context_mask.float()
+
+        sent_logits = self.sent(s2).squeeze(-1) * context_mask.float()
         if len(sent_logits) > 1:
             sent_logits.squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
@@ -365,9 +536,90 @@ class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
+            total_loss = ans_loss+ 0.2 * sent_loss
+            return total_loss, start_logits, end_logits, sent_logits
+        else:
+            start_logits = nn.Softmax(dim=-1)(start_logits)
+            end_logits = nn.Softmax(dim=-1)(end_logits)
+            sent_logits = torch.sigmoid(sent_logits)
+            return start_logits, end_logits, sent_logits
+
+
+class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
+    # 不expand可以吗 mask应该乘还是加
+    def __init__(self, config):
+        super(BertForQuestionAnsweringCoAttention, self).__init__(config)
+        self.bert = BertModel(config)
+
+        self.Wq3_1 = nn.Linear(2 * config.hidden_size, config.hidden_size)
+        self.Wq3_2 = nn.Linear(2 * config.hidden_size, config.hidden_size)
+        self.coatt1 = CoattentionModel(config)
+
+        self.start_logits = nn.Linear(config.hidden_size, 1)
+        self.end_logits = nn.Linear(config.hidden_size, 1)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.sent = nn.Linear(config.hidden_size, 1)
+        self.init_weights()
+
+    def forward(self, input_ids, attention_mask, token_type_ids, start_positions=None, end_positions=None,
+                sent_mask=None, sent_lbs=None, sent_weight=None, mask=None):
+        if len(input_ids.shape) < 2:
+            input_ids = input_ids.unsqueeze(0)
+            token_type_ids = token_type_ids.unsqueeze(0)
+            attention_mask = attention_mask.unsqueeze(0)
+            if start_positions is not None and len(start_positions.shape) < 2:
+                start_positions = start_positions.unsqueeze(0)
+                end_positions = end_positions.unsqueeze(0)
+                sent_mask = sent_mask.unsqueeze(0)
+                sent_lbs = sent_lbs.unsqueeze(0)
+                sent_weight = sent_weight.unsqueeze(0)
+        sequence_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0]
+        sequence_output = self.dropout(sequence_output)
+        ones_mask = torch.ones_like(attention_mask).cuda()
+        context_mask = (ones_mask - token_type_ids) * attention_mask
+        ques_mask = token_type_ids * attention_mask
+        coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(), ques_mask.unsqueeze(1).float())
+        # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
+        s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
+        s1 = self.Wq3_1(torch.cat([s1, sequence_output], dim=-1)) * context_mask.unsqueeze(-1) + \
+             self.Wq3_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1) + sequence_output
+        s2 = self.coatt1(s1, s1, coattention_mask)
+        extended_context_mask = (1.0 - context_mask) * -10000.0
+        start_logits = self.start_logits(s2).squeeze(-1) + extended_context_mask  # *context_mask.float()
+        end_logits = self.end_logits(s2).squeeze(-1) + extended_context_mask  # *context_mask.float()
+        # start_logits=self.start_logits(co1).squeeze(-1)
+        # end_logits = self.end_logits(co1).squeeze(-1)
+
+        sent_logits = self.sent(s2).squeeze(-1) * context_mask.float()
+        if len(sent_logits) > 1:
+            sent_logits.squeeze(-1)
+        loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
+        sent_logits = sent_logits * sent_mask.float()
+        if start_positions is not None and end_positions is not None:
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1)
+            # sent_lbs = sent_lbs[:, 0:context_maxlen]
+            # sent_weight = sent_weight[:, 0:context_maxlen]
+            sent_loss = loss_fn1(sent_logits, sent_lbs.float())
+            sent_loss = (sent_loss * sent_mask.float()) * sent_weight
+            sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
+            # sometimes the start/end positions are outside our model inputs, we ignore these terms
+            ignored_index = start_logits.size(1)
+            start_positions.clamp_(0, ignored_index)
+            end_positions.clamp_(0, ignored_index)
+
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)  # bsz*seq bsz*n
+            end_loss = loss_fct(end_logits, end_positions)
+            ans_loss = start_loss + end_loss
             total_loss = ans_loss + 0.2 * sent_loss
             return total_loss, start_logits, end_logits, sent_logits
         else:
+            # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
+            # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
             start_logits = nn.Softmax(dim=-1)(start_logits)
             end_logits = nn.Softmax(dim=-1)(end_logits)
             sent_logits = torch.sigmoid(sent_logits)
@@ -379,7 +631,7 @@ class BertForQuestionAnsweringTwoCoAttention(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForQuestionAnsweringTwoCoAttention, self).__init__(config)
         self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
+        
 
         self.Wq3_1 = nn.Linear(2*config.hidden_size, config.hidden_size)
         self.Wq3_2 = nn.Linear(2*config.hidden_size, config.hidden_size)
@@ -415,7 +667,6 @@ class BertForQuestionAnsweringTwoCoAttention(BertPreTrainedModel):
         ques_mask=token_type_ids*attention_mask
         coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
         # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
-        # import pdb; pdb.set_trace()
         s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
         s1=self.Wq3_1(torch.cat([s1, sequence_output], dim=-1))*context_mask.unsqueeze(-1)+ \
            self.Wq3_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1)+sequence_output
@@ -476,7 +727,7 @@ class BertForQuestionAnsweringThreeCoAttention(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForQuestionAnsweringThreeCoAttention, self).__init__(config)
         self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
+        
 
         self.Wq3_1 = nn.Linear(2*config.hidden_size, config.hidden_size)
         self.Wq3_2 = nn.Linear(2*config.hidden_size, config.hidden_size)
@@ -572,7 +823,7 @@ class BertForQuestionAnsweringThreeSameCoAttention(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForQuestionAnsweringThreeSameCoAttention, self).__init__(config)
         self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
+        
 
         self.Wq3_1 = nn.Linear(2*config.hidden_size, config.hidden_size)
         self.Wq3_2 = nn.Linear(2*config.hidden_size, config.hidden_size)
@@ -608,7 +859,6 @@ class BertForQuestionAnsweringThreeSameCoAttention(BertPreTrainedModel):
         ques_mask=token_type_ids*attention_mask
         coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
         # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
-        # import pdb; pdb.set_trace()
         s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
         s1=self.Wq3_1(torch.cat([s1, sequence_output], dim=-1))*context_mask.unsqueeze(-1)+ \
            self.Wq3_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1)+sequence_output
@@ -619,446 +869,6 @@ class BertForQuestionAnsweringThreeSameCoAttention(BertPreTrainedModel):
         s3 = self.Wq3_1(torch.cat([s3, s2], dim=-1)) * context_mask.unsqueeze(-1) + \
              self.Wq3_2(torch.cat([s3, s2], dim=-1)) * ques_mask.unsqueeze(-1) + s2
         s4 = self.coatt1(s3, s3, coattention_mask)
-
-
-
-        extended_context_mask = (1.0 - context_mask) * -10000.0
-        start_logits=self.start_logits(s4).squeeze(-1)+extended_context_mask#*context_mask.float()
-        end_logits = self.end_logits(s4).squeeze(-1)+extended_context_mask#*context_mask.float()
-        # start_logits=self.start_logits(co1).squeeze(-1)
-        # end_logits = self.end_logits(co1).squeeze(-1)
-
-        sent_logits = self.sent(s4).squeeze(-1)*context_mask.float()
-        if len(sent_logits) > 1:
-            sent_logits.squeeze(-1)
-        loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
-        sent_logits = sent_logits * sent_mask.float()
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sent_lbs = sent_lbs[:, 0:context_maxlen]
-            # sent_weight = sent_weight[:, 0:context_maxlen]
-            sent_loss = loss_fn1(sent_logits, sent_lbs.float())
-            sent_loss = (sent_loss * sent_mask.float()) * sent_weight
-            sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
-            end_loss = loss_fct(end_logits, end_positions)
-            ans_loss = start_loss + end_loss
-            total_loss=ans_loss+0.2*sent_loss
-            return total_loss,start_logits,end_logits,sent_logits
-        else:
-            # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
-            # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
-            start_logits = nn.Softmax(dim=-1)(start_logits)
-            end_logits = nn.Softmax(dim=-1)(end_logits)
-            sent_logits=torch.sigmoid(sent_logits)
-            return start_logits, end_logits,sent_logits
-
-
-class BertForQuestionAnsweringThreeSameCoAttention(BertPreTrainedModel):
-    #不expand可以吗 mask应该乘还是加
-    def __init__(self, config):
-        super(BertForQuestionAnsweringThreeSameCoAttention, self).__init__(config)
-        self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
-
-        self.Wq3_1 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        self.Wq3_2 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        # self.Wq4_1 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # self.Wq4_2 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # self.Wq5_1 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        # self.Wq5_2 = nn.Linear(2 * config.hidden_size, config.hidden_size)
-        self.coatt1=CoattentionModel(config)
-        # self.coatt2 = CoattentionModel(config)
-        # self.coatt3 = CoattentionModel(config)
-
-        self.start_logits = nn.Linear(config.hidden_size, 1)
-        self.end_logits = nn.Linear(config.hidden_size, 1)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent=nn.Linear(config.hidden_size,1)
-        self.init_weights()
-
-    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None,mask=None):
-        if len(input_ids.shape) < 2:
-            input_ids=input_ids.unsqueeze(0)
-            token_type_ids = token_type_ids.unsqueeze(0)
-            attention_mask = attention_mask.unsqueeze(0)
-            if start_positions is not None and len(start_positions.shape)<2:
-                start_positions=start_positions.unsqueeze(0)
-                end_positions=end_positions.unsqueeze(0)
-                sent_mask=sent_mask.unsqueeze(0)
-                sent_lbs=sent_lbs.unsqueeze(0)
-                sent_weight=sent_weight.unsqueeze(0)
-        sequence_output = self.bert(input_ids, attention_mask=attention_mask,token_type_ids=token_type_ids)[0]
-        sequence_output=self.dropout(sequence_output)
-        ones_mask = torch.ones_like(attention_mask).cuda()
-        context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask=token_type_ids*attention_mask
-        coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
-        # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
-        # import pdb; pdb.set_trace()
-        s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
-        s1=self.Wq3_1(torch.cat([s1, sequence_output], dim=-1))*context_mask.unsqueeze(-1)+ \
-           self.Wq3_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1)+sequence_output
-        s2 = self.coatt1(s1, s1, coattention_mask)
-        s2 = self.Wq3_1(torch.cat([s2, s1], dim=-1))*context_mask.unsqueeze(-1)+ \
-           self.Wq3_2(torch.cat([s2, s1], dim=-1)) * ques_mask.unsqueeze(-1)+s1
-        s3 = self.coatt1(s2, s2, coattention_mask)
-        s3 = self.Wq3_1(torch.cat([s3, s2], dim=-1)) * context_mask.unsqueeze(-1) + \
-             self.Wq3_2(torch.cat([s3, s2], dim=-1)) * ques_mask.unsqueeze(-1) + s2
-        s4 = self.coatt1(s3, s3, coattention_mask)
-
-
-
-        extended_context_mask = (1.0 - context_mask) * -10000.0
-        start_logits=self.start_logits(s4).squeeze(-1)+extended_context_mask#*context_mask.float()
-        end_logits = self.end_logits(s4).squeeze(-1)+extended_context_mask#*context_mask.float()
-        # start_logits=self.start_logits(co1).squeeze(-1)
-        # end_logits = self.end_logits(co1).squeeze(-1)
-
-        sent_logits = self.sent(s4).squeeze(-1)*context_mask.float()
-        if len(sent_logits) > 1:
-            sent_logits.squeeze(-1)
-        loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
-        sent_logits = sent_logits * sent_mask.float()
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sent_lbs = sent_lbs[:, 0:context_maxlen]
-            # sent_weight = sent_weight[:, 0:context_maxlen]
-            sent_loss = loss_fn1(sent_logits, sent_lbs.float())
-            sent_loss = (sent_loss * sent_mask.float()) * sent_weight
-            sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
-            end_loss = loss_fct(end_logits, end_positions)
-            ans_loss = start_loss + end_loss
-            total_loss=ans_loss+0.2*sent_loss
-            return total_loss,start_logits,end_logits,sent_logits
-        else:
-            # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
-            # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
-            start_logits = nn.Softmax(dim=-1)(start_logits)
-            end_logits = nn.Softmax(dim=-1)(end_logits)
-            sent_logits=torch.sigmoid(sent_logits)
-            return start_logits, end_logits,sent_logits
-
-
-class BertForQuestionAnsweringCoAttention(BertPreTrainedModel):
-    #不expand可以吗 mask应该乘还是加
-    def __init__(self, config):
-        super(BertForQuestionAnsweringCoAttention, self).__init__(config)
-        self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
-
-        self.Wq3_1 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        self.Wq3_2 = nn.Linear(2*config.hidden_size, config.hidden_size)
-        self.coatt1=CoattentionModel(config)
-
-        self.start_logits = nn.Linear(config.hidden_size, 1)
-        self.end_logits = nn.Linear(config.hidden_size, 1)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent=nn.Linear(config.hidden_size,1)
-        self.init_weights()
-
-    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None,mask=None):
-        if len(input_ids.shape) < 2:
-            input_ids=input_ids.unsqueeze(0)
-            token_type_ids = token_type_ids.unsqueeze(0)
-            attention_mask = attention_mask.unsqueeze(0)
-            if start_positions is not None and len(start_positions.shape)<2:
-                start_positions=start_positions.unsqueeze(0)
-                end_positions=end_positions.unsqueeze(0)
-                sent_mask=sent_mask.unsqueeze(0)
-                sent_lbs=sent_lbs.unsqueeze(0)
-                sent_weight=sent_weight.unsqueeze(0)
-        sequence_output = self.bert(input_ids, attention_mask=attention_mask,token_type_ids=token_type_ids)[0]
-        sequence_output=self.dropout(sequence_output)
-        ones_mask = torch.ones_like(attention_mask).cuda()
-        context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask=token_type_ids*attention_mask
-        coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
-        # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
-        # import pdb; pdb.set_trace()
-        s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
-        s1=self.Wq3_1(torch.cat([s1, sequence_output], dim=-1))*context_mask.unsqueeze(-1)+ \
-           self.Wq3_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1)+sequence_output
-        s2 = self.coatt1(s1, s1, coattention_mask)
-        extended_context_mask = (1.0 - context_mask) * -10000.0
-        start_logits=self.start_logits(s2).squeeze(-1)+extended_context_mask#*context_mask.float()
-        end_logits = self.end_logits(s2).squeeze(-1)+extended_context_mask#*context_mask.float()
-        # start_logits=self.start_logits(co1).squeeze(-1)
-        # end_logits = self.end_logits(co1).squeeze(-1)
-
-        sent_logits = self.sent(s2).squeeze(-1)*context_mask.float()
-        if len(sent_logits) > 1:
-            sent_logits.squeeze(-1)
-        loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
-        sent_logits = sent_logits * sent_mask.float()
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sent_lbs = sent_lbs[:, 0:context_maxlen]
-            # sent_weight = sent_weight[:, 0:context_maxlen]
-            sent_loss = loss_fn1(sent_logits, sent_lbs.float())
-            sent_loss = (sent_loss * sent_mask.float()) * sent_weight
-            sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
-            end_loss = loss_fct(end_logits, end_positions)
-            ans_loss = start_loss + end_loss
-            total_loss = ans_loss + 0.2 * sent_loss
-            return total_loss, start_logits, end_logits, sent_logits
-        else:
-            # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
-            # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
-            start_logits = nn.Softmax(dim=-1)(start_logits)
-            end_logits = nn.Softmax(dim=-1)(end_logits)
-            sent_logits=torch.sigmoid(sent_logits)
-            return start_logits, end_logits, sent_logits
-
-
-class BertForQuestionAnsweringTransformer(BertPreTrainedModel):
-    #不expand可以吗 mask应该乘还是加
-    def __init__(self, config):
-        super(BertForQuestionAnsweringTransformer, self).__init__(config)
-        self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
-
-        self.coatt1=CoattentionModel(config)
-
-        self.start_logits = nn.Linear(config.hidden_size, 1)
-        self.end_logits = nn.Linear(config.hidden_size, 1)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent=nn.Linear(config.hidden_size,1)
-        self.init_weights()
-
-    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None,mask=None):
-        if len(input_ids.shape) < 2:
-            input_ids=input_ids.unsqueeze(0)
-            token_type_ids = token_type_ids.unsqueeze(0)
-            attention_mask = attention_mask.unsqueeze(0)
-            if start_positions is not None and len(start_positions.shape)<2:
-                start_positions=start_positions.unsqueeze(0)
-                end_positions=end_positions.unsqueeze(0)
-                sent_mask=sent_mask.unsqueeze(0)
-                sent_lbs=sent_lbs.unsqueeze(0)
-                sent_weight=sent_weight.unsqueeze(0)
-        sequence_output = self.bert(input_ids, attention_mask=attention_mask,token_type_ids=token_type_ids)[0]
-        sequence_output=self.dropout(sequence_output)
-        ones_mask = torch.ones_like(attention_mask).cuda()
-        context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask=token_type_ids*attention_mask
-        coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
-        # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
-        # import pdb; pdb.set_trace()
-        s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
-        s1 = s1 + sequence_output
-        # s2 = self.coatt1(s1, s1, coattention_mask)
-        # s2 = s2 + s1
-        # s3 = self.coatt2(s2, s2, coattention_mask)
-        # s3 = s3 + s2
-        # s4 = self.coatt3(s3, s3, coattention_mask)
-
-
-
-        extended_context_mask = (1.0 - context_mask) * -10000.0
-        start_logits=self.start_logits(s1).squeeze(-1)+extended_context_mask#*context_mask.float()
-        end_logits = self.end_logits(s1).squeeze(-1)+extended_context_mask#*context_mask.float()
-        # start_logits=self.start_logits(co1).squeeze(-1)
-        # end_logits = self.end_logits(co1).squeeze(-1)
-
-        sent_logits = self.sent(s1).squeeze(-1)*context_mask.float()
-        if len(sent_logits) > 1:
-            sent_logits.squeeze(-1)
-        loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
-        sent_logits = sent_logits * sent_mask.float()
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sent_lbs = sent_lbs[:, 0:context_maxlen]
-            # sent_weight = sent_weight[:, 0:context_maxlen]
-            sent_loss = loss_fn1(sent_logits, sent_lbs.float())
-            sent_loss = (sent_loss * sent_mask.float()) * sent_weight
-            sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
-            end_loss = loss_fct(end_logits, end_positions)
-            ans_loss = start_loss + end_loss
-            total_loss=ans_loss+0.2*sent_loss
-            return total_loss,start_logits,end_logits,sent_logits
-        else:
-            # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
-            # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
-            start_logits = nn.Softmax(dim=-1)(start_logits)
-            end_logits = nn.Softmax(dim=-1)(end_logits)
-            sent_logits=torch.sigmoid(sent_logits)
-            return start_logits, end_logits,sent_logits
-
-
-class BertForQuestionAnsweringTwoTransformer(BertPreTrainedModel):
-    #不expand可以吗 mask应该乘还是加
-    def __init__(self, config):
-        super(BertForQuestionAnsweringTwoTransformer, self).__init__(config)
-        self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
-
-        self.coatt1=CoattentionModel(config)
-        # self.coatt2 = CoattentionModel(config)
-        self.coatt3 = CoattentionModel(config)
-
-        self.start_logits = nn.Linear(config.hidden_size, 1)
-        self.end_logits = nn.Linear(config.hidden_size, 1)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent=nn.Linear(config.hidden_size,1)
-        self.init_weights()
-
-    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None,mask=None):
-        if len(input_ids.shape) < 2:
-            input_ids=input_ids.unsqueeze(0)
-            token_type_ids = token_type_ids.unsqueeze(0)
-            attention_mask = attention_mask.unsqueeze(0)
-            if start_positions is not None and len(start_positions.shape)<2:
-                start_positions=start_positions.unsqueeze(0)
-                end_positions=end_positions.unsqueeze(0)
-                sent_mask=sent_mask.unsqueeze(0)
-                sent_lbs=sent_lbs.unsqueeze(0)
-                sent_weight=sent_weight.unsqueeze(0)
-        sequence_output = self.bert(input_ids, attention_mask=attention_mask,token_type_ids=token_type_ids)[0]
-        sequence_output=self.dropout(sequence_output)
-        ones_mask = torch.ones_like(attention_mask).cuda()
-        context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask=token_type_ids*attention_mask
-        coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
-        # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
-        # import pdb; pdb.set_trace()
-        s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
-        s1 = s1 + sequence_output
-        s2 = self.coatt1(s1, s1, coattention_mask)
-        s2 = s2 + s1
-        # s3 = self.coatt2(s2, s2, coattention_mask)
-        # s3 = s3 + s2
-        s4 = self.coatt3(s2, s2, coattention_mask)
-
-
-
-        extended_context_mask = (1.0 - context_mask) * -10000.0
-        start_logits=self.start_logits(s4).squeeze(-1)+extended_context_mask#*context_mask.float()
-        end_logits = self.end_logits(s4).squeeze(-1)+extended_context_mask#*context_mask.float()
-        # start_logits=self.start_logits(co1).squeeze(-1)
-        # end_logits = self.end_logits(co1).squeeze(-1)
-
-        sent_logits = self.sent(s4).squeeze(-1)*context_mask.float()
-        if len(sent_logits) > 1:
-            sent_logits.squeeze(-1)
-        loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
-        sent_logits = sent_logits * sent_mask.float()
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sent_lbs = sent_lbs[:, 0:context_maxlen]
-            # sent_weight = sent_weight[:, 0:context_maxlen]
-            sent_loss = loss_fn1(sent_logits, sent_lbs.float())
-            sent_loss = (sent_loss * sent_mask.float()) * sent_weight
-            sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
-            end_loss = loss_fct(end_logits, end_positions)
-            ans_loss = start_loss + end_loss
-            total_loss=ans_loss+0.2*sent_loss
-            return total_loss,start_logits,end_logits,sent_logits
-        else:
-            # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
-            # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
-            start_logits = nn.Softmax(dim=-1)(start_logits)
-            end_logits = nn.Softmax(dim=-1)(end_logits)
-            sent_logits=torch.sigmoid(sent_logits)
-            return start_logits, end_logits,sent_logits
-
-class BertForQuestionAnsweringThreeTransformer(BertPreTrainedModel):
-    #不expand可以吗 mask应该乘还是加
-    def __init__(self, config):
-        super(BertForQuestionAnsweringThreeTransformer, self).__init__(config)
-        self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
-
-        self.coatt1=CoattentionModel(config)
-        self.coatt2 = CoattentionModel(config)
-        self.coatt3 = CoattentionModel(config)
-
-        self.start_logits = nn.Linear(config.hidden_size, 1)
-        self.end_logits = nn.Linear(config.hidden_size, 1)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent=nn.Linear(config.hidden_size,1)
-        self.init_weights()
-
-    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None,mask=None):
-        if len(input_ids.shape) < 2:
-            input_ids=input_ids.unsqueeze(0)
-            token_type_ids = token_type_ids.unsqueeze(0)
-            attention_mask = attention_mask.unsqueeze(0)
-            if start_positions is not None and len(start_positions.shape)<2:
-                start_positions=start_positions.unsqueeze(0)
-                end_positions=end_positions.unsqueeze(0)
-                sent_mask=sent_mask.unsqueeze(0)
-                sent_lbs=sent_lbs.unsqueeze(0)
-                sent_weight=sent_weight.unsqueeze(0)
-        sequence_output = self.bert(input_ids, attention_mask=attention_mask,token_type_ids=token_type_ids)[0]
-        sequence_output=self.dropout(sequence_output)
-        ones_mask = torch.ones_like(attention_mask).cuda()
-        context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask=token_type_ids*attention_mask
-        coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
-        # s1 = self.coatt1(sequence_output, sequence_output, mask.float())
-        # import pdb; pdb.set_trace()
-        s1 = self.coatt1(sequence_output, sequence_output, coattention_mask)
-        s1 = s1 + sequence_output
-        s2 = self.coatt1(s1, s1, coattention_mask)
-        s2 = s2 + s1
-        s3 = self.coatt2(s2, s2, coattention_mask)
-        s3 = s3 + s2
-        s4 = self.coatt3(s3, s3, coattention_mask)
 
 
 
@@ -1109,7 +919,7 @@ class BertForQuestionAnsweringGraph(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForQuestionAnsweringGraph, self).__init__(config)
         self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
+        
 
         self.Wq3_1 = nn.Linear(2*config.hidden_size, config.hidden_size)
         self.Wq3_2 = nn.Linear(2*config.hidden_size, config.hidden_size)

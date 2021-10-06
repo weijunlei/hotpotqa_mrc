@@ -15,6 +15,7 @@ from torch.utils.data.distributed import DistributedSampler
 from first_hop_data_helper import convert_examples_to_features, read_hotpotqa_examples
 from first_hop_prediction_helper import prediction_evaluate, write_predictions
 sys.path.append("../pretrain_model")
+from changed_model import BertForParagraphClassification, BertForRelatedSentence
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 from tokenization import BertTokenizer

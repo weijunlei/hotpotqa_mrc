@@ -35,6 +35,7 @@ from first_hop_data_helper import (HotpotQAExample,
                                        convert_examples_to_features)
 from first_hop_selector import dev_feature_getter, write_predictions
 sys.path.append("../pretrain_model")
+from changed_model import BertForParagraphClassification, BertForRelatedSentence
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 from tokenization import BertTokenizer

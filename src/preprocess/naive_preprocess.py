@@ -21,7 +21,6 @@ def naive_preprocess(config):
         for get_title, sf_sent_idxs in title2sf.items():
             if has_answer:
                 continue
-            # TODO: 用支撑句里的答案而不是使用整个支撑段落里最早出现的答案
             sf_sent_idxs = sorted(sf_sent_idxs)
             context_idx = title2idx[get_title]
             para = ''.join(qa_info['context'][context_idx][1])

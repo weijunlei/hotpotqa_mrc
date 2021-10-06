@@ -2,7 +2,8 @@ import json
 
 from origin_reader_helper import SquadExample
 
-def read_examples(input_file, filter_file,tokenizer,is_training):
+
+def read_examples(input_file, filter_file, tokenizer, is_training):
     filter = json.load(open(filter_file, 'r'))
     examples = []
     def is_whitespace(c):
@@ -10,18 +11,18 @@ def read_examples(input_file, filter_file,tokenizer,is_training):
             return True
         return False
 
-    fail_count=0
-    lines=json.load(open(input_file, 'r', encoding='utf-8'))
-    fail=0
+    fail_count = 0
+    lines = json.load(open(input_file, 'r', encoding='utf-8'))
+    fail = 0
     for d in lines:
         context = ""
         question = d['question']
-        answer=d['answer']
-        answer_label=d['labels'][0]
+        answer = d['answer']
+        answer_label = d['labels'][0]
         sup = d['supporting_facts']
-        id=d['_id']
-        length=len(context)
-        sent_cls=[]
+        id = d['_id']
+        length = len(context)
+        sent_cls = []
         sent_lbs=[]
         start_position=None
         end_position=None
@@ -35,52 +36,50 @@ def read_examples(input_file, filter_file,tokenizer,is_training):
         full_sents_lbs=[]
         char_to_matrix=[]
         sid=1
-        for ind_con,con in enumerate(d['context']):#为了去掉句首的空白
+        for ind_con, con in enumerate(d['context']):#为了去掉句首的空白
             if ind_con in filter[id]:
-                full_sents_mask+=[1 for con1 in con[1] if con1.strip()!='']
+                full_sents_mask += [1 for con1 in con[1] if con1.strip()!='']
             else:
-                full_sents_mask+=[0]*len(con[1])
+                full_sents_mask += [0]*len(con[1])
             for indc1,c1 in enumerate(con[1]):
                 if ind_con in filter[id] and c1.strip()=='':
                     continue
-                if [con[0],indc1] in sup:
+                if [con[0], indc1] in sup:
                     full_sents_lbs.append(1)
                 else:
                     full_sents_lbs.append(0)
-            if con[0]==answer_label[0] and ind_con not in filter[id]:
-                fail+=1
+            if con[0] == answer_label[0] and ind_con not in filter[id]:
+                fail += 1
                 break
             if ind_con in filter[id]:
-                offset=0
-                added=0
-                for inds,sent in enumerate(con[1]):
-                    if sent.strip()=='':
+                offset = 0
+                added = 0
+                for inds, sent in enumerate(con[1]):
+                    if sent.strip() == '':
                         continue
-                    if context=='':
-                        white1=0
+                    if context == '':
+                        white1 = 0
                         while is_whitespace(sent[0]):
-                            white1+=1
-                            sent=sent[1:]
-                        offset+=white1
+                            white1 += 1
+                            sent = sent[1:]
+                        offset += white1
                     elif not sent.startswith(' '):
-                        context+=' '
-                        length+=1
+                        context += ' '
+                        length += 1
                         char_to_matrix += [sid]
                     # context+='<unk>'+sent
-                    context +=sent
-                    char_to_matrix+=[sid]*len(sent)
-                    sid+=1
-                    sent_cls.append(length+0)
-                    if con[0]==answer_label[0]:
-                        if answer_label[1]>=offset and answer_label[1]<offset+len(sent):
-                            start_position=length+answer_label[1]-offset#+5
-                        # if answer_label[2]>=offset-white1 and answer_label[2]<=offset:
-                        #     end_position=length
-                        if answer_label[2]>offset and answer_label[2]<=offset+len(sent):
-                            end_position=length+answer_label[2]-offset#+5
-                    length += len(sent)# + 5
-                    offset+=len(sent)
-                    if [con[0],inds] in sup:
+                    context += sent
+                    char_to_matrix += [sid]*len(sent)
+                    sid += 1
+                    sent_cls.append(length)
+                    if con[0] == answer_label[0]:
+                        if answer_label[1] >= offset and answer_label[1] < offset+len(sent):
+                            start_position = length+answer_label[1]-offset#+5
+                        if answer_label[2] > offset and answer_label[2]<=offset+len(sent):
+                            end_position = length+answer_label[2]-offset #+5
+                    length += len(sent) # + 5
+                    offset += len(sent)
+                    if [con[0], inds] in sup:
                         sent_lbs.append(1)
                     else:
                         sent_lbs.append(0)
@@ -165,7 +164,7 @@ def read_examples(input_file, filter_file,tokenizer,is_training):
                 sum_toklen += len(char_to_word_offset)-prelen
             if indt != len(doc_tokens) - 1:
                 char_to_word_offset.append(len(doc_subwords))
-                conlen+=1
+                conlen += 1
             while len(char_to_word_offset) < conlen:
                 char_to_word_offset.append(len(doc_subwords) - 1)
             while len(char_to_word_offset) > conlen:
@@ -173,55 +172,31 @@ def read_examples(input_file, filter_file,tokenizer,is_training):
             assert conlen == len(char_to_word_offset)
         assert len(char_to_word_offset) == len(context)
 
-        sent_cls_w=[]
+        sent_cls_w = []
         for sc in sent_cls_n:
             sent_cls_w.append(char_to_word_offset[sc])
-        start_position_w=char_to_word_offset[start_position_n]
-        if end_position_n==len(char_to_word_offset):
-            end_position_w=char_to_word_offset[end_position_n-1]+1
+        start_position_w = char_to_word_offset[start_position_n]
+        if end_position_n == len(char_to_word_offset):
+            end_position_w = char_to_word_offset[end_position_n-1]+1
         else:
             end_position_w=char_to_word_offset[end_position_n]
         sent_cls_extend=[]
-        for ind_scw,scw in enumerate(sent_cls_w):
-            doc_subwords.insert(scw+ind_scw,'[UNK]')
-            sub_to_orig_index.insert(scw+ind_scw,sub_to_orig_index[scw+ind_scw])
-            subwords_to_matrix.insert(scw+ind_scw,subwords_to_matrix[scw+ind_scw])
+        for ind_scw, scw in enumerate(sent_cls_w):
+            doc_subwords.insert(scw+ind_scw, '[UNK]')
+            sub_to_orig_index.insert(scw+ind_scw, sub_to_orig_index[scw+ind_scw])
+            subwords_to_matrix.insert(scw+ind_scw, subwords_to_matrix[scw+ind_scw])
             sent_cls_extend.append(scw+ind_scw)
-            if start_position_w>=scw+ind_scw:
-                start_position_w+=1
-            if end_position_w>scw+ind_scw:
-                end_position_w+=1
+            if start_position_w >= scw+ind_scw:
+                start_position_w += 1
+            if end_position_w > scw+ind_scw:
+                end_position_w += 1
 
-        # tok_text = " ".join(doc_subwords[start_position_w:end_position_w])
-        # tok_text=tok_text.replace('##','')
-        # tok_text=tok_text.replace(' ##','')
-        # tok_text=tok_text.strip()
-        # orig_text=" ".join(doc_tokens[sub_to_orig_index[start_position_w]:sub_to_orig_index[end_position_w-1]+1])
-        # actual_text=get_final_text(tok_text, orig_text, True, False)
-        # tok_text_f = ''.join(tok_text.split())
-        # actual_text_f=''.join(actual_text.split()).lower()
-        # start_offset=actual_text_f.find(tok_text_f)
-        # end_offset=len(actual_text_f)-start_offset-len(tok_text_f)
-        # if start_offset>=0:
-        #     if end_offset!=0:
-        #         actual_text=actual_text[start_offset:-end_offset]
-        #     else:
-        #         actual_text=actual_text[start_offset:]
-        # # actual_text=tokenizer.convert_tokens_to_string(doc_subwords[start_position_w:end_position_w]).strip()
-        # cleaned_answer_text = " ".join(whitespace_tokenize(answer))
-        #
-        # if actual_text!=cleaned_answer_text and answer!='yes' and answer!='no':
-        #
-        #     print(actual_text)
-        #     print(cleaned_answer_text)
-        #     print()
-
-        if answer.lower()=='yes':
-            start_position_w=-1
-            end_position_w=-1
-        if answer.lower()=='no':
-            start_position_w=-2
-            end_position_w=-2
+        if answer.lower() == 'yes':
+            start_position_w = -1
+            end_position_w = -1
+        if answer.lower() == 'no':
+            start_position_w = -2
+            end_position_w = -2
         example = SquadExample(
             qas_id=id,
             question_text=question,

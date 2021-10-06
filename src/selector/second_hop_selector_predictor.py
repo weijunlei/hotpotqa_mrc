@@ -366,7 +366,7 @@ def run_predict(args):
                 all_tokens = tokenizer.tokenize(cur_all_text)
                 if not has_sentence_result and len(all_tokens) > 256:
                     all_tokens = all_tokens[:256]
-                else:
+                if has_sentence_result:
                     del_idx += 1
         all_tokens_len = len(tokenizer.tokenize(cur_all_text))
         total += all_tokens_len
