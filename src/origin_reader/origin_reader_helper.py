@@ -370,6 +370,12 @@ def _compute_softmax(scores):
     return probs
 
 
+def is_whitespace(ch):
+    if ch == " " or ch == "\t" or ch == "\r" or ch == "\n" or ord(ch) == 0x202F or ch == '\xa0':
+        return True
+    return False
+
+
 def write_predictions(tokenizer, all_examples, all_features, all_results, n_best_size=20,
                       max_answer_length=20, do_lower_case=True):
     """Write final predictions to the json file and log-odds of null if needed."""

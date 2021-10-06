@@ -1,20 +1,16 @@
 import json
+from origin_reader_helper import SquadExample, is_whitespace
 
-from origin_reader_helper import SquadExample
 
-
-def read_examples(input_file, filter_file, tokenizer, is_training):
-    filter = json.load(open(filter_file, 'r'))
+def read_examples(input_file, supporting_para_file, tokenizer, is_training):
+    # 支撑段落
+    sp_dict = json.load(open(supporting_para_file, 'r'))
+    # 处理后的数据
+    datas = json.load(open(input_file, 'r', encoding='utf-8'))
+    # 转换后的examples
     examples = []
-    def is_whitespace(c):
-        if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F or c=='\xa0':
-            return True
-        return False
-
-    fail_count = 0
-    lines = json.load(open(input_file, 'r', encoding='utf-8'))
-    fail = 0
-    for d in lines:
+    no_answer_examples = 0
+    for d in datas:
         context = ""
         question = d['question']
         answer = d['answer']
@@ -37,35 +33,35 @@ def read_examples(input_file, filter_file, tokenizer, is_training):
         char_to_matrix=[]
         sid=1
         for ind_con, con in enumerate(d['context']):#为了去掉句首的空白
-            if ind_con in filter[id]:
-                full_sents_mask+=[1 for con1 in con[1] if con1.strip()!='']
+            if ind_con in sp_dict[id]:
+                full_sents_mask += [1 for con1 in con[1] if con1.strip()!='']
             else:
-                full_sents_mask+=[0]*len(con[1])
+                full_sents_mask += [0]*len(con[1])
             for indc1,c1 in enumerate(con[1]):
-                if ind_con in filter[id] and c1.strip()=='':
+                if ind_con in sp_dict[id] and c1.strip()=='':
                     continue
-                if [con[0],indc1] in sup:
+                if [con[0], indc1] in sup:
                     full_sents_lbs.append(1)
                 else:
                     full_sents_lbs.append(0)
-            if con[0]==answer_label[0] and ind_con not in filter[id]:
-                fail+=1
+            if con[0] == answer_label[0] and ind_con not in sp_dict[id]:
+                no_answer_examples += 1
                 break
-            if ind_con in filter[id]:
+            if ind_con in sp_dict[id]:
                 offset = 0
                 added = 0
                 for inds, sent in enumerate(con[1]):
-                    if sent.strip()=='':
+                    if sent.strip() == '':
                         continue
                     if context == '':
                         white1 = 0
                         while is_whitespace(sent[0]):
                             white1 += 1
                             sent = sent[1:]
-                        offset+=white1
+                        offset += white1
                     elif not sent.startswith(' '):
-                        context+=' '
-                        length+=1
+                        context += ' '
+                        length += 1
                         char_to_matrix += [sid]
                     # context+='<unk>'+sent
                     context += sent
@@ -213,23 +209,15 @@ def read_examples(input_file, filter_file, tokenizer, is_training):
             subwords_to_matrix=subwords_to_matrix
         )
         examples.append(example)
-    print('fail:',fail_count)
-    # logging(input_file+' fail count '+str(fail_count))
     return examples
 
 
-def read_dev_examples(input_file, filter_file,tokenizer,is_training):
-    filter = json.load(open(filter_file, 'r'))
+def read_dev_examples(input_file, supporting_para_file,tokenizer,is_training):
+    sp_dict = json.load(open(supporting_para_file, 'r'))
     examples = []
-    def is_whitespace(c):
-        if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F or c=='\xa0':
-            return True
-        return False
-
-    fail_count=0
-    lines=json.load(open(input_file,'r',encoding='utf-8'))
-    fail=0
-    for d in lines:
+    datas=json.load(open(input_file,'r',encoding='utf-8'))
+    no_answer_examples=0
+    for d in datas:
         context = ""
         question = d['question']
         answer=d['answer']
@@ -243,21 +231,21 @@ def read_dev_examples(input_file, filter_file,tokenizer,is_training):
         char_to_matrix = []
         sid = 1
         for ind_con,con in enumerate(d['context']):#为了去掉句首的空白
-            if ind_con in filter[id]:
+            if ind_con in sp_dict[id]:
                 full_sents_mask+=[1 for con1 in con[1] if con1.strip()!='']
             else:
                 full_sents_mask+=[0]*len(con[1])
             for indc1,c1 in enumerate(con[1]):
-                if ind_con in filter[id] and c1.strip()=='':
+                if ind_con in sp_dict[id] and c1.strip()=='':
                     continue
                 if [con[0],indc1] in sup:
                     full_sents_lbs.append(1)
                 else:
                     full_sents_lbs.append(0)
-            # if con[0]==answer_label[0] and ind_con not in filter[id]:
-            #     fail+=1
+            # if con[0]==answer_label[0] and ind_con not in sp_dict[id]:
+            #     no_answer_examples+=1
             #     break
-            if ind_con in filter[id]:
+            if ind_con in sp_dict[id]:
                 offset=0
                 for inds,sent in enumerate(con[1]):
                     if sent.strip()=='':
@@ -372,7 +360,7 @@ def read_dev_examples(input_file, filter_file,tokenizer,is_training):
         #         cur_subword += 1
         #         if cur_subword>=len(doc_subwords):
         #             break
-        sent_cls_w=[]
+        sent_cls_w = []
         for sc in sent_cls_n:
             sent_cls_w.append(char_to_word_offset[sc])
         sent_cls_extend=[]
@@ -403,6 +391,4 @@ def read_dev_examples(input_file, filter_file,tokenizer,is_training):
             subwords_to_matrix=subwords_to_matrix
         )
         examples.append(example)
-    print('fail:',fail_count)
-    # logging(input_file+' fail count '+str(fail_count))
     return examples

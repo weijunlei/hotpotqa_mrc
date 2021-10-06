@@ -92,7 +92,7 @@ def logger_config(log_path, log_prefix='lwj'):
 def get_dev_data(args, tokenizer, logger=None):
     """ 获取验证集数据 """
     dev_examples = read_dev_examples(
-        input_file=args.dev_file, filter_file=args.dev_filter_file, tokenizer=tokenizer, is_training=True)
+        input_file=args.dev_file, supporting_para_file=args.dev_supporting_para_file, tokenizer=tokenizer, is_training=True)
     logger.info('dev examples: {}'.format(len(dev_examples)))
     # dev_feature_file = args.dev_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
     #     list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride),
@@ -139,7 +139,7 @@ def get_train_data(args, tokenizer, logger=None):
     if not os.path.exists(tmp_cache_file):
         train_examples = read_examples(
             input_file=args.train_file,
-            filter_file=args.train_filter_file,
+            supporting_para_file=args.train_supporting_para_file,
             tokenizer=tokenizer,
             is_training=True)
         # 当数据配置不变时可以设置为定值

@@ -22,8 +22,8 @@ class TransformerLayer(nn.Module):
         :param mask: mask: [batch_size * 1 * seq_length * seq_length]
         :return: [batch_size * seq_length * hidden_size]
         """
-        inner = self.dropout_1(self.self_attention(x, x, x, mask))
-        inner = self.layer_norm_1(inner + x)
-        output = self.dropout_2(self.ffw(inner))
-        output = self.layer_norm_2(output + inner)
+        # inner = self.dropout_1(self.self_attention(x, x, x, mask))
+        # inner = self.layer_norm_1(inner + x)
+        output = self.dropout_2(self.ffw(x))
+        output = self.layer_norm_2(output + x)
         return output

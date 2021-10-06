@@ -508,10 +508,10 @@ class BertSelfAttentionAndCoAttention(BertPreTrainedModel):
         s1 = self.Wq1_1(torch.cat([s1, sequence_output], dim=-1)) * context_mask.unsqueeze(-1) + \
              self.Wq1_2(torch.cat([s1, sequence_output], dim=-1)) * ques_mask.unsqueeze(-1) + sequence_output
         s2 = self.coatt1(s1, s1, coattention_mask)
-        start_logits = self.start_logits(sequence_output).squeeze(-1) + extended_context_mask # *context_mask.float()
-        end_logits = self.end_logits(sequence_output).squeeze(-1) + extended_context_mask # *context_mask.float()
+        start_logits = self.start_logits(s2).squeeze(-1) + extended_context_mask # *context_mask.float()
+        end_logits = self.end_logits(s2).squeeze(-1) + extended_context_mask # *context_mask.float()
 
-        sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
+        sent_logits = self.sent(s2).squeeze(-1) * context_mask.float()
         if len(sent_logits) > 1:
             sent_logits.squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
@@ -536,7 +536,7 @@ class BertSelfAttentionAndCoAttention(BertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
-            total_loss = ans_loss+0.2*sent_loss
+            total_loss = ans_loss+ 0.2 * sent_loss
             return total_loss, start_logits, end_logits, sent_logits
         else:
             start_logits = nn.Softmax(dim=-1)(start_logits)
