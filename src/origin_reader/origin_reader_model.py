@@ -40,17 +40,10 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Samp
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-import bisect
-
-if sys.version_info[0] == 2:
-    import cPickle as pickle
-else:
-    import pickle
-from collections import Counter
-import string
+import pickle
 import gc
 
-from origin_read_examples import read_examples, read_dev_examples
+from origin_read_examples import read_examples
 from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
 from origin_reader_helper import write_predictions, evaluate
 from lazy_dataloader import LazyLoadTensorDataset
@@ -60,9 +53,19 @@ sys.path.append("../pretrain_model")
 from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, \
     BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward, BertForQuestionAnsweringForwardBest,\
     BertSelfAttentionAndCoAttention, BertTransformer, BertSkipConnectTransformer
-# from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
+# 自定义好的模型
+model_dict = {
+    'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention,
+    'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
+    'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
+    'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
+    'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest,
+    'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention,
+    'BertSkipConnectTransformer': BertSkipConnectTransformer,
+    'BertTransformer': BertTransformer,
+}
 
 logger = None
 
@@ -91,12 +94,12 @@ def logger_config(log_path, log_prefix='lwj'):
 
 def get_dev_data(args, tokenizer, logger=None):
     """ 获取验证集数据 """
-    dev_examples = read_dev_examples(
-        input_file=args.dev_file, supporting_para_file=args.dev_supporting_para_file, tokenizer=tokenizer, is_training=True)
+    dev_examples = read_examples(
+        input_file=args.dev_file,
+        supporting_para_file=args.dev_supporting_para_file,
+        tokenizer=tokenizer,
+        is_training=False)
     logger.info('dev examples: {}'.format(len(dev_examples)))
-    # dev_feature_file = args.dev_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
-    #     list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride),
-    #     args.feature_suffix)
     cached_dev_features_file = '{}/dev_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
                                                                       args.bert_model.split('/')[-1],
                                                                       str(args.max_seq_length),
@@ -271,18 +274,6 @@ def run_train():
 
     train_examples = None
     num_train_optimization_steps = None
-
-    # 自定义好的模型
-    model_dict = {
-        'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention,
-        'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
-        'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
-        'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
-        'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest,
-        'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention,
-        'BertSkipConnectTransformer': BertSkipConnectTransformer,
-        'BertTransformer': BertTransformer,
-    }
     model = model_dict[args.model_name].from_pretrained(args.bert_model)
     # 半精度和并行化使用设置
     if args.fp16:

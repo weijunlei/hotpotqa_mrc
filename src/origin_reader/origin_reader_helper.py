@@ -11,7 +11,7 @@ sys.path.append("../pretrain_model")
 from tokenization import BasicTokenizer
 
 
-class SquadExample(object):
+class HotpotQAExample(object):
     """
     A single training/test example for the Squad dataset.
     For examples without an answer, the start and end position are -1.
@@ -51,18 +51,11 @@ class SquadExample(object):
         return self.__repr__()
 
     def __repr__(self):
-        s = ""
-        s += "qas_id: %s" % (self.qas_id)
-        s += ", question_text: %s" % (
-            self.question_text)
-        s += ", doc_tokens: [%s]" % (" ".join(self.doc_tokens))
+        qa_info = "qas_id:{} question:{}".format(self.qas_id, self.doc_tokens)
         if self.start_position:
-            s += ", start_position: %d" % (self.start_position)
-        if self.start_position:
-            s += ", end_position: %d" % (self.end_position)
-        if self.start_position:
-            s += ", is_impossible: %r" % (self.is_impossible)
-        return s
+            qa_info += " ,start position: {}".format(self.start_position)
+            qa_info += " , end_position: {}".format(self.end_position)
+        return qa_info
 
 
 class InputFeatures(object):
