@@ -125,10 +125,10 @@ def get_dev_data(args, tokenizer, logger=None):
                 pickle.dump(dev_features, writer)
     logger.info('dev feature_num: {}'.format(len(dev_features)))
     dev_data = LazyLoadTensorDataset(dev_features, is_training=False)
-    if args.local_rank == -1:
-        dev_sampler = RandomSampler(dev_data)
-    else:
-        dev_sampler = DistributedSampler(dev_data)
+    # if args.local_rank == -1:
+    dev_sampler = RandomSampler(dev_data)
+    # else:
+    #     dev_sampler = DistributedSampler(dev_data)
     dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.val_batch_size)
     return dev_examples, dev_dataloader, dev_features
 
@@ -405,20 +405,21 @@ def run_train(rank=0, world_size=1):
                 # 保存以及验证模型结果
                 if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
                     # 获取验证集数据
-                    dev_examples, dev_dataloader, dev_features = get_dev_data(args, tokenizer=tokenizer, logger=logger)
-                    ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
-                                                                                    dev_dataloader,
-                                                                                    n_gpu,
-                                                                                    device,
-                                                                                    dev_features,
-                                                                                    tokenizer,
-                                                                                    dev_examples)
-                    logger.info("epoch:{} data: {} step: {}".format(epoch_idx, ind, global_step))
-                    logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
-                        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
-                    ))
-                    del dev_examples, dev_dataloader, dev_features
-                    gc.collect()
+                    if rank == 0:
+                        dev_examples, dev_dataloader, dev_features = get_dev_data(args, tokenizer=tokenizer, logger=logger)
+                        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
+                                                                                        dev_dataloader,
+                                                                                        n_gpu,
+                                                                                        device,
+                                                                                        dev_features,
+                                                                                        tokenizer,
+                                                                                        dev_examples)
+                        logger.info("epoch:{} data: {} step: {}".format(epoch_idx, ind, global_step))
+                        logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
+                            ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
+                        ))
+                        del dev_examples, dev_dataloader, dev_features
+                        gc.collect()
                     logger.info("max_f1: {}".format(max_f1))
                     if joint_f1 > max_f1 and rank == 0:
                         logger.info("get better model in step: {} with joint f1: {}".format(global_step, joint_f1))

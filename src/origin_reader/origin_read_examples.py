@@ -105,11 +105,11 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
 
         context = ' '.join(doc_tokens)
         sent_cls_n = []
-        newchar_to_matrix = [0]* len(context)
+        newchar_to_matrix = [0] * len(context)
         for ind_ctm, ctm in enumerate(char_to_matrix):
             if is_training and char_to_newchar[ind_ctm] >= len(context):
                 continue
-            newchar_to_matrix[char_to_newchar[ind_ctm]]=ctm
+            newchar_to_matrix[char_to_newchar[ind_ctm]] = ctm
         for sc in sent_cls:
             sent_cls_n.append(char_to_newchar[sc])
         if is_training:
@@ -119,9 +119,9 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
             else:
                 end_position_n = char_to_newchar[end_position]
         char_to_word_offset = []
-        subwords_to_matrix=[]
-        doc_subwords=[]
-        sub_to_orig_index=[]
+        subwords_to_matrix = []
+        doc_subwords = []
+        sub_to_orig_index = []
         conlen = 0
         for indt, dtoken in enumerate(doc_tokens):
             sub_tokens = tokenizer.tokenize(dtoken)
