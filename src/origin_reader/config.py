@@ -35,10 +35,10 @@ def get_config():
     parser.add_argument("--log_path", default="../../log", type=str)
     parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_labeled_data_v3.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--train_filter_file",
+    parser.add_argument("--train_supporting_para_file",
                         default='../../data/selector/second_hop_related_paragraph_result/train_related.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--dev_filter_file",
+    parser.add_argument("--dev_supporting_para_file",
                         default='../../data/selector/second_hop_related_paragraph_result/dev_related.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--feature_cache_path", default='../../data/cache/test', type=str,

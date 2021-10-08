@@ -1,4 +1,6 @@
 import json
+from tqdm import tqdm
+
 from origin_reader_helper import HotpotQAExample, is_whitespace
 
 
@@ -10,12 +12,12 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
     # 转换后的examples
     examples = []
     no_answer_examples = 0
-    for d in datas:
+    for data_idx, data in enumerate(tqdm(datas)):
         context = ""
-        qas_id = d['_id']
-        question = d['question']
-        answer = d['answer']
-        sup = d['supporting_facts']
+        qas_id = data['_id']
+        question = data['question']
+        answer = data['answer']
+        sup = data['supporting_facts']
         length = len(context)
         sent_cls = []
         start_position = None
@@ -25,7 +27,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
         char_to_matrix = []
         input_sentence_idx = 1  # 输入到模型中句子编号
         if is_training:
-            answer_label = d['labels'][0]
+            answer_label = data['labels'][0]
             sent_lbs = []
             if answer.lower() == 'yes':
                 start_position = -1
@@ -33,7 +35,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
             if answer.lower() == 'no':
                 start_position = -2
                 end_position = -2
-        for ind_con, con in enumerate(d['context']):  # 去除句首的空白字符
+        for ind_con, con in enumerate(data['context']):  # 去除句首的空白字符
             if ind_con in sp_dict[qas_id]:
                 full_sents_mask += [1 for con1 in con[1] if con1.strip() != '']
             else:
@@ -103,7 +105,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
 
         context = ' '.join(doc_tokens)
         sent_cls_n = []
-        newchar_to_matrix = [0]*len(context)
+        newchar_to_matrix = [0]* len(context)
         for ind_ctm, ctm in enumerate(char_to_matrix):
             if is_training and char_to_newchar[ind_ctm] >= len(context):
                 continue

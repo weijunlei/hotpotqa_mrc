@@ -304,7 +304,7 @@ class BertTransformer(BertPreTrainedModel):
         super(BertTransformer, self).__init__(config)
         self.bert = BertModel(config)
         self.transformer = TransformerLayer(hidden_size=config.hidden_size,
-                                            head_num=6,
+                                            head_num=24,
                                             dropout=config.hidden_dropout_prob,
                                             feedforward_size=config.hidden_size * 3)
         self.start_logits = nn.Linear(config.hidden_size, 1)
