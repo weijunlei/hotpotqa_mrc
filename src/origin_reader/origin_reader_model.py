@@ -36,6 +36,8 @@ from io import open
 import re
 import torch
 import numpy as np
+from torch.multiprocessing import Process
+import torch.multiprocessing as mp
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
@@ -68,6 +70,8 @@ model_dict = {
 }
 
 logger = None
+os.environ['MASTER_ADDR'] = 'localhost'
+os.environ['MASTER_PORT'] = '12355'
 
 
 def logger_config(log_path, log_prefix='lwj'):
@@ -140,6 +144,7 @@ def get_train_data(args, tokenizer, logger=None):
         os.makedirs(args.feature_cache_path)
     tmp_cache_file = cached_train_features_file + '_' + str(0)
     if not os.path.exists(tmp_cache_file):
+        logger.info("creating examples from origin file to {}".format(args.train_file))
         train_examples = read_examples(
             input_file=args.train_file,
             supporting_para_file=args.train_supporting_para_file,
@@ -149,6 +154,7 @@ def get_train_data(args, tokenizer, logger=None):
         example_num = len(train_examples)  # 89899
         random.shuffle(train_examples)
     else:
+        logger.info("get examples from cache file {}".format(args.train_file))
         example_num = 89541
     logger.info("train example num: {}".format(example_num))
     max_train_num = 200000
@@ -215,7 +221,7 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
     return ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
 
 
-def run_train():
+def run_train(rank=0, world_size=1):
     parser = get_config()
     args = parser.parse_args()
     # 模型缓存文件
@@ -244,11 +250,12 @@ def run_train():
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
     else:
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
+        torch.cuda.set_device(rank)
+        device = torch.device("cuda", rank)
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.distributed.init_process_group(backend='nccl')
+        torch.distributed.init_process_group(backend='nccl', rank=rank, world_size=world_size)
+        logger.info("start train on nccl!")
     logger.info("device: {} n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
         device, n_gpu, bool(args.local_rank != -1), args.fp16))
 
@@ -279,18 +286,21 @@ def run_train():
     if args.fp16:
         model.half()
     model.to(device)
+    # if args.local_rank != -1:
+    #     try:
+    #         from apex.parallel import DistributedDataParallel as DDP
+    #     except ImportError:
+    #         raise ImportError(
+    #             "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
     if args.local_rank != -1:
-        try:
-            from apex.parallel import DistributedDataParallel as DDP
-        except ImportError:
-            raise ImportError(
-                "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
-
-        model = DDP(model)
+        logger.info("setting model {}..".format(rank))
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank], find_unused_parameters=True)
+        logger.info("setting model {} done!".format(rank))
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
 
     # 参数配置
+    logger.info("parameter setting...")
     param_optimizer = list(model.named_parameters())
     # hack to remove pooler, which is not used
     # thus it produce None grad that break apex
@@ -302,7 +312,7 @@ def run_train():
     ]
 
     global_step = 0
-
+    logger.info("start read example...")
     # 获取训练集数据
     total_feature_num, start_idxs, cached_train_features_file = get_train_data(args, tokenizer=tokenizer, logger=logger)
     model.train()
@@ -331,6 +341,7 @@ def run_train():
                              lr=args.learning_rate,
                              warmup=args.warmup_proportion,
                              t_total=num_train_optimization_steps)
+        logger.info("t_total: {}".format(num_train_optimization_steps))
 
     max_f1 = 0
     print_loss = 0
@@ -409,7 +420,7 @@ def run_train():
                     del dev_examples, dev_dataloader, dev_features
                     gc.collect()
                     logger.info("max_f1: {}".format(max_f1))
-                    if joint_f1 > max_f1:
+                    if joint_f1 > max_f1 and rank == 0:
                         logger.info("get better model in step: {} with joint f1: {}".format(global_step, joint_f1))
                         max_f1 = joint_f1
                         model_to_save = model.module if hasattr(model,
@@ -427,16 +438,28 @@ def run_train():
             del sent_weight, train_data, train_dataloader
             gc.collect()
     # 保存最后的模型
-    model_to_save = model.module if hasattr(model,
-                                            'module') else model  # Only save the model it-self
-    output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
-    # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
-    torch.save(model_to_save.state_dict(), output_model_file)
-    output_config_file = os.path.join(args.output_dir, 'config.json')
-    with open(output_config_file, 'w') as f:
-        f.write(model_to_save.config.to_json_string())
-    logger.info('saving step: {} model'.format(global_step))
+    if rank == 0:
+        model_to_save = model.module if hasattr(model,
+                                                'module') else model  # Only save the model it-self
+        output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
+        # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
+        torch.save(model_to_save.state_dict(), output_model_file)
+        output_config_file = os.path.join(args.output_dir, 'config.json')
+        with open(output_config_file, 'w') as f:
+            f.write(model_to_save.config.to_json_string())
+        logger.info('saving step: {} model'.format(global_step))
 
 
 if __name__ == "__main__":
-    run_train()
+    use_ddp = True
+    if not use_ddp:
+        run_train()
+    else:
+        world_size = 2
+        processes = []
+        for rank in range(world_size):
+            p = Process(target=run_train, args=(rank, world_size))
+            p.start()
+            processes.append(p)
+        for p in processes:
+            p.join()
