@@ -157,7 +157,7 @@ def get_train_data(args, tokenizer, logger=None):
         logger.info("get examples from cache file {}".format(args.train_file))
         example_num = 89541
     logger.info("train example num: {}".format(example_num))
-    max_train_num = 200000
+    max_train_num = 10000
     start_idxs = list(range(0, example_num, max_train_num))
     end_idxs = [x + max_train_num for x in start_idxs]
     end_idxs[-1] = example_num
@@ -452,7 +452,7 @@ def run_train(rank=0, world_size=1):
 
 
 if __name__ == "__main__":
-    use_ddp = True
+    use_ddp = False
     if not use_ddp:
         run_train()
     else:

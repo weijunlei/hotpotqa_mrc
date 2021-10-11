@@ -226,7 +226,7 @@ class BertForQuestionAnsweringForward(BertPreTrainedModel):
             # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
             start_logits = nn.Softmax(dim=-1)(start_logits)
             end_logits = nn.Softmax(dim=-1)(end_logits)
-            sent_logits=torch.sigmoid(sent_logits)
+            sent_logits = torch.sigmoid(sent_logits)
             return start_logits, end_logits, sent_logits
 
 
@@ -234,8 +234,6 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForQuestionAnsweringForwardBest, self).__init__(config)
         self.bert = BertModel(config)
-        
-
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -244,26 +242,24 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
 
     def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None):
         if len(input_ids.shape) < 2:
-            input_ids=input_ids.unsqueeze(0)
+            input_ids = input_ids.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
             if start_positions is not None and len(start_positions.shape)<2:
-                start_positions=start_positions.unsqueeze(0)
-                end_positions=end_positions.unsqueeze(0)
-                sent_mask=sent_mask.unsqueeze(0)
-                sent_lbs=sent_lbs.unsqueeze(0)
-                sent_weight=sent_weight.unsqueeze(0)
-        sequence_output = self.bert(input_ids, attention_mask=attention_mask,token_type_ids=token_type_ids)[0]
-        sequence_output=self.dropout(sequence_output)
+                start_positions = start_positions.unsqueeze(0)
+                end_positions = end_positions.unsqueeze(0)
+                sent_mask = sent_mask.unsqueeze(0)
+                sent_lbs = sent_lbs.unsqueeze(0)
+                sent_weight = sent_weight.unsqueeze(0)
+        sequence_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0]
+        sequence_output = self.dropout(sequence_output)
         ones_mask = torch.ones_like(attention_mask).cuda()
         context_mask = (ones_mask - token_type_ids) * attention_mask
-        ques_mask = token_type_ids * attention_mask
-        coattention_mask = torch.matmul(context_mask.unsqueeze(-1).float(),ques_mask.unsqueeze(1).float())
         extended_context_mask = (1.0 - context_mask) * -10000.0
-        start_logits = self.start_logits(sequence_output).squeeze(-1)+extended_context_mask #*context_mask.float()
-        end_logits = self.end_logits(sequence_output).squeeze(-1)+extended_context_mask #*context_mask.float()
+        start_logits = self.start_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
+        end_logits = self.end_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
 
-        sent_logits = self.sent(sequence_output).squeeze(-1)*context_mask.float()
+        sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
         if len(sent_logits) > 1:
             sent_logits.squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
@@ -288,11 +284,9 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
-            total_loss = ans_loss+0.2*sent_loss
+            total_loss = ans_loss + 0.2*sent_loss
             return total_loss, start_logits, end_logits, sent_logits
         else:
-            # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
-            # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
             start_logits = nn.Softmax(dim=-1)(start_logits)
             end_logits = nn.Softmax(dim=-1)(end_logits)
             sent_logits = torch.sigmoid(sent_logits)

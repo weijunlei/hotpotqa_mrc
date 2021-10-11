@@ -77,7 +77,8 @@ class InputFeatures(object):
                  sent_lbs=None,
                  sent_weight=None,
                  mask=None,
-                 content_len=None
+                 content_len=None,
+                 word_sim_matrix=None,
                  ):
         self.unique_id = unique_id
         self.example_index = example_index
@@ -95,6 +96,7 @@ class InputFeatures(object):
         self.sent_weight=sent_weight
         self.mask=mask
         self.content_len=content_len
+        self.word_sim_matrix=word_sim_matrix
 
 
 def cut_sent(para):
