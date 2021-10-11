@@ -36,21 +36,16 @@ from io import open
 import re
 import torch
 import numpy as np
+from torch.multiprocessing import Process
+import torch.multiprocessing as mp
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-import bisect
-
-if sys.version_info[0] == 2:
-    import cPickle as pickle
-else:
-    import pickle
-from collections import Counter
-import string
+import pickle
 import gc
 
-from origin_read_examples import read_examples, read_dev_examples
+from origin_read_examples import read_examples
 from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
 from origin_reader_helper import write_predictions, evaluate
 from lazy_dataloader import LazyLoadTensorDataset
@@ -60,11 +55,23 @@ sys.path.append("../pretrain_model")
 from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, \
     BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward, BertForQuestionAnsweringForwardBest,\
     BertSelfAttentionAndCoAttention, BertTransformer, BertSkipConnectTransformer
-# from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
+# 自定义好的模型
+model_dict = {
+    'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention,
+    'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
+    'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
+    'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
+    'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest,
+    'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention,
+    'BertSkipConnectTransformer': BertSkipConnectTransformer,
+    'BertTransformer': BertTransformer,
+}
 
 logger = None
+os.environ['MASTER_ADDR'] = 'localhost'
+os.environ['MASTER_PORT'] = '12355'
 
 
 def logger_config(log_path, log_prefix='lwj'):
@@ -91,12 +98,12 @@ def logger_config(log_path, log_prefix='lwj'):
 
 def get_dev_data(args, tokenizer, logger=None):
     """ 获取验证集数据 """
-    dev_examples = read_dev_examples(
-        input_file=args.dev_file, filter_file=args.dev_filter_file, tokenizer=tokenizer, is_training=True)
+    dev_examples = read_examples(
+        input_file=args.dev_file,
+        supporting_para_file=args.dev_supporting_para_file,
+        tokenizer=tokenizer,
+        is_training=False)
     logger.info('dev examples: {}'.format(len(dev_examples)))
-    # dev_feature_file = args.dev_file.split('.')[0] + '_{0}_{1}_{2}_{3}'.format(
-    #     list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride),
-    #     args.feature_suffix)
     cached_dev_features_file = '{}/dev_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
                                                                       args.bert_model.split('/')[-1],
                                                                       str(args.max_seq_length),
@@ -118,10 +125,10 @@ def get_dev_data(args, tokenizer, logger=None):
                 pickle.dump(dev_features, writer)
     logger.info('dev feature_num: {}'.format(len(dev_features)))
     dev_data = LazyLoadTensorDataset(dev_features, is_training=False)
-    if args.local_rank == -1:
-        dev_sampler = RandomSampler(dev_data)
-    else:
-        dev_sampler = DistributedSampler(dev_data)
+    # if args.local_rank == -1:
+    dev_sampler = RandomSampler(dev_data)
+    # else:
+    #     dev_sampler = DistributedSampler(dev_data)
     dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.val_batch_size)
     return dev_examples, dev_dataloader, dev_features
 
@@ -137,18 +144,20 @@ def get_train_data(args, tokenizer, logger=None):
         os.makedirs(args.feature_cache_path)
     tmp_cache_file = cached_train_features_file + '_' + str(0)
     if not os.path.exists(tmp_cache_file):
+        logger.info("creating examples from origin file to {}".format(args.train_file))
         train_examples = read_examples(
             input_file=args.train_file,
-            filter_file=args.train_filter_file,
+            supporting_para_file=args.train_supporting_para_file,
             tokenizer=tokenizer,
             is_training=True)
         # 当数据配置不变时可以设置为定值
         example_num = len(train_examples)  # 89899
         random.shuffle(train_examples)
     else:
+        logger.info("get examples from cache file {}".format(args.train_file))
         example_num = 89541
     logger.info("train example num: {}".format(example_num))
-    max_train_num = 200000
+    max_train_num = 10000
     start_idxs = list(range(0, example_num, max_train_num))
     end_idxs = [x + max_train_num for x in start_idxs]
     end_idxs[-1] = example_num
@@ -212,7 +221,7 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
     return ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
 
 
-def run_train():
+def run_train(rank=0, world_size=1):
     parser = get_config()
     args = parser.parse_args()
     # 模型缓存文件
@@ -241,11 +250,12 @@ def run_train():
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
     else:
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
+        torch.cuda.set_device(rank)
+        device = torch.device("cuda", rank)
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.distributed.init_process_group(backend='nccl')
+        torch.distributed.init_process_group(backend='nccl', rank=rank, world_size=world_size)
+        logger.info("start train on nccl!")
     logger.info("device: {} n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
         device, n_gpu, bool(args.local_rank != -1), args.fp16))
 
@@ -271,35 +281,26 @@ def run_train():
 
     train_examples = None
     num_train_optimization_steps = None
-
-    # 自定义好的模型
-    model_dict = {
-        'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention,
-        'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
-        'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
-        'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
-        'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest,
-        'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention,
-        'BertSkipConnectTransformer': BertSkipConnectTransformer,
-        'BertTransformer': BertTransformer,
-    }
     model = model_dict[args.model_name].from_pretrained(args.bert_model)
     # 半精度和并行化使用设置
     if args.fp16:
         model.half()
     model.to(device)
+    # if args.local_rank != -1:
+    #     try:
+    #         from apex.parallel import DistributedDataParallel as DDP
+    #     except ImportError:
+    #         raise ImportError(
+    #             "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
     if args.local_rank != -1:
-        try:
-            from apex.parallel import DistributedDataParallel as DDP
-        except ImportError:
-            raise ImportError(
-                "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
-
-        model = DDP(model)
+        logger.info("setting model {}..".format(rank))
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank], find_unused_parameters=True)
+        logger.info("setting model {} done!".format(rank))
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
 
     # 参数配置
+    logger.info("parameter setting...")
     param_optimizer = list(model.named_parameters())
     # hack to remove pooler, which is not used
     # thus it produce None grad that break apex
@@ -311,7 +312,7 @@ def run_train():
     ]
 
     global_step = 0
-
+    logger.info("start read example...")
     # 获取训练集数据
     total_feature_num, start_idxs, cached_train_features_file = get_train_data(args, tokenizer=tokenizer, logger=logger)
     model.train()
@@ -340,6 +341,7 @@ def run_train():
                              lr=args.learning_rate,
                              warmup=args.warmup_proportion,
                              t_total=num_train_optimization_steps)
+        logger.info("t_total: {}".format(num_train_optimization_steps))
 
     max_f1 = 0
     print_loss = 0
@@ -403,22 +405,23 @@ def run_train():
                 # 保存以及验证模型结果
                 if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
                     # 获取验证集数据
-                    dev_examples, dev_dataloader, dev_features = get_dev_data(args, tokenizer=tokenizer, logger=logger)
-                    ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
-                                                                                    dev_dataloader,
-                                                                                    n_gpu,
-                                                                                    device,
-                                                                                    dev_features,
-                                                                                    tokenizer,
-                                                                                    dev_examples)
-                    logger.info("epoch:{} data: {} step: {}".format(epoch_idx, ind, global_step))
-                    logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
-                        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
-                    ))
-                    del dev_examples, dev_dataloader, dev_features
-                    gc.collect()
+                    if rank == 0:
+                        dev_examples, dev_dataloader, dev_features = get_dev_data(args, tokenizer=tokenizer, logger=logger)
+                        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
+                                                                                        dev_dataloader,
+                                                                                        n_gpu,
+                                                                                        device,
+                                                                                        dev_features,
+                                                                                        tokenizer,
+                                                                                        dev_examples)
+                        logger.info("epoch:{} data: {} step: {}".format(epoch_idx, ind, global_step))
+                        logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
+                            ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
+                        ))
+                        del dev_examples, dev_dataloader, dev_features
+                        gc.collect()
                     logger.info("max_f1: {}".format(max_f1))
-                    if joint_f1 > max_f1:
+                    if joint_f1 > max_f1 and rank == 0:
                         logger.info("get better model in step: {} with joint f1: {}".format(global_step, joint_f1))
                         max_f1 = joint_f1
                         model_to_save = model.module if hasattr(model,
@@ -436,16 +439,28 @@ def run_train():
             del sent_weight, train_data, train_dataloader
             gc.collect()
     # 保存最后的模型
-    model_to_save = model.module if hasattr(model,
-                                            'module') else model  # Only save the model it-self
-    output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
-    # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
-    torch.save(model_to_save.state_dict(), output_model_file)
-    output_config_file = os.path.join(args.output_dir, 'config.json')
-    with open(output_config_file, 'w') as f:
-        f.write(model_to_save.config.to_json_string())
-    logger.info('saving step: {} model'.format(global_step))
+    if rank == 0:
+        model_to_save = model.module if hasattr(model,
+                                                'module') else model  # Only save the model it-self
+        output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
+        # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
+        torch.save(model_to_save.state_dict(), output_model_file)
+        output_config_file = os.path.join(args.output_dir, 'config.json')
+        with open(output_config_file, 'w') as f:
+            f.write(model_to_save.config.to_json_string())
+        logger.info('saving step: {} model'.format(global_step))
 
 
 if __name__ == "__main__":
-    run_train()
+    use_ddp = False
+    if not use_ddp:
+        run_train()
+    else:
+        world_size = 2
+        processes = []
+        for rank in range(world_size):
+            p = Process(target=run_train, args=(rank, world_size))
+            p.start()
+            processes.append(p)
+        for p in processes:
+            p.join()

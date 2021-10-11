@@ -11,7 +11,7 @@ sys.path.append("../pretrain_model")
 from tokenization import BasicTokenizer
 
 
-class SquadExample(object):
+class HotpotQAExample(object):
     """
     A single training/test example for the Squad dataset.
     For examples without an answer, the start and end position are -1.
@@ -51,18 +51,11 @@ class SquadExample(object):
         return self.__repr__()
 
     def __repr__(self):
-        s = ""
-        s += "qas_id: %s" % (self.qas_id)
-        s += ", question_text: %s" % (
-            self.question_text)
-        s += ", doc_tokens: [%s]" % (" ".join(self.doc_tokens))
+        qa_info = "qas_id:{} question:{}".format(self.qas_id, self.doc_tokens)
         if self.start_position:
-            s += ", start_position: %d" % (self.start_position)
-        if self.start_position:
-            s += ", end_position: %d" % (self.end_position)
-        if self.start_position:
-            s += ", is_impossible: %r" % (self.is_impossible)
-        return s
+            qa_info += " ,start position: {}".format(self.start_position)
+            qa_info += " , end_position: {}".format(self.end_position)
+        return qa_info
 
 
 class InputFeatures(object):
@@ -84,7 +77,8 @@ class InputFeatures(object):
                  sent_lbs=None,
                  sent_weight=None,
                  mask=None,
-                 content_len=None
+                 content_len=None,
+                 word_sim_matrix=None,
                  ):
         self.unique_id = unique_id
         self.example_index = example_index
@@ -102,6 +96,7 @@ class InputFeatures(object):
         self.sent_weight=sent_weight
         self.mask=mask
         self.content_len=content_len
+        self.word_sim_matrix=word_sim_matrix
 
 
 def cut_sent(para):
@@ -368,6 +363,12 @@ def _compute_softmax(scores):
     for score in exp_scores:
         probs.append(score / total_sum)
     return probs
+
+
+def is_whitespace(ch):
+    if ch == " " or ch == "\t" or ch == "\r" or ch == "\n" or ord(ch) == 0x202F or ch == '\xa0':
+        return True
+    return False
 
 
 def write_predictions(tokenizer, all_examples, all_features, all_results, n_best_size=20,
