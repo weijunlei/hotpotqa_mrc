@@ -6,8 +6,7 @@ from tqdm import tqdm
 from multiprocessing.pool import Pool
 
 from origin_reader_helper import InputFeatures, _check_is_max_context
-sys.path.append("../preprocess")
-from get_similarity import get_similarity
+from preprocess.get_similarity import get_similarity
 
 
 def word_sim_matrix_generator_helper(feature):
@@ -27,6 +26,7 @@ def word_sim_matrix_generator(features, max_seq_length):
     # for feature in tqdm(features):
     #     results.append(word_sim_matrix_generator_helper(feature))
     return results
+
 
 
 def convert_examples_to_features(examples, tokenizer, max_seq_length,

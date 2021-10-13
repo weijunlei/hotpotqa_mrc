@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 import math
 
-from modeling_bert import BertPreTrainedModel, BertModel, BertOutput, BertSelfOutput, BertIntermediate
+from pretrain_model.modeling_bert import BertPreTrainedModel, BertModel, BertOutput, BertSelfOutput, BertIntermediate
 from transformer import TransformerLayer
 
 
@@ -176,19 +176,10 @@ class BertForQuestionAnsweringForward(BertPreTrainedModel):
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent = nn.Linear(config.hidden_size, 1)
+        self.sent = nn.Linear(config.hidden_size,1)
         self.init_weights()
 
-    def forward(self,
-                input_ids,
-                attention_mask,
-                token_type_ids,
-                word_sim_matrix=None,
-                start_positions=None,
-                end_positions=None,
-                sent_mask=None,
-                sent_lbs=None,
-                sent_weight=None):
+    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None, sent_mask=None, sent_lbs=None, sent_weight=None):
         if len(input_ids.shape) < 2:
             input_ids = input_ids.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
@@ -214,7 +205,10 @@ class BertForQuestionAnsweringForward(BertPreTrainedModel):
                 start_positions = start_positions.squeeze(-1)
             if len(end_positions.size()) > 1:
                 end_positions = end_positions.squeeze(-1)
+            # sent_lbs = sent_lbs[:, 0:context_maxlen]
+            # sent_weight = sent_weight[:, 0:context_maxlen]
             sent_loss = loss_fn1(sent_logits, sent_lbs.float())
+            # sent_loss = (sent_loss * sent_mask.float()) * sent_weight
             sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
@@ -228,6 +222,8 @@ class BertForQuestionAnsweringForward(BertPreTrainedModel):
             total_loss = ans_loss+0.2*sent_loss
             return total_loss, start_logits, end_logits, sent_logits
         else:
+            # start_logits=torch.nn.functional.log_softmax(start_logits, dim=-1)
+            # end_logits = torch.nn.functional.log_softmax(end_logits, dim=-1)
             start_logits = nn.Softmax(dim=-1)(start_logits)
             end_logits = nn.Softmax(dim=-1)(end_logits)
             sent_logits = torch.sigmoid(sent_logits)
@@ -244,16 +240,7 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
         self.sent = nn.Linear(config.hidden_size, 1)
         self.init_weights()
 
-    def forward(self,
-                input_ids,
-                attention_mask,
-                token_type_ids,
-                word_sim_matrix=None,
-                start_positions=None,
-                end_positions=None,
-                sent_mask=None,
-                sent_lbs=None,
-                sent_weight=None):
+    def forward(self, input_ids, attention_mask, token_type_ids,  start_positions=None, end_positions=None,sent_mask=None,sent_lbs=None,sent_weight=None):
         if len(input_ids.shape) < 2:
             input_ids = input_ids.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
@@ -271,13 +258,11 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
         extended_context_mask = (1.0 - context_mask) * -10000.0
         start_logits = self.start_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
         end_logits = self.end_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
-        # 去除context mask
-        # sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
-        sent_logits = self.sent(sequence_output).squeeze(-1)
+
+        sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
         if len(sent_logits) > 1:
             sent_logits.squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
-        # 增加sent_mask
         sent_logits = sent_logits * sent_mask.float()
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
@@ -326,7 +311,6 @@ class BertTransformer(BertPreTrainedModel):
                 input_ids,
                 attention_mask,
                 token_type_ids,
-                word_sim_matrix=None,
                 start_positions=None,
                 end_positions=None,
                 sent_mask=None,
@@ -346,8 +330,7 @@ class BertTransformer(BertPreTrainedModel):
         batch_size, seq_length, hidden_size = sequence_output.size()
         sequence_output = self.dropout(sequence_output)
         self_mask = attention_mask.unsqueeze(1).repeat(1, seq_length, 1).unsqueeze(1)
-        word_sim_matrix = word_sim_matrix.unsqueeze(dim=1)
-        sequence_output = self.transformer(sequence_output, mask=self_mask + word_sim_matrix)
+        sequence_output = self.transformer(sequence_output, mask=self_mask)
         sequence_output = self.dropout(sequence_output)
         ones_mask = torch.ones_like(attention_mask).cuda()
         context_mask = (ones_mask - token_type_ids) * attention_mask
