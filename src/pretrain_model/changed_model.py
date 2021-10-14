@@ -272,13 +272,13 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
         start_logits = self.start_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
         end_logits = self.end_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
         # 去除context mask
-        # sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
-        sent_logits = self.sent(sequence_output).squeeze(-1)
+        sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
+        # sent_logits = self.sent(sequence_output).squeeze(-1)
         if len(sent_logits) > 1:
             sent_logits.squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
         # 去除sent_mask
-        sent_logits = sent_logits * sent_mask.float()
+        # sent_logits = sent_logits * sent_mask.float()
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
@@ -288,7 +288,7 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
             # sent_lbs = sent_lbs[:, 0:context_maxlen]
             # sent_weight = sent_weight[:, 0:context_maxlen]
             sent_loss = loss_fn1(sent_logits, sent_lbs.float())
-            sent_loss = (sent_loss * sent_mask.float()) * sent_weight
+            # sent_loss = (sent_loss * sent_mask.float()) * sent_weight
             sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
