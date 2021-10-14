@@ -288,7 +288,7 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
             # sent_lbs = sent_lbs[:, 0:context_maxlen]
             # sent_weight = sent_weight[:, 0:context_maxlen]
             sent_loss = loss_fn1(sent_logits, sent_lbs.float())
-            sent_loss = (sent_loss) * sent_weight
+            # sent_loss = (sent_loss) * sent_weight
             sent_loss = torch.sum(sent_loss, (-1, -2), keepdim=False)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
