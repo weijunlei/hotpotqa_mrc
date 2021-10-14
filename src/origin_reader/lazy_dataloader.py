@@ -21,15 +21,16 @@ class LazyLoadTensorDataset(Dataset):
         sent_mask = torch.tensor(feature.sent_mask, dtype=torch.long)
         content_len = torch.tensor(feature.content_len, dtype=torch.long)
         tmp_word_matrix = feature.word_sim_matrix.toarray()
-        word_sim_matrix = tmp_word_matrix + tmp_word_matrix.T - np.diag(np.diag(tmp_word_matrix))
-        word_sim_matrix = torch.tensor(word_sim_matrix, dtype=torch.float32)
+        # word_sim_matrix = tmp_word_matrix + tmp_word_matrix.T - np.diag(np.diag(tmp_word_matrix))
+        # word_sim_matrix = torch.tensor(word_sim_matrix, dtype=torch.float32)
 
         tensors = [input_ids,
                    input_mask,
                    segment_ids,
                    sent_mask,
                    content_len,
-                   word_sim_matrix]
+                   # word_sim_matrix
+                   ]
 
         if self.is_training:
             start_positions = torch.tensor(feature.start_position, dtype=torch.long)

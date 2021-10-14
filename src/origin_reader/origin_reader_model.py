@@ -206,11 +206,11 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
             else:
                 d_batch = d_batch[:-1]
             d_all_input_ids, d_all_input_mask, d_all_segment_ids, \
-            d_all_cls_mask, d_all_content_len, d_word_sim_matrix = d_batch
+            d_all_cls_mask, d_all_content_len = d_batch
             dev_start_logits, dev_end_logits, dev_sent_logits = model(d_all_input_ids,
                                                                       d_all_input_mask,
                                                                       d_all_segment_ids,
-                                                                      word_sim_matrix=d_word_sim_matrix,
+                                                                      # word_sim_matrix=d_word_sim_matrix,
                                                                       sent_mask=d_all_cls_mask)
             for idx, example_index in enumerate(d_example_indices):
                 dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
@@ -373,11 +373,11 @@ def run_train(rank=0, world_size=1):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, sent_mask, content_len, word_sim_matrix, start_positions, end_positions, sent_lbs, sent_weight = batch
+                input_ids, input_mask, segment_ids, sent_mask, content_len, start_positions, end_positions, sent_lbs, sent_weight = batch
                 loss, _, _, _ = model(input_ids,
                                       input_mask,
                                       segment_ids,
-                                      word_sim_matrix=word_sim_matrix,
+                                      # word_sim_matrix=word_sim_matrix,
                                       start_positions=start_positions,
                                       end_positions=end_positions,
                                       sent_mask=sent_mask,

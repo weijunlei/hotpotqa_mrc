@@ -10,23 +10,23 @@ sys.path.append("../preprocess")
 from get_similarity import get_similarity
 
 
-def word_sim_matrix_generator_helper(feature):
-    word_sim_matrix = get_similarity(feature.tokens)
-    return word_sim_matrix
+# def word_sim_matrix_generator_helper(feature):
+#     word_sim_matrix = get_similarity(feature.tokens)
+#     return word_sim_matrix
 
 
-def word_sim_matrix_generator(features, max_seq_length):
-    results = []
-    pool = Pool(processes=5)
-    for result in tqdm(pool.imap(func=word_sim_matrix_generator_helper, iterable=features),
-                       total=len(features),
-                       desc="getting word similarity matrixs..."):
-        results.append(result)
-    pool.close()
-    pool.join()
-    # for feature in tqdm(features):
-    #     results.append(word_sim_matrix_generator_helper(feature))
-    return results
+# def word_sim_matrix_generator(features, max_seq_length):
+#     results = []
+#     pool = Pool(processes=5)
+#     for result in tqdm(pool.imap(func=word_sim_matrix_generator_helper, iterable=features),
+#                        total=len(features),
+#                        desc="getting word similarity matrixs..."):
+#         results.append(result)
+#     pool.close()
+#     pool.join()
+#     # for feature in tqdm(features):
+#     #     results.append(word_sim_matrix_generator_helper(feature))
+#     return results
 
 
 def convert_examples_to_features(examples, tokenizer, max_seq_length,
@@ -149,11 +149,11 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     content_len=content_len
                     ))
             unique_id += 1
-    print(datetime.datetime.now())
-    word_sim_matrixs = word_sim_matrix_generator(features, max_seq_length)
-    for feature, word_sim_matrix in zip(features, word_sim_matrixs):
-        feature.word_sim_matrix = word_sim_matrix
-    print(datetime.datetime.now())
+    # print(datetime.datetime.now())
+    # word_sim_matrixs = word_sim_matrix_generator(features, max_seq_length)
+    # for feature, word_sim_matrix in zip(features, word_sim_matrixs):
+    #     feature.word_sim_matrix = word_sim_matrix
+    # print(datetime.datetime.now())
     return features
 
 
@@ -248,9 +248,9 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                     sent_mask=sent_mask,
                     content_len=content_len))
             unique_id += 1
-    print(datetime.datetime.now())
-    word_sim_matrixs = word_sim_matrix_generator(features, max_seq_length)
-    for feature, word_sim_matrix in zip(features, word_sim_matrixs):
-        feature.word_sim_matrix = word_sim_matrix
-    print(datetime.datetime.now())
+    # print(datetime.datetime.now())
+    # word_sim_matrixs = word_sim_matrix_generator(features, max_seq_length)
+    # for feature, word_sim_matrix in zip(features, word_sim_matrixs):
+    #     feature.word_sim_matrix = word_sim_matrix
+    # print(datetime.datetime.now())
     return features
