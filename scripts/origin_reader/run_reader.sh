@@ -13,9 +13,9 @@ export CUDA_VISIBLE_DEVICES="2,3"
 cd ../../src/origin_reader
 python -u origin_reader_model.py \
   --bert_model bert-base-uncased \
-  --output_dir ../../data/checkpoints/qa_base_20211014_forward_best_wo_sent_context_mask_wo_weight \
+  --output_dir ../../data/checkpoints/qa_base_20211014_forward_best_wo_sent_context_mask \
   --model_name BertForQuestionAnsweringForwardBest \
-  --log_prefix qa_base_20211014_forward_best_wo_sent_context_mask_wo_weight \
+  --log_prefix qa_base_20211014_forward_best_wo_sent_context_mask \
   --overwrite_result True \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
