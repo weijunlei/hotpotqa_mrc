@@ -14,9 +14,9 @@ export CUDA_VISIBLE_DEVICES="2,1"
 cd ../../transformer_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model bert-base-uncased \
-  --output_dir ../../data/checkpoints/20211020_with_word_sim_5_transformer \
+  --output_dir ../../data/checkpoints/20211020_with_word_sim_0_transformer \
   --model_name BertForQuestionAnsweringForwardWithSim \
-  --log_prefix 20211020_with_word_sim_5_transformer \
+  --log_prefix 20211020_with_word_sim_0_transformer \
   --overwrite_result True \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
@@ -26,6 +26,6 @@ python -u origin_reader_model.py \
   --train_batch_size 12 \
   --local_rank -1 \
   --val_batch_size 64 \
-  --save_model_step 3000 \
+  --save_model_step 10 \
   --num_train_epochs 5.0
 echo "----------------------------------------------------"

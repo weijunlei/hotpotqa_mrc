@@ -362,6 +362,7 @@ def run_train(rank=0, world_size=1):
             logger.info("loading file: {}".format(new_cache_file))
             with open(new_cache_file, "rb") as reader:
                 train_features = pickle.load(reader)
+                train_features = train_features[:100]
             logger.info("load file: {} done!".format(new_cache_file))
             train_data = LazyLoadTensorDataset(features=train_features, is_training=True)
             if args.local_rank == -1:
