@@ -54,7 +54,7 @@ from config import get_config
 sys.path.append("../pretrain_model")
 from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, \
     BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward, BertForQuestionAnsweringForwardBest,\
-    BertSelfAttentionAndCoAttention, BertTransformer, BertSkipConnectTransformer, BertForQuestionAnsweringForwardWithSim
+    BertSelfAttentionAndCoAttention, BertTransformer, BertSkipConnectTransformer
 from optimization import BertAdam, warmup_linear
 from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
 # 自定义好的模型
@@ -67,7 +67,6 @@ model_dict = {
     'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention,
     'BertSkipConnectTransformer': BertSkipConnectTransformer,
     'BertTransformer': BertTransformer,
-    'BertForQuestionAnsweringForwardWithSim': BertForQuestionAnsweringForwardWithSim
 }
 
 logger = None
@@ -164,32 +163,29 @@ def get_train_data(args, tokenizer, logger=None):
     end_idxs[-1] = example_num
     total_feature_num = 0
 
-    if os.path.exists(cached_train_features_file + '_' + '0'):
-        total_feature_num = 89899
-    else:
-        for i in range(len(start_idxs)):
-            new_cache_file = cached_train_features_file + '_' + str(i)
-            if os.path.exists(new_cache_file):
-                logger.info("start reading features from cache file: {}".format(new_cache_file))
-                with open(new_cache_file, "rb") as f:
-                    train_features = pickle.load(f)
-                logger.info("read features done!")
-            else:
-                logger.info("start reading features from origin examples...")
-                train_examples_ = train_examples[start_idxs[i]: end_idxs[i]]
-                train_features = convert_examples_to_features(
-                    examples=train_examples_,
-                    tokenizer=tokenizer,
-                    max_seq_length=args.max_seq_length,
-                    doc_stride=args.doc_stride,
-                    is_training=True)
-                if args.local_rank == -1 or torch.distributed.get_rank() == 0:
-                    logger.info("Saving train features into cached file {}".format(cached_train_features_file))
-                    with open(new_cache_file, "wb") as writer:
-                        pickle.dump(train_features, writer)
-            total_feature_num += len(train_features)
-            del train_features
-            gc.collect()
+    for i in range(len(start_idxs)):
+        new_cache_file = cached_train_features_file + '_' + str(i)
+        if os.path.exists(new_cache_file):
+            logger.info("start reading features from cache file: {}".format(new_cache_file))
+            with open(new_cache_file, "rb") as f:
+                train_features = pickle.load(f)
+            logger.info("read features done!")
+        else:
+            logger.info("start reading features from origin examples...")
+            train_examples_ = train_examples[start_idxs[i]: end_idxs[i]]
+            train_features = convert_examples_to_features(
+                examples=train_examples_,
+                tokenizer=tokenizer,
+                max_seq_length=args.max_seq_length,
+                doc_stride=args.doc_stride,
+                is_training=True)
+            if args.local_rank == -1 or torch.distributed.get_rank() == 0:
+                logger.info("Saving train features into cached file {}".format(cached_train_features_file))
+                with open(new_cache_file, "wb") as writer:
+                    pickle.dump(train_features, writer)
+        total_feature_num += len(train_features)
+        del train_features
+        gc.collect()
     logger.info('train feature_num: {}'.format(total_feature_num))
     return total_feature_num, start_idxs, cached_train_features_file
 
@@ -210,11 +206,11 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
             else:
                 d_batch = d_batch[:-1]
             d_all_input_ids, d_all_input_mask, d_all_segment_ids, \
-            d_all_cls_mask, d_all_content_len, d_word_sim_matrix = d_batch
+            d_all_cls_mask, d_all_content_len = d_batch
             dev_start_logits, dev_end_logits, dev_sent_logits = model(d_all_input_ids,
                                                                       d_all_input_mask,
                                                                       d_all_segment_ids,
-                                                                      word_sim_matrix=d_word_sim_matrix,
+                                                                      # word_sim_matrix=d_word_sim_matrix,
                                                                       sent_mask=d_all_cls_mask)
             for idx, example_index in enumerate(d_example_indices):
                 dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
@@ -372,16 +368,16 @@ def run_train(rank=0, world_size=1):
             train_dataloader = DataLoader(train_data,
                                           sampler=train_sampler,
                                           batch_size=args.train_batch_size,
-                                          num_workers=1)
+                                          num_workers=4)
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, sent_mask, content_len, word_sim_matrix, start_positions, end_positions, sent_lbs, sent_weight = batch
+                input_ids, input_mask, segment_ids, sent_mask, content_len, start_positions, end_positions, sent_lbs, sent_weight = batch
                 loss, _, _, _ = model(input_ids,
                                       input_mask,
                                       segment_ids,
-                                      word_sim_matrix=word_sim_matrix,
+                                      # word_sim_matrix=word_sim_matrix,
                                       start_positions=start_positions,
                                       end_positions=end_positions,
                                       sent_mask=sent_mask,

@@ -216,6 +216,7 @@ class BertSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        word_sim_matrix=None,
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -240,6 +241,8 @@ class BertSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if word_sim_matrix is not None:
+            attention_scores = torch.mul(attention_scores, word_sim_matrix.unsqueeze(1))
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
@@ -327,12 +330,13 @@ class BertAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        word_sim_matrix=None,
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
     ):
         self_outputs = self.self(
-            hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask
+            hidden_states, attention_mask, word_sim_matrix, head_mask, encoder_hidden_states, encoder_attention_mask
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -396,11 +400,15 @@ class BertLayer(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        word_sim_matrix=None,
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
     ):
-        self_attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
+        if word_sim_matrix is None:
+            self_attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
+        else:
+            self_attention_outputs = self.attention(hidden_states, attention_mask, word_sim_matrix, head_mask)
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -428,6 +436,7 @@ class BertEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        word_sim_matrix=None,
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -435,14 +444,16 @@ class BertEncoder(nn.Module):
         all_hidden_states = ()
         all_attentions = ()
         for i, layer_module in enumerate(self.layer):
-            if i == 0:
-                continue
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
-                hidden_states, attention_mask, head_mask[i], encoder_hidden_states, encoder_attention_mask
-            )
+            if i == 5:
+                layer_outputs = layer_module(
+                    hidden_states, attention_mask, head_mask[i], word_sim_matrix, encoder_hidden_states, encoder_attention_mask
+                )
+            else:
+                layer_outputs = layer_module(
+                    hidden_states, attention_mask, head_mask[i], encoder_hidden_states, encoder_attention_mask
+                )
             hidden_states = layer_outputs[0]
 
             if self.output_attentions:
@@ -666,6 +677,7 @@ class BertModel(BertPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
+        word_sim_matrix=None,
         head_mask=None,
         inputs_embeds=None,
         encoder_hidden_states=None,
@@ -750,8 +762,8 @@ class BertModel(BertPreTrainedModel):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         # TODO: 将torch.nn.DataParallel 改为 DDP模式而不是直接改类型
-        # extended_attention_mask = extended_attention_mask.to(dtype=torch.float32)
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=torch.float32)
+        # extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
@@ -806,6 +818,7 @@ class BertModel(BertPreTrainedModel):
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
+            word_sim_matrix=word_sim_matrix,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
         )
