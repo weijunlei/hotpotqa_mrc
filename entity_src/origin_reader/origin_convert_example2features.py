@@ -30,12 +30,15 @@ from get_similarity import get_similarity
 
 def convert_entity_info_to_ids(entity_infos):
     """ 将entity info 转化为id"""
-    entity_dict = {'OTHER': 0, 'PERSON': 1, }
+    entity_dict = {'NONE': 0, 'OTHER': 1, 'ORDINAL': 2, 'DATE': 3, 'CARDINAL': 4, 'ORG': 5, 'PERSON': 6, 'LANGUAGE': 7,
+                   'NORP': 8, 'WORK_OF_ART': 9, 'LOC': 10, 'TIME': 11, 'PRODUCT': 12, 'FAC': 13, 'MONEY': 14,
+                   'EVENT': 15, 'PERCENT': 16, 'LAW': 17, 'QUANTITY': 18, 'GPE': 19}
     entity_ids = []
     for entity_info in entity_infos:
         if entity_info == '':
             entity_ids.append(0)
-        entity_ids.append(entity_dict.get(entity_info, 1))
+        else:
+            entity_ids.append(entity_dict.get(entity_info, 1))
     return entity_ids
 
 
@@ -109,11 +112,13 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 input_ids.append(0)
                 input_mask.append(0)
                 segment_ids.append(0)
+                entity_ids.append(0)
                 matrix.append(-1)
 
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
+            assert len(entity_ids) == max_seq_length
             assert len(matrix) == max_seq_length
 
             start_position_f = None
@@ -158,6 +163,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     input_ids=input_ids,
                     input_mask=input_mask,
                     segment_ids=segment_ids,
+                    entity_ids=entity_ids,
                     start_position=start_position_f,
                     end_position=end_position_f,
                     sent_mask=sent_mask,
@@ -183,6 +189,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
     for (example_index, example) in enumerate(examples):
         query_tokens = tokenizer.tokenize(example.question_text)
         all_doc_tokens = example.doc_tokens
+        all_tokens_entity_info = example.tokens_entity_info
         # graph=full_graph[example.qas_id]
         # The -5 accounts for '<s>','yes','no', </s> and </s>
         max_tokens_for_doc = max_seq_length - len(query_tokens) - 5
@@ -203,6 +210,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
             tokens = ["[CLS]", "yes", "no"]
+            entity_tokens = ['', '', '']
             token_to_orig_map = {}
             token_is_max_context = {}
             segment_ids = [0, 0, 0]
@@ -214,21 +222,26 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 is_max_context = _check_is_max_context(doc_spans, doc_span_index, split_token_index)
                 token_is_max_context[len(tokens)] = is_max_context
                 tokens.append(all_doc_tokens[split_token_index])
+                entity_tokens.append(all_tokens_entity_info[split_token_index])
                 segment_ids.append(0)
                 matrix.append(example.subwords_to_matrix[split_token_index])
             content_len = len(tokens)
             tokens.append("[SEP]")
+            entity_tokens.append('')
             segment_ids.append(0)
             matrix.append(-1)
 
             for token in query_tokens:
                 tokens.append(token)
+                entity_tokens.append('')
                 segment_ids.append(1)
             tokens.append("[SEP]")
+            entity_tokens.append('')
             segment_ids.append(1)
             matrix += [0] * len(query_tokens) + [-1]
 
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            entity_ids = convert_entity_info_to_ids(entity_tokens)
 
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
             # tokens are attended to.
@@ -239,12 +252,14 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 input_ids.append(0)
                 input_mask.append(0)
                 segment_ids.append(0)
+                entity_ids.append(0)
                 matrix.append(-1)
 
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
             assert len(matrix) == max_seq_length
+            assert len(entity_ids) == max_seq_length
             sent_mask = [0] * max_seq_length
             doc_start = doc_span.start
             doc_end = doc_span.start + doc_span.length
@@ -262,6 +277,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                     input_ids=input_ids,
                     input_mask=input_mask,
                     segment_ids=segment_ids,
+                    entity_ids=entity_ids,
                     sent_mask=sent_mask,
                     content_len=content_len))
             unique_id += 1

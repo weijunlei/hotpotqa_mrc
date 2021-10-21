@@ -92,7 +92,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
         prev_is_whitespace = True
         char_count = -2
         tokens_entity_info = []
-        assert len(context) == entity_context, "Error in entity info!"
+        assert len(context) == len(entity_context), "Error in entity info!"
         for ch, ch_entity in zip(context, entity_context):
             if is_whitespace(ch):
                 prev_is_whitespace = True
@@ -211,6 +211,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
             orig_tokens=doc_tokens,
             sub_to_orig_index=sub_to_orig_index,
             doc_tokens=doc_subwords,
+            tokens_entity_info=doc_sub_entity_infos,
             orig_answer_text=answer,
             start_position=start_position_w,
             end_position=end_position_w,

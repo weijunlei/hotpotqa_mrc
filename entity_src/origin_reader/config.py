@@ -18,9 +18,9 @@ def get_config():
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
                              "bert-base-multilingual-cased, bert-base-chinese.")
-    parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20211021_with_entity', type=str,
+    parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20211021_with_entity_test', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--model_name", type=str, default='BertForQuestionAnsweringForward',
+    parser.add_argument("--model_name", type=str, default='BertForQuestionAnsweringForwardWithEntity',
                         help="must be BertForQuestionAnsweringCoAttention"
                              "\BertForQuestionAnsweringThreeCoAttention"
                              "\BertForQuestionAnsweringThreeSameCoAttention"
@@ -31,7 +31,7 @@ def get_config():
     # parser.add_argument("--overwrite_result", dest='overwrite_result', action='store_true')
     # parser.add_argument("--no-over_write_result", dest='overwrite_result', action='store_false')
     parser.add_argument("--overwrite_result", type=str2bool, default=True)
-    parser.add_argument("--log_prefix", default="qa_base_20211021_with_entity", type=str)
+    parser.add_argument("--log_prefix", default="qa_base_20211021_with_entity_test", type=str)
     parser.add_argument("--log_path", default="../../log", type=str)
     parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_labeled_data_v3_with_entity_label.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")

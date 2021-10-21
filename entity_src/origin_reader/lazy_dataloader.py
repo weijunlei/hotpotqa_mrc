@@ -23,6 +23,7 @@ class LazyLoadTensorDataset(Dataset):
         # tmp_word_matrix = feature.word_sim_matrix.toarray()
         # word_sim_matrix = tmp_word_matrix + tmp_word_matrix.T - np.diag(np.diag(tmp_word_matrix))
         # word_sim_matrix = torch.tensor(word_sim_matrix, dtype=torch.float32)
+        entity_ids = torch.tensor(feature.entity_ids, dtype=torch.long)
 
         tensors = [input_ids,
                    input_mask,
@@ -30,6 +31,7 @@ class LazyLoadTensorDataset(Dataset):
                    sent_mask,
                    content_len,
                    # word_sim_matrix
+                   entity_ids
                    ]
 
         if self.is_training:
