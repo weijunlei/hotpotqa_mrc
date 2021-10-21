@@ -284,7 +284,7 @@ def run_train(rank=0, world_size=1):
     if not os.path.exists(args.train_file):
         raise ValueError("train file not exists! please set train file!")
     if not args.overwrite_result and os.path.exists(args.output_dir) and os.listdir(args.output_dir):
-        raise ValueError("Output directory () already exists and is not empty.")
+        raise ValueError("Output directory {} already exists and is not empty.".format(args.output_dir))
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
@@ -362,7 +362,6 @@ def run_train(rank=0, world_size=1):
             logger.info("loading file: {}".format(new_cache_file))
             with open(new_cache_file, "rb") as reader:
                 train_features = pickle.load(reader)
-                train_features = train_features[:100]
             logger.info("load file: {} done!".format(new_cache_file))
             train_data = LazyLoadTensorDataset(features=train_features, is_training=True)
             if args.local_rank == -1:

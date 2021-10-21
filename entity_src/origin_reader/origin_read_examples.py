@@ -18,6 +18,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
         question = data['question']
         answer = data['answer']
         sup = data['supporting_facts']
+        entity_context = []
         length = len(context)
         sent_cls = []
         start_position = None
@@ -35,7 +36,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
             if answer.lower() == 'no':
                 start_position = -2
                 end_position = -2
-        for ind_con, con in enumerate(data['context']):  # 去除句首的空白字符
+        for ind_con, (con, entity_info) in enumerate(zip(data['context'], data['entity_info'])):  # 去除句首的空白字符
             if ind_con in sp_dict[qas_id]:
                 full_sents_mask += [1 for con1 in con[1] if con1.strip() != '']
             else:
@@ -52,7 +53,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
                 break
             if ind_con in sp_dict[qas_id]:
                 offset = 0
-                for inds, sent in enumerate(con[1]):
+                for inds, (sent, sent_entity_info) in enumerate(zip(con[1], entity_info)):
                     if sent.strip() == '':
                         continue
                     if context == '':
@@ -60,18 +61,21 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
                         while is_whitespace(sent[0]):
                             white1 += 1
                             sent = sent[1:]
+                            sent_entity_info = sent_entity_info[1:]
                         offset += white1
                     elif not sent.startswith(' '):
                         context += ' '
+                        entity_context.append('')
                         length += 1
                         char_to_matrix += [input_sentence_idx]
                     context += sent
+                    entity_context += sent_entity_info
                     char_to_matrix += [input_sentence_idx] * len(sent)
                     input_sentence_idx += 1
                     sent_cls.append(length)
                     if is_training and con[0] == answer_label[0]:
                         if offset <= answer_label[1] < offset+len(sent):
-                            start_position = length+answer_label[1]-offset#+5
+                            start_position = length + answer_label[1]-offset#+5
                         if offset < answer_label[2] <= offset+len(sent):
                             end_position = length+answer_label[2]-offset #+5
                     length += len(sent)
@@ -87,22 +91,26 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
         char_to_newchar = []
         prev_is_whitespace = True
         char_count = -2
-        for c in context:
-            if is_whitespace(c):
+        tokens_entity_info = []
+        assert len(context) == entity_context, "Error in entity info!"
+        for ch, ch_entity in zip(context, entity_context):
+            if is_whitespace(ch):
                 prev_is_whitespace = True
-                char_to_newchar.append(char_count+1)
+                char_to_newchar.append(char_count + 1)
             else:
                 if prev_is_whitespace:
-                    doc_tokens.append(c)
+                    doc_tokens.append(ch)
+                    tokens_entity_info.append(ch_entity)
                     char_count += 2
                 else:
-                    doc_tokens[-1] += c
-                    char_count+=1
+                    doc_tokens[-1] += ch
+                    tokens_entity_info[-1] = ch_entity if ch_entity != '' else tokens_entity_info[-1]
+                    char_count += 1
                 prev_is_whitespace = False
                 char_to_newchar.append(char_count)
         if prev_is_whitespace:
             char_to_newchar.append(char_count+1)
-
+        assert len(doc_tokens) == len(tokens_entity_info), "Error in entity info"
         context = ' '.join(doc_tokens)
         sent_cls_n = []
         newchar_to_matrix = [0] * len(context)
@@ -121,9 +129,10 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
         char_to_word_offset = []
         subwords_to_matrix = []
         doc_subwords = []
+        doc_sub_entity_infos = []
         sub_to_orig_index = []
         conlen = 0
-        for indt, dtoken in enumerate(doc_tokens):
+        for indt, (dtoken, token_entity_info) in enumerate(zip(doc_tokens, tokens_entity_info)):
             sub_tokens = tokenizer.tokenize(dtoken)
             sum_toklen = 0
             unkc = 0
@@ -131,6 +140,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
             for indst, subtoken in enumerate(sub_tokens):
                 tok_len = len(subtoken)
                 doc_subwords.append(subtoken)
+                doc_sub_entity_infos.append(token_entity_info)
                 sub_to_orig_index.append(indt)
                 if len(char_to_word_offset) < len(newchar_to_matrix):
                     subwords_to_matrix.append(newchar_to_matrix[len(char_to_word_offset)])
@@ -173,6 +183,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
         sent_cls_extend = []
         for ind_scw, scw in enumerate(sent_cls_w):
             doc_subwords.insert(scw+ind_scw, '[UNK]')
+            doc_sub_entity_infos.insert(scw+ind_scw, '')
             sub_to_orig_index.insert(scw+ind_scw, sub_to_orig_index[scw+ind_scw])
             subwords_to_matrix.insert(scw+ind_scw, subwords_to_matrix[scw+ind_scw])
             sent_cls_extend.append(scw+ind_scw)
@@ -181,6 +192,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
                     start_position_w += 1
                 if end_position_w > scw + ind_scw:
                     end_position_w += 1
+        assert len(doc_subwords) == len(doc_sub_entity_infos), "Error in sub words entity info!"
         if is_training:
             if answer.lower() == 'yes':
                 start_position_w = -1

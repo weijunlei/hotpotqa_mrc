@@ -446,7 +446,7 @@ class BertEncoder(nn.Module):
         for i, layer_module in enumerate(self.layer):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-            if i == 0:
+            if i == 1:
                 layer_outputs = layer_module(
                     hidden_states, attention_mask, head_mask[i], word_sim_matrix, encoder_hidden_states, encoder_attention_mask
                 )

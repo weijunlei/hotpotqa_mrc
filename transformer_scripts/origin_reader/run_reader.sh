@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "----------------------------------------------------"
 echo "start train reader model"
-export CUDA_VISIBLE_DEVICES="2,1"
+export CUDA_VISIBLE_DEVICES="0,1"
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
                # BertForQuestionAnsweringThreeSameCoAttention,
@@ -14,9 +14,9 @@ export CUDA_VISIBLE_DEVICES="2,1"
 cd ../../transformer_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model bert-base-uncased \
-  --output_dir ../../data/checkpoints/20211020_with_word_sim_0_transformer \
+  --output_dir ../../data/checkpoints/20211020_with_word_sim_1_transformer \
   --model_name BertForQuestionAnsweringForwardWithSim \
-  --log_prefix 20211020_with_word_sim_0_transformer \
+  --log_prefix 20211020_with_word_sim_1_transformer \
   --overwrite_result True \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
@@ -26,6 +26,6 @@ python -u origin_reader_model.py \
   --train_batch_size 12 \
   --local_rank -1 \
   --val_batch_size 64 \
-  --save_model_step 10 \
+  --save_model_step 1000 \
   --num_train_epochs 5.0
 echo "----------------------------------------------------"
