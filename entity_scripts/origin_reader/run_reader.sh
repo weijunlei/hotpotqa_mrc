@@ -23,7 +23,7 @@ python -u origin_reader_model.py \
   --train_supporting_para_file ../../data/selector/second_hop_related_paragraph_result/train_related.json \
   --dev_supporting_para_file ../../data/selector/second_hop_related_paragraph_result/dev_related.json \
   --feature_cache_path ../../data/cache/qa_base_20211021_with_entity_wo_question_entity \
-  --train_batch_size 8 \
+  --train_batch_size 12 \
   --local_rank -1 \
   --val_batch_size 64 \
   --save_model_step 3000 \

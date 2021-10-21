@@ -364,20 +364,25 @@ def run_train(rank=0, world_size=1):
                 train_features = pickle.load(reader)
             logger.info("load file: {} done!".format(new_cache_file))
             train_data = LazyLoadTensorDataset(features=train_features, is_training=True)
+            logger.info("get train data done!")
             if args.local_rank == -1:
                 train_sampler = RandomSampler(train_data)
             else:
                 train_sampler = DistributedSampler(train_data)
-
+            logger.info("getting data loader...")
             train_dataloader = DataLoader(train_data,
                                           sampler=train_sampler,
                                           batch_size=args.train_batch_size,
-                                          num_workers=1)
+                                          num_workers=0)
+            logger.info("get data loader done!")
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+                logger.debug("getting data from data loader...")
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, sent_mask, content_len, word_sim_matrix, start_positions, end_positions, sent_lbs, sent_weight = batch
+                logger.debug("get data from data loader done.")
+                import pdb; pdb.set_trace()
                 loss, _, _, _ = model(input_ids,
                                       input_mask,
                                       segment_ids,
@@ -387,6 +392,7 @@ def run_train(rank=0, world_size=1):
                                       sent_mask=sent_mask,
                                       sent_lbs=sent_lbs,
                                       sent_weight=sent_weight)
+                logger.debug("training model done!")
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
                 logger.debug("step = %d, train_loss=%f", global_step, loss)

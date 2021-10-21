@@ -14,9 +14,9 @@ export CUDA_VISIBLE_DEVICES="0,1"
 cd ../../transformer_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model bert-base-uncased \
-  --output_dir ../../data/checkpoints/20211020_with_word_sim_1_transformer \
+  --output_dir ../../data/checkpoints/20211020_with_word_sim_0_transformer \
   --model_name BertForQuestionAnsweringForwardWithSim \
-  --log_prefix 20211020_with_word_sim_1_transformer \
+  --log_prefix 20211020_with_word_sim_0_transformer \
   --overwrite_result True \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
