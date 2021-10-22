@@ -329,11 +329,11 @@ class BertForQuestionAnsweringForwardWithSim(BertPreTrainedModel):
                 sent_mask=None,
                 sent_lbs=None,
                 sent_weight=None):
-        import pdb; pdb.set_trace()
         if len(input_ids.shape) < 2:
             input_ids = input_ids.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
+            word_sim_matrix = word_sim_matrix.unsqueeze(0)
             if start_positions is not None and len(start_positions.shape)<2:
                 start_positions = start_positions.unsqueeze(0)
                 end_positions = end_positions.unsqueeze(0)

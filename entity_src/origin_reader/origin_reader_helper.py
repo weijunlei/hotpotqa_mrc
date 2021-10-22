@@ -22,6 +22,8 @@ class HotpotQAExample(object):
                  question_text,
                  orig_tokens,
                  doc_tokens,
+                 question_tokens,
+                 question_tokens_entity_info,
                  tokens_entity_info,
                  sub_to_orig_index,
                  orig_answer_text=None,
@@ -38,6 +40,8 @@ class HotpotQAExample(object):
         self.orig_tokens = orig_tokens
         self.sub_to_orig_index = sub_to_orig_index
         self.doc_tokens = doc_tokens
+        self.question_tokens = question_tokens
+        self.question_tokens_entity_info = question_tokens_entity_info
         self.tokens_entity_info = tokens_entity_info
         self.orig_answer_text = orig_answer_text
         self.start_position = start_position

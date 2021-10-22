@@ -141,8 +141,6 @@ def get_train_data(args, tokenizer, logger=None):
                                                                             str(args.max_seq_length),
                                                                             str(args.doc_stride),
                                                                             args.feature_suffix)
-    if not os.path.exists(args.feature_cache_path):
-        os.makedirs(args.feature_cache_path)
     tmp_cache_file = cached_train_features_file + '_' + str(0)
     if not os.path.exists(tmp_cache_file):
         logger.info("creating examples from origin file to {}".format(args.train_file))
@@ -206,14 +204,24 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                     t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
             else:
                 d_batch = d_batch[:-1]
-            d_all_input_ids, d_all_input_mask, d_all_segment_ids, \
-            d_all_cls_mask, d_all_content_len, d_all_entity_ids = d_batch
-            dev_start_logits, dev_end_logits, dev_sent_logits = model(d_all_input_ids,
-                                                                      d_all_input_mask,
-                                                                      d_all_segment_ids,
+            input_ids, input_mask, segment_ids, sent_mask, content_len, entity_ids = d_batch
+            if len(input_ids.shape) < 2:
+                input_ids = input_ids.unsqueeze(0)
+                segment_ids = segment_ids.unsqueeze(0)
+                input_mask = input_mask.unsqueeze(0)
+                entity_ids = entity_ids.unsqueeze(0)
+                if start_positions is not None and len(start_positions.shape) < 2:
+                    start_positions = start_positions.unsqueeze(0)
+                    end_positions = end_positions.unsqueeze(0)
+                    sent_mask = sent_mask.unsqueeze(0)
+                    sent_lbs = sent_lbs.unsqueeze(0)
+                    sent_weight = sent_weight.unsqueeze(0)
+            dev_start_logits, dev_end_logits, dev_sent_logits = model(input_ids,
+                                                                      input_mask,
+                                                                      segment_ids,
                                                                       # word_sim_matrix=d_word_sim_matrix,
-                                                                      entity_ids=d_all_entity_ids,
-                                                                      sent_mask=d_all_cls_mask)
+                                                                      entity_ids=entity_ids,
+                                                                      sent_mask=sent_mask)
             for idx, example_index in enumerate(d_example_indices):
                 dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
                 dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
@@ -283,7 +291,7 @@ def run_train(rank=0, world_size=1):
         raise ValueError("train file not exists! please set train file!")
     if not args.overwrite_result and os.path.exists(args.output_dir) and os.listdir(args.output_dir):
         raise ValueError("Output directory () already exists and is not empty.")
-    if not os.path.exists(args.output_dir):
+    if rank == 0 and not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
@@ -323,6 +331,8 @@ def run_train(rank=0, world_size=1):
     global_step = 0
     logger.info("start read example...")
     # 获取训练集数据
+    if rank == 0 and not os.path.exists(args.feature_cache_path):
+        os.makedirs(args.feature_cache_path)
     total_feature_num, start_idxs, cached_train_features_file = get_train_data(args, tokenizer=tokenizer, logger=logger)
     model.train()
     num_train_optimization_steps = int(
@@ -376,6 +386,17 @@ def run_train(rank=0, world_size=1):
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, sent_mask, content_len, entity_ids, start_positions, end_positions, sent_lbs, sent_weight = batch
+                if len(input_ids.shape) < 2:
+                    input_ids = input_ids.unsqueeze(0)
+                    segment_ids = segment_ids.unsqueeze(0)
+                    input_mask = input_mask.unsqueeze(0)
+                    entity_ids = entity_ids.unsqueeze(0)
+                    if start_positions is not None and len(start_positions.shape) < 2:
+                        start_positions = start_positions.unsqueeze(0)
+                        end_positions = end_positions.unsqueeze(0)
+                        sent_mask = sent_mask.unsqueeze(0)
+                        sent_lbs = sent_lbs.unsqueeze(0)
+                        sent_weight = sent_weight.unsqueeze(0)
                 loss, _, _, _ = model(input_ids,
                                       input_mask,
                                       segment_ids,
@@ -454,7 +475,6 @@ def run_train(rank=0, world_size=1):
         model_to_save = model.module if hasattr(model,
                                                 'module') else model  # Only save the model it-self
         output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
-        # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
         torch.save(model_to_save.state_dict(), output_model_file)
         output_config_file = os.path.join(args.output_dir, 'config.json')
         with open(output_config_file, 'w') as f:
@@ -463,7 +483,7 @@ def run_train(rank=0, world_size=1):
 
 
 if __name__ == "__main__":
-    use_ddp = False
+    use_ddp = True
     if not use_ddp:
         run_train()
     else:

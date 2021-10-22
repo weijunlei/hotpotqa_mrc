@@ -48,7 +48,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
     unique_id = 1000000000
     features = []
     for (example_index, example) in enumerate(examples):
-        query_tokens = tokenizer.tokenize(example.question_text)
+        query_tokens = example.question_tokens
         all_doc_tokens = example.doc_tokens
         all_tokens_entity_info = example.tokens_entity_info
         # The -5 accounts for '<s>','yes','no', </s> and </s>
@@ -91,9 +91,9 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
             segment_ids.append(0)
             matrix.append(0)
 
-            for token in query_tokens:
-                tokens.append(token)
-                entity_tokens.append('')
+            for query_token, question_token_entity_info in zip(query_tokens, example.question_tokens_entity_info):
+                tokens.append(query_token)
+                entity_tokens.append(question_token_entity_info)
                 segment_ids.append(1)
             tokens.append("[SEP]")
             entity_tokens.append('')
@@ -187,7 +187,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
     unique_id = 1000000000
     features = []
     for (example_index, example) in enumerate(examples):
-        query_tokens = tokenizer.tokenize(example.question_text)
+        query_tokens = example.question_tokens
         all_doc_tokens = example.doc_tokens
         all_tokens_entity_info = example.tokens_entity_info
         # graph=full_graph[example.qas_id]
@@ -231,9 +231,9 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
             segment_ids.append(0)
             matrix.append(-1)
 
-            for token in query_tokens:
+            for token, question_token_entity_info in zip(query_tokens, example.question_tokens_entity_info):
                 tokens.append(token)
-                entity_tokens.append('')
+                entity_tokens.append(question_token_entity_info)
                 segment_ids.append(1)
             tokens.append("[SEP]")
             entity_tokens.append('')

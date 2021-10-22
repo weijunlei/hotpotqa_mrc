@@ -313,11 +313,13 @@ class BertForQuestionAnsweringForwardWithEntity(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForQuestionAnsweringForwardWithEntity, self).__init__(config)
         self.bert = BertModel(config)
-        self.entity_embedder = nn.Embedding(num_embeddings=20, embedding_dim=10)
-        self.start_logits = nn.Linear(config.hidden_size + 10, 1)
-        self.end_logits = nn.Linear(config.hidden_size + 10, 1)
+        ENTITY_NUM = 20
+        ENTITY_DIM = 10
+        self.entity_embedder = nn.Embedding(num_embeddings=ENTITY_NUM, embedding_dim=ENTITY_DIM)
+        self.start_logits = nn.Linear(config.hidden_size + ENTITY_DIM, 1)
+        self.end_logits = nn.Linear(config.hidden_size + ENTITY_DIM, 1)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sent = nn.Linear(config.hidden_size + 10, 1)
+        self.sent = nn.Linear(config.hidden_size + ENTITY_DIM, 1)
         self.init_weights()
 
     def forward(self,
@@ -330,16 +332,6 @@ class BertForQuestionAnsweringForwardWithEntity(BertPreTrainedModel):
                 sent_mask=None,
                 sent_lbs=None,
                 sent_weight=None):
-        if len(input_ids.shape) < 2:
-            input_ids = input_ids.unsqueeze(0)
-            token_type_ids = token_type_ids.unsqueeze(0)
-            attention_mask = attention_mask.unsqueeze(0)
-            if start_positions is not None and len(start_positions.shape)<2:
-                start_positions = start_positions.unsqueeze(0)
-                end_positions = end_positions.unsqueeze(0)
-                sent_mask = sent_mask.unsqueeze(0)
-                sent_lbs = sent_lbs.unsqueeze(0)
-                sent_weight = sent_weight.unsqueeze(0)
         sequence_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0]
         sequence_output = self.dropout(sequence_output)
         entity_output = self.entity_embedder(entity_ids)
@@ -349,9 +341,8 @@ class BertForQuestionAnsweringForwardWithEntity(BertPreTrainedModel):
         extended_context_mask = (1.0 - context_mask) * -10000.0
         start_logits = self.start_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
         end_logits = self.end_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
-        # 去除context mask
-        # sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
-        sent_logits = self.sent(sequence_output).squeeze(-1)
+        sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
+        # sent_logits = self.sent(sequence_output).squeeze(-1)
         if len(sent_logits) > 1:
             sent_logits.squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)

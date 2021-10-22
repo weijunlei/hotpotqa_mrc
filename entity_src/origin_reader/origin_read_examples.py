@@ -4,6 +4,33 @@ from tqdm import tqdm
 from origin_reader_helper import HotpotQAExample, is_whitespace
 
 
+def question_text_process(question, question_entity_info, tokenizer):
+    """ 将question转化为token并与question entity info 对应"""
+    question_tokens = []
+    question_tokens_entity_info = []
+    doc_tokens = []
+    tokens_entity_info = []
+    prev_is_whitespace = True
+    for idx, (q_ch, q_entity_info) in enumerate(zip(question, question_entity_info)):
+        if is_whitespace(q_ch):
+            prev_is_whitespace = True
+        else:
+            if prev_is_whitespace:
+                doc_tokens.append(q_ch)
+                tokens_entity_info.append(q_entity_info)
+            else:
+                doc_tokens[-1] += q_ch
+                tokens_entity_info[-1] = q_entity_info if q_entity_info != '' else tokens_entity_info[-1]
+            prev_is_whitespace = False
+    for d_token, token_entity_info in zip(doc_tokens, tokens_entity_info):
+        sub_tokens = tokenizer.tokenize(d_token)
+        for ind_st, sub_token in enumerate(sub_tokens):
+            question_tokens.append(sub_token)
+            question_tokens_entity_info.append(token_entity_info)
+    return question_tokens, question_tokens_entity_info
+
+        
+
 def read_examples(input_file, supporting_para_file, tokenizer, is_training):
     # 处理后的数据
     datas = json.load(open(input_file, 'r', encoding='utf-8'))
@@ -27,6 +54,10 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
         full_sents_lbs = []
         char_to_matrix = []
         input_sentence_idx = 1  # 输入到模型中句子编号
+        question_tokens, question_tokens_entity_info = question_text_process(question,
+                                                                             data['question_entity_info'],
+                                                                             tokenizer=tokenizer)
+        assert len(question_tokens) == len(question_tokens_entity_info), "Error in getting questions..."
         if is_training:
             answer_label = data['labels'][0]
             sent_lbs = []
@@ -132,30 +163,30 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
         doc_sub_entity_infos = []
         sub_to_orig_index = []
         conlen = 0
-        for indt, (dtoken, token_entity_info) in enumerate(zip(doc_tokens, tokens_entity_info)):
-            sub_tokens = tokenizer.tokenize(dtoken)
+        for indt, (d_token, token_entity_info) in enumerate(zip(doc_tokens, tokens_entity_info)):
+            sub_tokens = tokenizer.tokenize(d_token)
             sum_toklen = 0
             unkc = 0
-            conlen += len(dtoken)
-            for indst, subtoken in enumerate(sub_tokens):
-                tok_len = len(subtoken)
-                doc_subwords.append(subtoken)
+            conlen += len(d_token)
+            for indst, sub_token in enumerate(sub_tokens):
+                tok_len = len(sub_token)
+                doc_subwords.append(sub_token)
                 doc_sub_entity_infos.append(token_entity_info)
                 sub_to_orig_index.append(indt)
                 if len(char_to_word_offset) < len(newchar_to_matrix):
                     subwords_to_matrix.append(newchar_to_matrix[len(char_to_word_offset)])
                 else:
                     subwords_to_matrix.append(newchar_to_matrix[len(char_to_word_offset)-1])
-                if subtoken.startswith('##'):
+                if sub_token.startswith('##'):
                     tok_len -= 2
-                if subtoken == '[UNK]':
+                if sub_token == '[UNK]':
                     unkc += 1
                     if len(sub_tokens) == indst + 1:
-                        tok_len = len(dtoken) - sum_toklen
+                        tok_len = len(d_token) - sum_toklen
                     elif sub_tokens[indst + 1] == '[UNK]':
                         tok_len = 1
                     else:
-                        tok_len = dtoken.find(sub_tokens[indst + 1][0], sum_toklen) - sum_toklen
+                        tok_len = d_token.find(sub_tokens[indst + 1][0], sum_toklen) - sum_toklen
                 prelen = len(char_to_word_offset)
                 for rr in range(tok_len):
                     if len(char_to_word_offset) < conlen:
@@ -211,6 +242,8 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
             orig_tokens=doc_tokens,
             sub_to_orig_index=sub_to_orig_index,
             doc_tokens=doc_subwords,
+            question_tokens=question_tokens,
+            question_tokens_entity_info=question_tokens_entity_info,
             tokens_entity_info=doc_sub_entity_infos,
             orig_answer_text=answer,
             start_position=start_position_w,

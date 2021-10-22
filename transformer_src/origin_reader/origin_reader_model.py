@@ -358,104 +358,106 @@ def run_train(rank=0, world_size=1):
     print_loss = 0
     for epoch_idx in trange(int(args.num_train_epochs), desc="Epoch"):
         for ind in trange(len(start_idxs), desc='Data'):
-            new_cache_file = cached_train_features_file + '_' + str(ind)
-            logger.info("loading file: {}".format(new_cache_file))
-            with open(new_cache_file, "rb") as reader:
-                train_features = pickle.load(reader)
-            logger.info("load file: {} done!".format(new_cache_file))
-            train_data = LazyLoadTensorDataset(features=train_features, is_training=True)
-            logger.info("get train data done!")
-            if args.local_rank == -1:
-                train_sampler = RandomSampler(train_data)
-            else:
-                train_sampler = DistributedSampler(train_data)
-            logger.info("getting data loader...")
-            train_dataloader = DataLoader(train_data,
-                                          sampler=train_sampler,
-                                          batch_size=args.train_batch_size,
-                                          num_workers=0)
-            logger.info("get data loader done!")
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
-                logger.debug("getting data from data loader...")
-                if n_gpu == 1:
-                    batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
-                batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, sent_mask, content_len, word_sim_matrix, start_positions, end_positions, sent_lbs, sent_weight = batch
-                logger.debug("get data from data loader done.")
-                import pdb; pdb.set_trace()
-                loss, _, _, _ = model(input_ids,
-                                      input_mask,
-                                      segment_ids,
-                                      word_sim_matrix=word_sim_matrix,
-                                      start_positions=start_positions,
-                                      end_positions=end_positions,
-                                      sent_mask=sent_mask,
-                                      sent_lbs=sent_lbs,
-                                      sent_weight=sent_weight)
-                logger.debug("training model done!")
-                if n_gpu > 1:
-                    loss = loss.sum()  # mean() to average on multi-gpu.
-                logger.debug("step = %d, train_loss=%f", global_step, loss)
-                print_loss += loss
-                if args.gradient_accumulation_steps > 1:
-                    loss = loss / args.gradient_accumulation_steps
-
-                if (global_step + 1) % 100 == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
-                    logger.info(
-                        "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, ind, global_step,
-                                                                                       print_loss))
-                    print_loss = 0
-                if args.fp16:
-                    optimizer.backward(loss)
+            try:
+                new_cache_file = cached_train_features_file + '_' + str(ind)
+                logger.info("loading file: {}".format(new_cache_file))
+                with open(new_cache_file, "rb") as reader:
+                    train_features = pickle.load(reader)
+                logger.info("load file: {} done!".format(new_cache_file))
+                train_data = LazyLoadTensorDataset(features=train_features, is_training=True)
+                logger.info("get train data done!")
+                if args.local_rank == -1:
+                    train_sampler = RandomSampler(train_data)
                 else:
-                    loss.backward()
-                if (step + 1) % args.gradient_accumulation_steps == 0:
+                    train_sampler = DistributedSampler(train_data)
+                logger.info("getting data loader...")
+                train_dataloader = DataLoader(train_data,
+                                              sampler=train_sampler,
+                                              batch_size=args.train_batch_size,
+                                              num_workers=0)
+                logger.info("get data loader done!")
+                for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+                    # logger.debug("getting data from data loader...")
+                    if n_gpu == 1:
+                        batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
+                    batch = tuple(t.to(device) for t in batch)
+                    input_ids, input_mask, segment_ids, sent_mask, content_len, word_sim_matrix, start_positions, end_positions, sent_lbs, sent_weight = batch
+                    # logger.debug("get data from data loader done.")
+                    loss, _, _, _ = model(input_ids,
+                                          input_mask,
+                                          segment_ids,
+                                          word_sim_matrix=word_sim_matrix,
+                                          start_positions=start_positions,
+                                          end_positions=end_positions,
+                                          sent_mask=sent_mask,
+                                          sent_lbs=sent_lbs,
+                                          sent_weight=sent_weight)
+                    logger.debug("training model done!")
+                    if n_gpu > 1:
+                        loss = loss.sum()  # mean() to average on multi-gpu.
+                    logger.debug("step = %d, train_loss=%f", global_step, loss)
+                    print_loss += loss
+                    if args.gradient_accumulation_steps > 1:
+                        loss = loss / args.gradient_accumulation_steps
+
+                    if (global_step + 1) % 100 == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
+                        logger.info(
+                            "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, ind, global_step,
+                                                                                           print_loss))
+                        print_loss = 0
                     if args.fp16:
-                        # modify learning rate with special warm up BERT uses
-                        # if args.fp16 is False, BertAdam is used and handles this automatically
-                        lr_this_step = args.learning_rate * warmup_linear(global_step / num_train_optimization_steps,
-                                                                          args.warmup_proportion)
-                        for param_group in optimizer.param_groups:
-                            param_group['lr'] = lr_this_step
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    global_step += 1
-                # 保存以及验证模型结果
-                if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
-                    # 获取验证集数据
-                    if rank == 0:
-                        dev_examples, dev_dataloader, dev_features = get_dev_data(args, tokenizer=tokenizer, logger=logger)
-                        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
-                                                                                        dev_dataloader,
-                                                                                        n_gpu,
-                                                                                        device,
-                                                                                        dev_features,
-                                                                                        tokenizer,
-                                                                                        dev_examples)
-                        logger.info("epoch:{} data: {} step: {}".format(epoch_idx, ind, global_step))
-                        logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
-                            ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
-                        ))
-                        del dev_examples, dev_dataloader, dev_features
-                        gc.collect()
-                    logger.info("max_f1: {}".format(max_f1))
-                    if joint_f1 > max_f1 and rank == 0:
-                        logger.info("get better model in step: {} with joint f1: {}".format(global_step, joint_f1))
-                        max_f1 = joint_f1
-                        model_to_save = model.module if hasattr(model,
-                                                                'module') else model  # Only save the model it-self
-                        output_model_file = os.path.join(args.output_dir, 'pytorch_model_best.bin')
-                        # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
-                        torch.save(model_to_save.state_dict(), output_model_file)
-                        output_config_file = os.path.join(args.output_dir, 'config.json')
-                        with open(output_config_file, 'w') as f:
-                            f.write(model_to_save.config.to_json_string())
-                        logger.info('saving step: {} model'.format(global_step))
-            # 内存清除
-            del train_features, input_ids, input_mask, segment_ids
-            del start_positions, end_positions, sent_lbs, sent_mask
-            del sent_weight, train_data, train_dataloader
-            gc.collect()
+                        optimizer.backward(loss)
+                    else:
+                        loss.backward()
+                    if (step + 1) % args.gradient_accumulation_steps == 0:
+                        if args.fp16:
+                            # modify learning rate with special warm up BERT uses
+                            # if args.fp16 is False, BertAdam is used and handles this automatically
+                            lr_this_step = args.learning_rate * warmup_linear(global_step / num_train_optimization_steps,
+                                                                              args.warmup_proportion)
+                            for param_group in optimizer.param_groups:
+                                param_group['lr'] = lr_this_step
+                        optimizer.step()
+                        optimizer.zero_grad()
+                        global_step += 1
+                    # 保存以及验证模型结果
+                    if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
+                        # 获取验证集数据
+                        if rank == 0:
+                            dev_examples, dev_dataloader, dev_features = get_dev_data(args, tokenizer=tokenizer, logger=logger)
+                            ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
+                                                                                            dev_dataloader,
+                                                                                            n_gpu,
+                                                                                            device,
+                                                                                            dev_features,
+                                                                                            tokenizer,
+                                                                                            dev_examples)
+                            logger.info("epoch:{} data: {} step: {}".format(epoch_idx, ind, global_step))
+                            logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
+                                ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
+                            ))
+                            del dev_examples, dev_dataloader, dev_features
+                            gc.collect()
+                        logger.info("max_f1: {}".format(max_f1))
+                        if joint_f1 > max_f1 and rank == 0:
+                            logger.info("get better model in step: {} with joint f1: {}".format(global_step, joint_f1))
+                            max_f1 = joint_f1
+                            model_to_save = model.module if hasattr(model,
+                                                                    'module') else model  # Only save the model it-self
+                            output_model_file = os.path.join(args.output_dir, 'pytorch_model_best.bin')
+                            # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
+                            torch.save(model_to_save.state_dict(), output_model_file)
+                            output_config_file = os.path.join(args.output_dir, 'config.json')
+                            with open(output_config_file, 'w') as f:
+                                f.write(model_to_save.config.to_json_string())
+                            logger.info('saving step: {} model'.format(global_step))
+                # 内存清除
+                del train_features, input_ids, input_mask, segment_ids
+                del start_positions, end_positions, sent_lbs, sent_mask
+                del sent_weight, train_data, train_dataloader
+                gc.collect()
+            except Exception as e:
+                import pdb; pdb.set_trace()
     # 保存最后的模型
     if rank == 0:
         model_to_save = model.module if hasattr(model,
