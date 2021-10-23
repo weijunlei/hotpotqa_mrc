@@ -348,8 +348,8 @@ class BertForQuestionAnsweringForwardWithSim(BertPreTrainedModel):
         start_logits = self.start_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
         end_logits = self.end_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
         # 去除context mask
-        # sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
-        sent_logits = self.sent(sequence_output).squeeze(-1)
+        sent_logits = self.sent(sequence_output).squeeze(-1) * context_mask.float()
+        # sent_logits = self.sent(sequence_output).squeeze(-1)
         if len(sent_logits) > 1:
             sent_logits.squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
