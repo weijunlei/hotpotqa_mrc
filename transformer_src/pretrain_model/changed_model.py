@@ -200,10 +200,10 @@ class BertForQuestionAnsweringForward(BertPreTrainedModel):
                 sent_lbs = sent_lbs.unsqueeze(0)
                 sent_weight = sent_weight.unsqueeze(0)
         sequence_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0]
-        start_logits = self.start_logits(sequence_output).squeeze(-1) #+extended_context_mask#*context_mask.float()
-        end_logits = self.end_logits(sequence_output).squeeze(-1) #+extended_context_mask#*context_mask.float()
+        start_logits = self.start_logits(sequence_output).squeeze(-1)
+        end_logits = self.end_logits(sequence_output).squeeze(-1)
 
-        sent_logits = self.sent(sequence_output).squeeze(-1)# *context_mask.float()
+        sent_logits = self.sent(sequence_output).squeeze(-1)
         if len(sent_logits) > 1:
             sent_logits.squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
@@ -297,7 +297,7 @@ class BertForQuestionAnsweringForwardBest(BertPreTrainedModel):
             end_positions.clamp_(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)#bsz*seq bsz*n
+            start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
             total_loss = ans_loss + 0.2 * sent_loss
