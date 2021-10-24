@@ -44,6 +44,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 import pickle
 import gc
+from transformers import RobertaTokenizer
 
 from origin_read_examples import read_examples
 from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
@@ -52,32 +53,21 @@ from lazy_dataloader import LazyLoadTensorDataset
 from config import get_config
 
 sys.path.append("../pretrain_model")
-from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, \
-    BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward, BertForQuestionAnsweringForwardBest,\
-    BertSelfAttentionAndCoAttention, BertTransformer, BertSkipConnectTransformer, \
-    BertForQuestionAnsweringForwardWithEntity, BertForQuestionAnsweringForwardWithEntityOneMask
+from changed_model_roberta import RobertaForQuestionAnsweringForwardWithEntity, RobertaForQuestionAnsweringForwardBest
 from optimization import BertAdam, warmup_linear
-from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
 # 自定义好的模型
 model_dict = {
-    'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention,
-    'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
-    'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
-    'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
-    'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest,
-    'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention,
-    'BertSkipConnectTransformer': BertSkipConnectTransformer,
-    'BertTransformer': BertTransformer,
-    'BertForQuestionAnsweringForwardWithEntity': BertForQuestionAnsweringForwardWithEntity,
-    'BertForQuestionAnsweringForwardWithEntityOneMask': BertForQuestionAnsweringForwardWithEntityOneMask
+    'RobertaForQuestionAnsweringForwardBest': RobertaForQuestionAnsweringForwardBest,
+    'RobertaForQuestionAnsweringForwardWithEntity': RobertaForQuestionAnsweringForwardWithEntity
 }
+os.environ['MASTER_ADDR'] = 'localhost'
+os.environ['MASTER_PORT'] = '5678'
+
 
 logger = None
-os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = '12355'
 
 
-def logger_config(log_path, log_prefix='lwj', write2console=False):
+def logger_config(log_path, log_prefix='lwj', write2console=True):
     """
     日志配置
     :param log_path: 输出的日志路径
@@ -184,7 +174,7 @@ def get_train_data(args, tokenizer, logger=None):
                 doc_stride=args.doc_stride,
                 is_training=True)
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
-                logger.info("Saving train features into cached file {}".format(cached_train_features_file))
+                logger.info("Saving train features into cached file {}".format(new_cache_file))
                 with open(new_cache_file, "wb") as writer:
                     pickle.dump(train_features, writer)
         total_feature_num += len(train_features)
@@ -299,7 +289,8 @@ def run_train(rank=0, world_size=1):
     if rank == 0 and not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    tokenizer = RobertaTokenizer.from_pretrained(args.bert_model,
+                                                 do_lower_case=args.do_lower_case)
 
     train_examples = None
     num_train_optimization_steps = None
@@ -461,7 +452,7 @@ def run_train(rank=0, world_size=1):
                         del dev_examples, dev_dataloader, dev_features
                         gc.collect()
                     logger.info("max_f1: {}".format(max_f1))
-                    if joint_f1 > max_f1 and rank == 0:
+                    if rank == 0 and joint_f1 > max_f1:
                         logger.info("get better model in step: {} with joint f1: {}".format(global_step, joint_f1))
                         max_f1 = joint_f1
                         model_to_save = model.module if hasattr(model,
@@ -492,7 +483,7 @@ def run_train(rank=0, world_size=1):
 
 
 if __name__ == "__main__":
-    use_ddp = False
+    use_ddp = True
     if not use_ddp:
         run_train()
     else:

@@ -7,8 +7,7 @@ import string
 import collections
 from collections import Counter
 
-sys.path.append("../pretrain_model")
-from tokenization import BasicTokenizer
+from transformers import BasicTokenizer
 
 
 class HotpotQAExample(object):

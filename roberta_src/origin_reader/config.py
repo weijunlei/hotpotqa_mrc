@@ -14,13 +14,13 @@ def get_config():
     """ 模型配置 """
     parser = argparse.ArgumentParser()
     ## Required parameters
-    parser.add_argument("--bert_model", default='bert-base-cased', type=str,
+    parser.add_argument("--bert_model", default='roberta-large', type=str,
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
                              "bert-base-multilingual-cased, bert-base-chinese.")
     parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20211022_with_entity_wo_question_entity_dim_10_wi_context_mask', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--model_name", type=str, default='BertForQuestionAnsweringForwardWithEntity',
+    parser.add_argument("--model_name", type=str, default='RobertaForQuestionAnsweringForwardBest',
                         help="must be BertForQuestionAnsweringCoAttention"
                              "\BertForQuestionAnsweringThreeCoAttention"
                              "\BertForQuestionAnsweringThreeSameCoAttention"

@@ -69,7 +69,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
-            tokens = ["[CLS]", "yes", "no"]
+            tokens = ["</s>", "yes", "no"]
             entity_tokens = ['', '', '']
             token_to_orig_map = {}
             token_is_max_context = {}
@@ -86,7 +86,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 matrix.append(example.subwords_to_matrix[split_token_index])
                 segment_ids.append(0)
             content_len = len(tokens)
-            tokens.append("[SEP]")
+            tokens.append("</s>")
             entity_tokens.append('')
             segment_ids.append(0)
             matrix.append(0)
@@ -95,7 +95,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 tokens.append(query_token)
                 entity_tokens.append(question_token_entity_info)
                 segment_ids.append(1)
-            tokens.append("[SEP]")
+            tokens.append("</s>")
             entity_tokens.append('')
             segment_ids.append(1)
             matrix += [0] * len(query_tokens) + [-1]
@@ -146,10 +146,10 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 sent_weight = [0]*max_seq_length
                 for ind_cls, orig_cls in enumerate(example.sent_cls):
                     if orig_cls>=doc_start and orig_cls<doc_end:
-                        sent_mask[orig_cls-doc_start+3]=1
-                        if example.sent_lbs[ind_cls]==1:
-                            sent_lbs[orig_cls-doc_start+3]=1
-                            sent_weight[orig_cls-doc_start+3]=1
+                        sent_mask[orig_cls-doc_start+3] = 1
+                        if example.sent_lbs[ind_cls] == 1:
+                            sent_lbs[orig_cls-doc_start+3] = 1
+                            sent_weight[orig_cls-doc_start+3] = 1
                         else:
                             sent_weight[orig_cls - doc_start + 3] = 0.5
             features.append(
@@ -209,7 +209,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
-            tokens = ["[CLS]", "yes", "no"]
+            tokens = ["</s>", "yes", "no"]
             entity_tokens = ['', '', '']
             token_to_orig_map = {}
             token_is_max_context = {}
@@ -226,7 +226,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 segment_ids.append(0)
                 matrix.append(example.subwords_to_matrix[split_token_index])
             content_len = len(tokens)
-            tokens.append("[SEP]")
+            tokens.append("</s>")
             entity_tokens.append('')
             segment_ids.append(0)
             matrix.append(-1)
@@ -235,7 +235,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 tokens.append(token)
                 entity_tokens.append(question_token_entity_info)
                 segment_ids.append(1)
-            tokens.append("[SEP]")
+            tokens.append("</s>")
             entity_tokens.append('')
             segment_ids.append(1)
             matrix += [0] * len(query_tokens) + [-1]
