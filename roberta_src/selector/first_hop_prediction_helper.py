@@ -18,6 +18,7 @@ def prediction_evaluate(paragraph_results,
         q_id, context_id = k.split('_')
         context_id = int(context_id)
         new_para_result[q_id][1][context_id] = v[0]
+    alpha = 1e-6
     for k, v in new_para_result.items():
         all_count += 1
         p11 = p10 = p01 = p00 = 0
@@ -31,7 +32,7 @@ def prediction_evaluate(paragraph_results,
                 max_logit = paragraph_result
                 max_result = True if label == 1 else max_result
             # MinMax Scaling
-            paragraph_result = (paragraph_result - min_v) / (max_v - min_v)
+            paragraph_result = (paragraph_result - min_v + alpha) / ((max_v - min_v) + alpha)
             paragraph_result = 1 if paragraph_result > thread else 0
             if paragraph_result == 1 and label == 1:
                 p11 += 1
@@ -45,11 +46,11 @@ def prediction_evaluate(paragraph_results,
                 # TODO: check the function
                 raise NotImplemented
         if p11 + p01 != 0:
-            p_recall += p11 / (p11 + p01)
+            p_recall += (p11 + alpha) / (p11 + p01 + alpha)
         else:
             print("error in calculate paragraph recall!")
         if p11 + p10 != 0:
-            p_precision += p11 / (p11 + p10)
+            p_precision += (p11 + alpha) / (p11 + p10 + alpha)
         else:
             print("error in calculate paragraph precision!")
         if p11 == 2 and p10 == 0:
@@ -58,7 +59,10 @@ def prediction_evaluate(paragraph_results,
             sent_recall += 1
         if max_result:
             sent_acc += 1
-    return sent_acc / all_count, p_precision / all_count, sent_em / all_count, sent_recall / all_count
+    return (sent_acc + alpha) / (all_count + alpha),\
+           (p_precision + alpha) / (all_count + alpha),\
+           (sent_em + alpha) / (all_count + alpha),\
+           (sent_recall + alpha) / (all_count + alpha)
 
 
 def write_predictions(all_examples, all_features, all_results, is_training='train', has_sentence_result=True):

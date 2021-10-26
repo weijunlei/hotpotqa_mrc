@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "----------------------------------------------------"
 echo "start train reader model"
-export CUDA_VISIBLE_DEVICES="2"
+export CUDA_VISIBLE_DEVICES="0"
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
                # BertForQuestionAnsweringThreeSameCoAttention,
@@ -10,14 +10,14 @@ export CUDA_VISIBLE_DEVICES="2"
                # BertSelfAttentionAndCoAttention
                # BertTransformer
                # BertSkipConnectTransformer
-               # BertForQuestionAnsweringForwardWithEntity
+#                BertForQuestionAnsweringForwardWithEntity
                # BertForQuestionAnsweringForwardWithEntityOneMask
 cd ../../entity_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model bert-base-uncased \
-  --output_dir ../../data/checkpoints/20211023_entity_one_mask \
-  --model_name BertForQuestionAnsweringForwardWithEntityOneMask \
-  --log_prefix 20211023_entity_one_mask \
+  --output_dir ../../data/checkpoints/20211026_naive_bert_best_with_entity_embedding_with_transformer \
+  --model_name BertForQuestionAnsweringForwardWithEntityTransformer \
+  --log_prefix 20211026_naive_bert_best_with_entity_embedding_with_transformer \
   --overwrite_result True \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3_with_entity_label.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3_with_entity_label.json \

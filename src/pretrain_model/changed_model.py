@@ -320,6 +320,7 @@ class BertTransformer(BertPreTrainedModel):
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout2 = nn.Dropout(config.hidden_dropout_prob)
         self.sent = nn.Linear(config.hidden_size, 1)
         self.init_weights()
 

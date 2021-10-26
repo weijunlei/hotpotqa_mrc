@@ -55,7 +55,8 @@ sys.path.append("../pretrain_model")
 from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, \
     BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward, BertForQuestionAnsweringForwardBest,\
     BertSelfAttentionAndCoAttention, BertTransformer, BertSkipConnectTransformer, \
-    BertForQuestionAnsweringForwardWithEntity, BertForQuestionAnsweringForwardWithEntityOneMask
+    BertForQuestionAnsweringForwardWithEntity, BertForQuestionAnsweringForwardWithEntityOneMask,\
+    BertForQuestionAnsweringForwardWithEntityTransformer
 from optimization import BertAdam, warmup_linear
 from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
 # 自定义好的模型
@@ -69,7 +70,8 @@ model_dict = {
     'BertSkipConnectTransformer': BertSkipConnectTransformer,
     'BertTransformer': BertTransformer,
     'BertForQuestionAnsweringForwardWithEntity': BertForQuestionAnsweringForwardWithEntity,
-    'BertForQuestionAnsweringForwardWithEntityOneMask': BertForQuestionAnsweringForwardWithEntityOneMask
+    'BertForQuestionAnsweringForwardWithEntityOneMask': BertForQuestionAnsweringForwardWithEntityOneMask,
+    'BertForQuestionAnsweringForwardWithEntityTransformer': BertForQuestionAnsweringForwardWithEntityTransformer
 }
 
 logger = None
@@ -461,7 +463,7 @@ def run_train(rank=0, world_size=1):
                         del dev_examples, dev_dataloader, dev_features
                         gc.collect()
                     logger.info("max_f1: {}".format(max_f1))
-                    if joint_f1 > max_f1 and rank == 0:
+                    if rank == 0 and joint_f1 > max_f1:
                         logger.info("get better model in step: {} with joint f1: {}".format(global_step, joint_f1))
                         max_f1 = joint_f1
                         model_to_save = model.module if hasattr(model,

@@ -85,7 +85,7 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
         cur_context_length = 0
         query_length = len(query_tokens) + 2
         unique_id = 0
-        all_tokens = ['[CLS]'] + query_tokens + ['[SEP]']
+        all_tokens = ['</s>'] + query_tokens + ['</s>']
         cls_mask = [1] + [0] * (len(all_tokens) - 1)
         if is_training == 'train' or is_training == 'dev':
             cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
@@ -109,7 +109,7 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
             roll_back = 0
             if cur_context_length + len(sentence_tokens) + 1 > max_context_length:
                 """ 超出长度往后延两句 """
-                all_tokens += ['[SEP]']
+                all_tokens += ['</s>']
                 tmp_len = len(all_tokens)
                 input_ids = tokenizer.convert_tokens_to_ids(all_tokens) + [0] * (max_seq_length - tmp_len)
                 query_ids = [0] * query_length + [1] * (tmp_len - query_length) + [0] * (max_seq_length - tmp_len)
@@ -155,7 +155,7 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
                 unique_id += 1
                 # 还原到未添加context前
                 cur_context_length = 0
-                all_tokens = ['[CLS]'] + query_tokens + ['[SEP]']
+                all_tokens = ['</s>'] + query_tokens + ['</s>']
                 cls_mask = [1] + [0] * (len(all_tokens) - 1)
                 cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
                 cls_weight = [1] + [0] * (len(all_tokens) - 1)
@@ -168,7 +168,7 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
                 sent_idx += 1
             pre_sent2_length = pre_sent1_length
             pre_sent1_length = len(sentence_tokens) + 1
-        all_tokens += ['[SEP]']
+        all_tokens += ['</s>']
         cls_mask += [1]
         cls_label += [0]
         cls_weight += [0]

@@ -20,6 +20,10 @@ class RobertaForParagraphClassification(RobertaModel):
             input_ids = input_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
+            if cls_label is not None:
+                cls_mask = cls_mask.unsqueeze(0)
+                cls_label = cls_label.unsqueeze(0)
+                cls_weight = cls_weight.unsqueeze(0)
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
                             position_ids=position_ids,
@@ -53,11 +57,16 @@ class RobertaForRelatedSentence(RobertaModel):
             input_ids = input_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
-        sequence_output, _ = self.robert(input_ids,
+            if cls_label is not None:
+                cls_mask = cls_mask.unsqueeze(0)
+                cls_label = cls_label.unsqueeze(0)
+                cls_weight = cls_weight.unsqueeze(0)
+        sequence_output = self.robert(input_ids,
                             attention_mask=attention_mask,
                             position_ids=position_ids,
                             head_mask=head_mask,
                             inputs_embeds=inputs_embeds)
+        sequence_output = sequence_output[0]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output).squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
@@ -157,7 +166,7 @@ class RobertaForQuestionAnsweringForwardWithEntity(RobertaModel):
         super(RobertaForQuestionAnsweringForwardWithEntity, self).__init__(config)
         self.roberta = RobertaModel(config)
         ENTITY_NUM = 20
-        ENTITY_DIM = 40
+        ENTITY_DIM = 5
         self.entity_embedder = nn.Embedding(num_embeddings=ENTITY_NUM, embedding_dim=ENTITY_DIM)
         self.start_logits = nn.Linear(config.hidden_size + ENTITY_DIM, 1)
         self.end_logits = nn.Linear(config.hidden_size + ENTITY_DIM, 1)
@@ -179,7 +188,7 @@ class RobertaForQuestionAnsweringForwardWithEntity(RobertaModel):
                 sent_mask=None,
                 sent_lbs=None,
                 sent_weight=None):
-        sequence_output = self.roberta(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0]
+        sequence_output = self.roberta(input_ids, attention_mask=attention_mask)[0]
         sequence_output = self.dropout(sequence_output)
         entity_output = self.entity_embedder(entity_ids)
         sequence_output = torch.cat([sequence_output, entity_output], dim=-1)
