@@ -18,9 +18,9 @@ def get_config():
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
                              "bert-base-multilingual-cased, bert-base-chinese.")
-    parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20211022_with_entity_wo_question_entity_dim_10_wi_context_mask', type=str,
+    parser.add_argument("--output_dir", default='../../data/checkpoints/new_test', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--model_name", type=str, default='BertForQuestionAnsweringForwardWithEntity',
+    parser.add_argument("--model_name", type=str, default='BertForQuestionAnsweringCQAttention',
                         help="must be BertForQuestionAnsweringCoAttention"
                              "\BertForQuestionAnsweringThreeCoAttention"
                              "\BertForQuestionAnsweringThreeSameCoAttention"
@@ -31,7 +31,7 @@ def get_config():
     # parser.add_argument("--overwrite_result", dest='overwrite_result', action='store_true')
     # parser.add_argument("--no-over_write_result", dest='overwrite_result', action='store_false')
     parser.add_argument("--overwrite_result", type=str2bool, default=True)
-    parser.add_argument("--log_prefix", default="qa_base_20211022_with_entity_test", type=str)
+    parser.add_argument("--log_prefix", default="new_test", type=str)
     parser.add_argument("--log_path", default="../../log", type=str)
     parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_labeled_data_v3_with_entity_label.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
@@ -50,7 +50,7 @@ def get_config():
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
     parser.add_argument("--doc_stride", default=256, type=int,
                         help="When splitting up a long document into chunks, how much stride to take between chunks.")
-    parser.add_argument("--train_batch_size", default=12, type=int, help="Total batch size for training.")
+    parser.add_argument("--train_batch_size", default=2, type=int, help="Total batch size for training.")
     parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--num_train_epochs", default=5.0, type=float,

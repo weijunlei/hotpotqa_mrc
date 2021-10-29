@@ -56,7 +56,8 @@ from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAn
     BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward, BertForQuestionAnsweringForwardBest,\
     BertSelfAttentionAndCoAttention, BertTransformer, BertSkipConnectTransformer, \
     BertForQuestionAnsweringForwardWithEntity, BertForQuestionAnsweringForwardWithEntityOneMask,\
-    BertForQuestionAnsweringForwardWithEntityTransformer
+    BertForQuestionAnsweringForwardWithEntityTransformer, BertForQuestionAnsweringCQAttention, \
+    BertForQuestionAnsweringCQAttentionWithEntity
 from optimization import BertAdam, warmup_linear
 from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
 # 自定义好的模型
@@ -71,7 +72,9 @@ model_dict = {
     'BertTransformer': BertTransformer,
     'BertForQuestionAnsweringForwardWithEntity': BertForQuestionAnsweringForwardWithEntity,
     'BertForQuestionAnsweringForwardWithEntityOneMask': BertForQuestionAnsweringForwardWithEntityOneMask,
-    'BertForQuestionAnsweringForwardWithEntityTransformer': BertForQuestionAnsweringForwardWithEntityTransformer
+    'BertForQuestionAnsweringForwardWithEntityTransformer': BertForQuestionAnsweringForwardWithEntityTransformer,
+    'BertForQuestionAnsweringCQAttention': BertForQuestionAnsweringCQAttention,
+    'BertForQuestionAnsweringCQAttentionWithEntity': BertForQuestionAnsweringCQAttentionWithEntity
 }
 
 logger = None
@@ -205,7 +208,7 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
 
     with torch.no_grad():
         for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Dev Iteration")):
-            d_example_indices = d_batch[-1].squeeze()
+            d_example_indices = d_batch[-1]
             if n_gpu == 1:
                 d_batch = tuple(
                     t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
@@ -217,27 +220,30 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                 segment_ids = segment_ids.unsqueeze(0)
                 input_mask = input_mask.unsqueeze(0)
                 entity_ids = entity_ids.unsqueeze(0)
-                if start_positions is not None and len(start_positions.shape) < 2:
-                    start_positions = start_positions.unsqueeze(0)
-                    end_positions = end_positions.unsqueeze(0)
-                    sent_mask = sent_mask.unsqueeze(0)
-                    sent_lbs = sent_lbs.unsqueeze(0)
-                    sent_weight = sent_weight.unsqueeze(0)
+                # if start_positions is not None and len(start_positions.shape) < 2:
+                #     start_positions = start_positions.unsqueeze(0)
+                #     end_positions = end_positions.unsqueeze(0)
+                #     sent_mask = sent_mask.unsqueeze(0)
+                #     sent_lbs = sent_lbs.unsqueeze(0)
+                #     sent_weight = sent_weight.unsqueeze(0)
             dev_start_logits, dev_end_logits, dev_sent_logits = model(input_ids,
                                                                       input_mask,
                                                                       segment_ids,
                                                                       # word_sim_matrix=d_word_sim_matrix,
                                                                       entity_ids=entity_ids,
                                                                       sent_mask=sent_mask)
-            for idx, example_index in enumerate(d_example_indices):
-                dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
-                dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
-                dev_sent_logit = dev_sent_logits[idx].detach().cpu().tolist()
-                dev_feature = dev_features[example_index.item()]
-                unique_id = dev_feature.unique_id
-                all_results.append(
-                    RawResult(unique_id=unique_id, start_logit=dev_start_logit, end_logit=dev_end_logit,
-                              sent_logit=dev_sent_logit))
+            try:
+                for idx, example_index in enumerate(d_example_indices):
+                    dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
+                    dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
+                    dev_sent_logit = dev_sent_logits[idx].detach().cpu().tolist()
+                    dev_feature = dev_features[example_index.item()]
+                    unique_id = dev_feature.unique_id
+                    all_results.append(
+                        RawResult(unique_id=unique_id, start_logit=dev_start_logit, end_logit=dev_end_logit,
+                                  sent_logit=dev_sent_logit))
+            except Exception as e:
+                import pdb; pdb.set_trace()
 
     _, preds, sp_pred = write_predictions(tokenizer, dev_examples, dev_features, all_results)
     ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = evaluate(dev_examples, preds, sp_pred)
