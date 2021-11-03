@@ -30,6 +30,8 @@ class LazyLoadTensorDataset(Dataset):
         if self.is_training:
             cls_label = torch.tensor(feature.cls_label, dtype=torch.long)
             tensors.append(cls_label)
+            example_index = torch.tensor(index, dtype=torch.long)
+            tensors.append(example_index)
         else:
             example_index = torch.tensor(index, dtype=torch.long)
             tensors.append(example_index)

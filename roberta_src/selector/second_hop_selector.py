@@ -9,21 +9,53 @@ import logging
 import pickle
 import collections
 from tqdm import trange, tqdm
+from torch.multiprocessing import Process
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler, TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 from transformers import RobertaTokenizer
 
+from second_train_config import get_config
 from second_hop_data_helper import read_second_hotpotqa_examples, convert_examples_to_second_features
 from second_hop_prediction_helper import write_predictions
+from lazy_dataloader import LazyLoadTensorDataset
+
 sys.path.append("../pretrain_model")
 from changed_model_roberta import RobertaForParagraphClassification, RobertaForRelatedSentence
 from optimization import BertAdam, warmup_linear
 
 # 日志设置
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = None
+os.environ['MASTER_ADDR'] = 'localhost'
+os.environ['MASTER_PORT'] = '6609'
+
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+
+def logger_config(log_path, log_prefix='lwj', write2console=False):
+    """
+    日志配置
+    :param log_path: 输出的日志路径
+    :param log_prefix: 记录中的日志前缀
+    :param write2console: 是否输出到命令行
+    :return:
+    """
+    global logger
+    logger = logging.getLogger(log_prefix)
+    logger.setLevel(level=logging.DEBUG)
+    handler = logging.FileHandler(log_path, encoding='UTF-8')
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    if write2console:
+        # console相当于控制台输出，handler文件输出。获取流句柄并设置日志级别，第二层过滤
+        console = logging.StreamHandler()
+        console.setLevel(logging.DEBUG)
+        logger.addHandler(console)
+    # 为logger对象添加句柄
+    logger.addHandler(handler)
+
+    return logger
 
 
 def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='RobertaForRelatedSentence'):
@@ -42,18 +74,17 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='RobertaForRe
             if n_gpu == 1:
                 d_batch = tuple(
                     t.squeeze(0).to(device) for t in d_batch)  # multi-gpu does scattering it-self
-            d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_label, d_all_cls_weight = d_batch[
-                                                                                                                      :-1]
-            dev_loss, dev_logits = model(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-                                         cls_mask=d_all_cls_mask, cls_label=d_all_cls_label,
-                                         cls_weight=d_all_cls_weight)
+            input_ids, input_mask, segment_ids, cls_mask, cls_weight, cls_label = d_batch[:-1]
+            dev_loss, dev_logits = model(input_ids=input_ids,
+                                         attention_mask=input_mask,
+                                         token_type_ids=segment_ids,
+                                         cls_mask=cls_mask,
+                                         cls_label=cls_label,
+                                         cls_weight=cls_weight)
             dev_loss = torch.sum(dev_loss)
             dev_logits = torch.sigmoid(dev_logits)
             total_loss += dev_loss
-            # print(dev_logits.shape)
             for i, example_index in enumerate(d_example_indices):
-                # start_position = start_positions[i].detach().cpu().tolist()
-                # end_position = end_positions[i].detach().cpu().tolist()
                 if has_sentence_result:
                     dev_logit = dev_logits[i].detach().cpu().tolist()
                     dev_logit.reverse()
@@ -90,9 +121,9 @@ def dev_feature_getter(args, tokenizer):
     if not os.path.exists(args.feature_cache_path):
         os.makedirs(args.feature_cache_path)
     dev_feature_file = '{}/selector_2_dev_{}_{}_{}'.format(args.feature_cache_path,
-                                                              list(filter(None, args.bert_model.split('/'))).pop(),
-                                                              str(args.max_seq_length),
-                                                              str(args.sent_overlap))
+                                                           list(filter(None, args.bert_model.split('/'))).pop(),
+                                                           str(args.max_seq_length),
+                                                           str(args.sent_overlap))
     if os.path.exists(dev_feature_file) and args.use_file_cache:
         with open(dev_feature_file, "rb") as dev_f:
             dev_features = pickle.load(dev_f)
@@ -107,16 +138,8 @@ def dev_feature_getter(args, tokenizer):
             logger.info("  Saving dev features into cached file %s", dev_feature_file)
             with open(dev_feature_file, "wb") as writer:
                 pickle.dump(dev_features, writer)
-    print("dev feature num: {}".format(len(dev_features)))
-    d_all_input_ids = torch.tensor([f.input_ids for f in dev_features], dtype=torch.long)
-    d_all_input_mask = torch.tensor([f.input_mask for f in dev_features], dtype=torch.long)
-    d_all_segment_ids = torch.tensor([f.segment_ids for f in dev_features], dtype=torch.long)
-    d_all_cls_mask = torch.tensor([f.cls_mask for f in dev_features], dtype=torch.long)
-    d_all_cls_label = torch.tensor([f.cls_label for f in dev_features], dtype=torch.long)
-    d_all_cls_weight = torch.tensor([f.cls_weight for f in dev_features], dtype=torch.float)
-    d_all_example_index = torch.arange(d_all_input_ids.size(0), dtype=torch.long)
-    dev_data = TensorDataset(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-                             d_all_cls_mask, d_all_cls_label, d_all_cls_weight, d_all_example_index)
+    logger.info("dev feature num: {}".format(len(dev_features)))
+    dev_data = LazyLoadTensorDataset(features=dev_features, is_training=True)
     if args.local_rank == -1:
         dev_sampler = RandomSampler(dev_data)
     else:
@@ -159,6 +182,7 @@ def convert_example2file(examples,
 
 
 def train_iterator(args,
+                   rank,
                    start_idxs,
                    cached_train_features_file,
                    tokenizer,
@@ -176,15 +200,7 @@ def train_iterator(args,
         for start_idx in trange(len(start_idxs), desc='Data'):
             with open(cached_train_features_file + '_' + str(start_idx), "rb") as reader:
                 train_features = pickle.load(reader)
-            # 展开数据
-            all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-            all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-            all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
-            all_cls_mask = torch.tensor([f.cls_mask for f in train_features], dtype=torch.long)
-            all_cls_label = torch.tensor([f.cls_label for f in train_features], dtype=torch.long)
-            all_cls_weight = torch.tensor([f.cls_weight for f in train_features], dtype=torch.float)
-            train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
-                                       all_cls_mask, all_cls_label, all_cls_weight)
+            train_data = LazyLoadTensorDataset(train_features, is_training=True)
             if args.local_rank == -1:
                 train_sampler = RandomSampler(train_data)
             else:
@@ -193,9 +209,13 @@ def train_iterator(args,
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
-                input_ids, input_mask, segment_ids, cls_mask, cls_label, cls_weight = batch
+                input_ids, input_mask, segment_ids, cls_mask, cls_weight, cls_label = batch[:-1]
 
-                loss, _ = model(input_ids, input_mask, segment_ids, cls_mask=cls_mask, cls_label=cls_label,
+                loss, _ = model(input_ids=input_ids,
+                                attention_mask=input_mask,
+                                token_type_ids=segment_ids,
+                                cls_mask=cls_mask,
+                                cls_label=cls_label,
                                 cls_weight=cls_weight)
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
@@ -206,9 +226,26 @@ def train_iterator(args,
 
                 if (global_steps + 1) % 100 == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
                     logger.info(
-                        "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, start_idx, global_steps, train_loss))
+                        "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, start_idx,
+                                                                                       global_steps, train_loss))
                     train_loss = 0
-                if (global_steps + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
+                if args.fp16:
+                    optimizer.backward(loss)
+                else:
+                    loss.backward()
+                if (step + 1) % args.gradient_accumulation_steps == 0:
+                    if args.fp16:
+                        # modify learning rate with special warm up BERT uses
+                        # if args.fp16 is False, BertAdam is used and handles this automatically
+                        lr_this_step = args.learning_rate * warmup_linear(global_steps / num_train_optimization_steps,
+                                                                          args.warmup_proportion)
+                        for param_group in optimizer.param_groups:
+                            param_group['lr'] = lr_this_step
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    global_steps += 1
+                if rank == 0 and (global_steps + 1) % args.save_model_step == 0 and (
+                        step + 1) % args.gradient_accumulation_steps == 0:
                     acc, prec, em, rec, total_loss = dev_evaluate(args=args,
                                                                   model=model,
                                                                   tokenizer=tokenizer,
@@ -229,55 +266,60 @@ def train_iterator(args,
                         with open(output_config_file, 'w') as f:
                             f.write(model_to_save.config.to_json_string())
                         logger.info('saving model')
-                if args.fp16:
-                    optimizer.backward(loss)
-                else:
-                    loss.backward()
-                if (step + 1) % args.gradient_accumulation_steps == 0:
-                    if args.fp16:
-                        # modify learning rate with special warm up BERT uses
-                        # if args.fp16 is False, BertAdam is used and handles this automatically
-                        lr_this_step = args.learning_rate * warmup_linear(global_steps / num_train_optimization_steps,
-                                                                          args.warmup_proportion)
-                        for param_group in optimizer.param_groups:
-                            param_group['lr'] = lr_this_step
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    global_steps += 1
+
             del train_features, all_input_ids, all_input_mask, all_segment_ids, all_cls_label, all_cls_mask, all_cls_weight, train_data, train_dataloader
             gc.collect()
-    acc, prec, em, rec, total_loss = dev_evaluate(args=args,
-                                                  model=model,
-                                                  tokenizer=tokenizer,
-                                                  n_gpu=n_gpu,
-                                                  device=device,
-                                                  model_name=args.model_name)
-    logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
-    logger.info("acc: {} precision: {} em: {} recall: {} total loss: {}".format(acc, prec, em, rec, total_loss))
+    if rank == 0:
+        acc, prec, em, rec, total_loss = dev_evaluate(args=args,
+                                                      model=model,
+                                                      tokenizer=tokenizer,
+                                                      n_gpu=n_gpu,
+                                                      device=device,
+                                                      model_name=args.model_name)
+        logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
+        logger.info("acc: {} precision: {} em: {} recall: {} total loss: {}".format(acc, prec, em, rec, total_loss))
 
-    if acc > best_predict_acc:
-        best_predict_acc = acc
-        model_to_save = model.module if hasattr(model,
-                                                'module') else model  # Only save the model it-self
-        output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
-        torch.save(model_to_save.state_dict(), output_model_file)
-        output_config_file = os.path.join(args.output_dir, 'config.json')
-        with open(output_config_file, 'w') as f:
-            f.write(model_to_save.config.to_json_string())
-        logger.info('saving model')
+        if acc > best_predict_acc:
+            best_predict_acc = acc
+            model_to_save = model.module if hasattr(model,
+                                                    'module') else model  # Only save the model it-self
+            output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
+            torch.save(model_to_save.state_dict(), output_model_file)
+            output_config_file = os.path.join(args.output_dir, 'config.json')
+            with open(output_config_file, 'w') as f:
+                f.write(model_to_save.config.to_json_string())
+            logger.info('saving model')
 
 
-def run_train(args):
+def run_train(args, rank=0, world_size=2):
     """ train second selector """
+    # 配置日志文件
+    global logger
+    if rank == 0 and not os.path.exists(args.log_path):
+        os.makedirs(args.log_path)
+    log_path = os.path.join(args.log_path, 'log_second_selector_{}_{}_{}_{}_{}.log'.format(args.log_prefix,
+                                                                                           args.bert_model.split('/')[
+                                                                                               -1],
+                                                                                           args.output_dir.split('/')[
+                                                                                               -1],
+                                                                                           args.train_batch_size,
+                                                                                           args.max_seq_length,
+                                                                                           ))
+    logger = logger_config(log_path=log_path, log_prefix='')
+    logger.info('-' * 13 + '所有配置' + '-' * 13)
+    logger.info("所有参数配置如下：")
+    for arg in vars(args):
+        logger.info('{}: {}'.format(arg, getattr(args, arg)))
+    logger.info('-' * 30)
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
     else:
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
+        torch.cuda.set_device(rank)
+        device = torch.device("cuda", rank)
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.distributed.init_process_group(backend='nccl')
+        torch.distributed.init_process_group(backend='nccl', rank=rank, world_size=world_size)
     logger.info("device: {} n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
         device, n_gpu, bool(args.local_rank != -1), args.fp16))
     # 梯度积累不小于1
@@ -298,7 +340,7 @@ def run_train(args):
                 "If `do_train` is True, then `train_file` must be specified.")
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and not args.over_write_result:
         raise ValueError("Output directory {} already exists and is not empty." + args.output_dir)
-    if not os.path.exists(args.output_dir):
+    if rank == 0 and not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
     tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
@@ -310,13 +352,9 @@ def run_train(args):
         model.half()
     model.to(device)
     if args.local_rank != -1:
-        try:
-            from apex.parallel import DistributedDataParallel as DDP
-        except ImportError:
-            raise ImportError(
-                "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training."
-            )
-        model == DDP(model)
+        logger.info("setting model {}..".format(rank))
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank], find_unused_parameters=True)
+        logger.info("setting model {} done!".format(rank))
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
     param_optimizer = list(model.named_parameters())
@@ -331,23 +369,23 @@ def run_train(args):
     if not os.path.exists(args.feature_cache_path):
         os.makedirs(args.feature_cache_path)
     cached_train_features_file = "{}/selector_second_train_{}_{}_{}".format(args.feature_cache_path,
-                                                                 list(filter(None, args.bert_model.split('/'))).pop(),
-                                                                 str(args.max_seq_length),
-                                                                 str(args.sent_overlap))
+                                                                            args.bert_model.split('/')[-1],
+                                                                            str(args.max_seq_length),
+                                                                            str(args.sent_overlap))
     train_features = None
     model.train()
     if not os.path.exists(args.first_predict_result_path):
         raise ValueError("first hop result not be predicted! " + args.first_predict_result_path)
 
     train_examples = read_second_hotpotqa_examples(
-                                        input_file=args.train_file,
-                                        best_paragraph_file="{}/{}".format(args.first_predict_result_path,
-                                                                             args.best_paragraph_file),
-                                        related_paragraph_file="{}/{}".format(args.first_predict_result_path,
-                                                                             args.related_paragraph_file),
-                                        new_context_file="{}/{}".format(args.first_predict_result_path,
-                                                                        args.new_context_file),
-                                        is_training='train')
+        input_file=args.train_file,
+        best_paragraph_file="{}/{}".format(args.first_predict_result_path,
+                                           args.best_paragraph_file),
+        related_paragraph_file="{}/{}".format(args.first_predict_result_path,
+                                              args.related_paragraph_file),
+        new_context_file="{}/{}".format(args.first_predict_result_path,
+                                        args.new_context_file),
+        is_training='train')
 
     example_num = len(train_examples)
     max_train_data_size = 100000
@@ -388,6 +426,7 @@ def run_train(args):
                              warmup=args.warmup_proportion,
                              t_total=num_train_optimization_steps)
     train_iterator(args=args,
+                   rank=rank,
                    start_idxs=start_idxs,
                    cached_train_features_file=cached_train_features_file,
                    tokenizer=tokenizer,
@@ -399,89 +438,16 @@ def run_train(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    # 必须参数
-    # 模型参数
-    parser.add_argument("--bert_model", default="bert-base-uncased", type=str,
-                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                             "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
-                             "bert-base-multilingual-cased, bert-base-chinese."
-                        )
-    parser.add_argument("--over_write_result", default=True, type=bool,
-                        help="over write the result")
-    parser.add_argument("--output_dir", default='../checkpoints/selector/second_hop_selector', type=str,
-                        help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--feature_cache_path", default="../data/cache/selector/second_hop_selector")
-    parser.add_argument("--model_name", type=str, default='BertForRelated',
-                        help="The output directory where the model checkpoints and predictions will be written.")
-    # 数据输入
-    parser.add_argument("--train_file", default='../data/hotpot_data/hotpot_train_labeled_data.json', type=str,
-                        help="train_file")
-    parser.add_argument("--first_predict_result_path", default="../data/selector/first_hop_result/", type=str,
-                        help="The output directory of all result")
-    parser.add_argument("--best_paragraph_file", default='train_best_paragraph.json', type=str,
-                        help="best_paragraph_file")
-    parser.add_argument("--related_paragraph_file", default='train_related_paragraph.json', type=str,
-                        help="related_paragraph_file")
-    parser.add_argument("--new_context_file", default='train_new_context.json', type=str,
-                        help="new_context_file")
-    parser.add_argument("--dev_best_paragraph_file", default='dev_best_paragraph.json', type=str,
-                        help="best_paragraph_file")
-    parser.add_argument("--dev_related_paragraph_file", default='dev_related_paragraph.json', type=str,
-                        help="related_paragraph_file")
-    parser.add_argument("--dev_new_context_file", default='dev_new_context.json', type=str,
-                        help="new_context_file")
-    parser.add_argument("--dev_file", default='../data/hotpot_data/hotpot_dev_labeled_data.json', type=str,
-                        help="SQuAD json for evaluation. ")
-    # 其他参数
-    parser.add_argument("--max_seq_length", default=512, type=int,
-                        help="The maximum total input sequence length after WordPiece tokenization. Sequences "
-                             "longer than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--use_file_cache", default=True, type=bool,
-                        help="use the feature cache or not")
-    parser.add_argument("--sent_overlap", default=2, type=int,
-                        help="When splitting up a long document into chunks, "
-                             "how much sentences is overlapped between chunks.")
-    parser.add_argument("--train_batch_size", default=24, type=int, help="Total batch size for training.")
-    parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
-    parser.add_argument("--learning_rate", default=2e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--num_train_epochs", default=1.0, type=float,
-                        help="Total number of training epochs to perform.")
-    parser.add_argument("--warmup_proportion", default=0.1, type=float,
-                        help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10%% "
-                             "of training.")
-    parser.add_argument("--verbose_logging", action='store_true',
-                        help="If true, all of the warnings related to data processing will be printed. "
-                             "A number of warnings are expected for a normal SQuAD evaluation.")
-    parser.add_argument("--output_log", type=str, default='../log/selector_2_base_2e-5.txt', )
-    parser.add_argument("--no_cuda",
-                        action='store_true',
-                        help="Whether not to use CUDA when available")
-    parser.add_argument('--seed',
-                        type=int,
-                        default=42,
-                        help="random seed for initialization")
-    parser.add_argument('--gradient_accumulation_steps',
-                        type=int,
-                        default=1,
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")
-    parser.add_argument("--do_lower_case",
-                        action='store_true', default=True,
-                        help="Whether to lower case the input text. True for uncased models, False for cased models.")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
-    parser.add_argument('--fp16',
-                        action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--loss_scale',
-                        type=float, default=0,
-                        help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
-                             "0 (default value): dynamic loss scaling.\n"
-                             "Positive power of 2: static loss scaling value.\n")
-    parser.add_argument('--save_model_step',
-                        type=int, default=5000,
-                        help="The proportion of the validation set")
+    parser = get_config()
     args = parser.parse_args()
-    run_train(args)
+    if not args.use_ddp:
+        run_train(args)
+    else:
+        world_size = args.world_size
+        processes = []
+        for rank in range(world_size):
+            p = Process(target=run_train, args=(args, rank, world_size))
+            p.start()
+            processes.append(p)
+        for p in processes:
+            p.join()

@@ -22,12 +22,11 @@ class BertForParagraphClassification(BertPreTrainedModel):
             input_ids = input_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
-        outputs = self.bert(input_ids,
+        outputs = self.bert(input_ids=input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
                             position_ids=position_ids,
-                            head_mask=head_mask,
-                            inputs_embeds=inputs_embeds)
+                            head_mask=head_mask)
 
         cls_output = outputs[1]
         cls_output = self.dropout(cls_output)
@@ -58,12 +57,11 @@ class BertForRelatedSentence(BertPreTrainedModel):
             input_ids = input_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
-        sequence_output, _ = self.bert(input_ids,
+        sequence_output, _ = self.bert(input_ids=input_ids,
                                        attention_mask=attention_mask,
                                        token_type_ids=token_type_ids,
                                        position_ids=position_ids,
-                                       head_mask=head_mask,
-                                       inputs_embeds=inputs_embeds)
+                                       head_mask=head_mask)
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output).squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)

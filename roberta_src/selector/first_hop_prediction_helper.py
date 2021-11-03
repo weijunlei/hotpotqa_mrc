@@ -88,7 +88,7 @@ def write_predictions(all_examples, all_features, all_results, is_training='trai
             # 对max_seq预测的结果
             raw_result = unique_id2result[get_feature_id].logit
             # 第一个'[CLS]'为paragraph为支撑句标识
-            paragraph_results[id] = raw_result[0]
+            paragraph_results[q_id] = raw_result[0]
             labels_result = raw_result
             cls_masks = get_feature.cls_mask
             cls_labels = get_feature.cls_label

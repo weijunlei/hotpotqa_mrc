@@ -69,7 +69,7 @@ def read_hotpotqa_examples(input_file,
     related_num = 0
     not_related_num = 0
 
-    for info in data:
+    for info in tqdm(data, desc="read example..."):
         context = info['context']
         question = info['question']
         if is_training == 'test':
@@ -117,7 +117,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, is_trainin
     features = []
     related_sent_num = 0
     not_related_sent_num = 0
-    for example_index, example in tqdm(enumerate(examples)):
+    for example_index, example in enumerate(tqdm(examples, desc="Convert example to feature...")):
         query_tokens = tokenizer.tokenize(example.question_tokens)
         # special tokens ['CLS'] ['SEP'] ['SEP']
         max_context_length = max_seq_length - len(query_tokens) - 3

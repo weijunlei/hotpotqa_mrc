@@ -26,9 +26,7 @@ class RobertaForParagraphClassification(RobertaModel):
                 cls_weight = cls_weight.unsqueeze(0)
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
-                            position_ids=position_ids,
-                            head_mask=head_mask,
-                            inputs_embeds=inputs_embeds)
+                            position_ids=position_ids)
 
         cls_output = outputs[1]
         cls_output = self.dropout(cls_output)
@@ -63,9 +61,7 @@ class RobertaForRelatedSentence(RobertaModel):
                 cls_weight = cls_weight.unsqueeze(0)
         sequence_output = self.robert(input_ids,
                             attention_mask=attention_mask,
-                            position_ids=position_ids,
-                            head_mask=head_mask,
-                            inputs_embeds=inputs_embeds)
+                            position_ids=position_ids)
         sequence_output = sequence_output[0]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output).squeeze(-1)

@@ -7,9 +7,9 @@ python -u first_hop_selector.py \
     --over_write_result True \
     --use_ddp True \
     --world_size 2 \
-    --log_prefix 20211102_first_selector_roberta_large \
+    --log_prefix 20211103_first_selector_roberta_large_test \
     --log_path ../../log \
-    --output_dir ../../data/checkpoints/selector/20211102_first_selector_roberta_large \
+    --output_dir ../../data/checkpoints/selector/20211103_first_selector_roberta_large_test \
     --feature_cache_path ../../data/cache/selector/roberta_first_hop_selector \
     --model_name RobertaForRelatedSentence \
     --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
@@ -18,9 +18,9 @@ python -u first_hop_selector.py \
     --use_file_cache True \
     --max_seq_length 512 \
     --train_batch_size 12 \
-    --val_batch_size 128 \
+    --val_batch_size 12 \
     --local_rank 0 \
     --save_model_step 10000 \
-    --num_train_epochs 3.0
+    --num_train_epochs 1.0
 echo "train first hop selector done!"
 echo "----------------------------------------------------"

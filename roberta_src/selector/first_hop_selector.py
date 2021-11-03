@@ -26,7 +26,10 @@ from optimization import BertAdam, warmup_linear
 # 日志设置
 logger = None
 os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = '5679'
+os.environ['MASTER_PORT'] = '5609'
+
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def logger_config(log_path, log_prefix='lwj', write2console=False):
@@ -97,6 +100,7 @@ def convert_examples2file(examples,
         truly_train_examples = examples[start_idxs[idx]: end_idxs[idx]]
         new_train_cache_file = cached_train_features_file + '_' + str(idx)
         if os.path.exists(new_train_cache_file) and args.use_file_cache:
+            logger.info("read feature from cache file: {}...".format(new_train_cache_file))
             with open(new_train_cache_file, "rb") as f:
                 train_features = pickle.load(f)
         else:
@@ -131,16 +135,20 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='RobertaForRe
 
     with torch.no_grad():
         for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Iteration")):
-            d_example_indices = d_batch[-1]
             if n_gpu == 1:
                 d_batch = tuple(
                     t.squeeze(0).to(device) for t in d_batch)
-            input_ids, input_mask, segment_ids, cls_mask, cls_weight, cls_label = d_batch
-            dev_loss, dev_logits = model(input_ids, input_mask, segment_ids, cls_mask, cls_label, cls_weight)
+            input_ids, input_mask, segment_ids, cls_mask, cls_weight, cls_label, example_indices = d_batch
+            dev_loss, dev_logits = model(input_ids=input_ids,
+                                         attention_mask=input_mask,
+                                         token_type_ids=segment_ids,
+                                         cls_mask=cls_mask,
+                                         cls_label=cls_label,
+                                         cls_weight=cls_weight)
             dev_loss = torch.sum(dev_loss)
             dev_logits = torch.sigmoid(dev_logits)
             total_loss += dev_loss
-            for i, example_index in enumerate(d_example_indices):
+            for i, example_index in enumerate(example_indices):
                 # 0/1二分类，1为后序
                 if model_name == 'RobertaForParagraphClassification':
                     dev_logit = dev_logits[i].detach().cpu().tolist()
@@ -204,9 +212,13 @@ def train_iterator(args,
                                               ))):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
-                input_ids, input_mask, segment_ids, cls_mask, cls_label, cls_weight = batch
+                input_ids, input_mask, segment_ids, cls_mask, cls_weight, cls_label, example_indices = batch
 
-                loss, _ = model(input_ids, input_mask, segment_ids, cls_mask=cls_mask, cls_label=cls_label,
+                loss, _ = model(input_ids=input_ids,
+                                attention_mask=input_mask,
+                                token_type_ids=segment_ids,
+                                cls_mask=cls_mask,
+                                cls_label=cls_label,
                                 cls_weight=cls_weight)
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
@@ -220,6 +232,22 @@ def train_iterator(args,
                         "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, start_idx,
                                                                                        global_steps, train_loss))
                     train_loss = 0
+                if args.fp16:
+                    optimizer.backward(loss)
+                else:
+                    loss.backward()
+                if (step + 1) % args.gradient_accumulation_steps == 0:
+                    if args.fp16:
+                        # modify learning rate with special warm up BERT uses
+                        # if args.fp16 is False, BertAdam is used and handles this automatically
+                        lr_this_step = args.learning_rate * warmup_linear(
+                            global_steps / num_train_optimization_steps,
+                            args.warmup_proportion)
+                        for param_group in optimizer.param_groups:
+                            param_group['lr'] = lr_this_step
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    global_steps += 1
                 # 固定步长验证结果并保存最佳结果
                 if rank == 0 and (global_steps + 1) % args.save_model_step == 0 and (
                         step + 1) % args.gradient_accumulation_steps == 0:
@@ -243,23 +271,6 @@ def train_iterator(args,
                         with open(output_config_file, 'w') as f:
                             f.write(model_to_save.config.to_json_string())
                         logger.info('saving model')
-
-                if args.fp16:
-                    optimizer.backward(loss)
-                else:
-                    loss.backward()
-                if (step + 1) % args.gradient_accumulation_steps == 0:
-                    if args.fp16:
-                        # modify learning rate with special warm up BERT uses
-                        # if args.fp16 is False, BertAdam is used and handles this automatically
-                        lr_this_step = args.learning_rate * warmup_linear(
-                            global_steps / num_train_optimization_steps,
-                            args.warmup_proportion)
-                        for param_group in optimizer.param_groups:
-                            param_group['lr'] = lr_this_step
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    global_steps += 1
             del train_features, train_data, train_dataloader
             gc.collect()
         # 保存最后训练的结果
@@ -291,14 +302,14 @@ def run_train(args, rank=0, world_size=2):
     global logger
     if rank == 0 and not os.path.exists(args.log_path):
         os.makedirs(args.log_path)
-    log_path = os.path.join(args.log_path, 'log_first_selector_{}_{}_{}.log'.format(args.log_prefix,
-                                                                                             args.bert_model.split('/')[
-                                                                                                 -1],
-                                                                                             args.output_dir.split('/')[
-                                                                                                 -1],
-                                                                                             args.train_batch_size,
-                                                                                             args.max_seq_length,
-                                                                                             ))
+    log_path = os.path.join(args.log_path, 'log_first_selector_{}_{}_{}_{}_{}.log'.format(args.log_prefix,
+                                                                                          args.bert_model.split('/')[
+                                                                                              -1],
+                                                                                          args.output_dir.split('/')[
+                                                                                              -1],
+                                                                                          args.train_batch_size,
+                                                                                          args.max_seq_length,
+                                                                                          ))
     logger = logger_config(log_path=log_path, log_prefix='')
     logger.info('-' * 13 + '所有配置' + '-' * 13)
     logger.info("所有参数配置如下：")
@@ -432,7 +443,6 @@ def run_train(args, rank=0, world_size=2):
 
 
 if __name__ == '__main__':
-    use_ddp = False
     parser = get_config()
     args = parser.parse_args()
     if not args.use_ddp:
