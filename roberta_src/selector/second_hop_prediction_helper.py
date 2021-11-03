@@ -162,7 +162,6 @@ def write_predictions(args, all_examples, all_features, all_results, is_training
             if has_sentence_result:
                 assert len(sentence_result) + overlap == mask1
                 assert len(sentence_all_labels) + overlap == mask1 + 1
-    # return paragraph_results, sentence_results, labels
     if is_training == 'test':
         return 0, 0, 0, 0
     else:

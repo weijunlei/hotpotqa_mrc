@@ -1,9 +1,11 @@
 echo "----------------------------------------------------"
 echo "start predict second hop result..."
-export CUDA_VISIBLE_DEVICES="2,3"
-cd ../../src/selector
+export CUDA_VISIBLE_DEVICES="2"
+cd ../../roberta_src/selector
 python -u second_hop_selector_predictor.py \
-    --bert_model bert-base-uncased \
+    --bert_model roberta_large \
+     --log_prefix 20211103_roberta_second_hop_selector \
+     --log_path ../../log \
     --checkpoint_path ../../data/checkpoints/selector/roberta_second_paragraph_hop_selector \
     --model_name RobertaForRelatedSentence \
     --dev_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
@@ -18,7 +20,9 @@ python -u second_hop_selector_predictor.py \
 echo "predict train second hop result done!"
 echo "start predict dev second hop result !"
 python -u second_hop_selector_predictor.py \
-    --bert_model bert-base-uncased \
+    --bert_model roberta-large \
+    --log_prefix 20211103_roberta_second_hop_selector \
+    --log_path ../../log \
     --checkpoint_path ../../data/checkpoints/selector/roberta_second_paragraph_hop_selector \
     --model_name RobertaForRelatedSentence \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \

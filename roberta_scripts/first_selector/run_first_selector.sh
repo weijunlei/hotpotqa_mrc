@@ -21,6 +21,6 @@ python -u first_hop_selector.py \
     --val_batch_size 12 \
     --local_rank 0 \
     --save_model_step 10000 \
-    --num_train_epochs 1.0
+    --num_train_epochs 3.0
 echo "train first hop selector done!"
 echo "----------------------------------------------------"

@@ -32,20 +32,39 @@ from second_hop_data_helper import (HotpotQAExample,
                                        HotpotInputFeatures,
                                        read_second_hotpotqa_examples,
                                        convert_examples_to_second_features)
+from second_predict_config import get_config
 sys.path.append("../pretrain_model")
 from changed_model_roberta import RobertaForRelatedSentence, RobertaForParagraphClassification
 from optimization import BertAdam, warmup_linear
 
 # 日志设置
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = None
 
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+def logger_config(log_path, log_prefix='lwj', write2console=False):
+    """
+    日志配置
+    :param log_path: 输出的日志路径
+    :param log_prefix: 记录中的日志前缀
+    :param write2console: 是否输出到命令行
+    :return:
+    """
+    global logger
+    logger = logging.getLogger(log_prefix)
+    logger.setLevel(level=logging.DEBUG)
+    handler = logging.FileHandler(log_path, encoding='UTF-8')
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    if write2console:
+        # console相当于控制台输出，handler文件输出。获取流句柄并设置日志级别，第二层过滤
+        console = logging.StreamHandler()
+        console.setLevel(logging.DEBUG)
+        logger.addHandler(console)
+    # 为logger对象添加句柄
+    logger.addHandler(handler)
+
+    return logger
 
 
 def write_second_predict_result(examples, features, results, has_sentence_result=True):
@@ -168,23 +187,37 @@ def write_second_predict_result(examples, features, results, has_sentence_result
     return tmp_best_paragraph, tmp_related_sentence, tmp_related_paragraph
 
 
-def run_predict(args):
+def run_predict(args, rank=0, world_size=2):
     """ 预测结果 """
+    global logger
+    if rank == 0 and not os.path.exists(args.log_path):
+        os.mamedirs(args.log_path)
+    log_path = os.path.join(args.log_path, 'log_second_predictor_{}_{}_{}_{}'.format(
+        args.log_prefix,
+        args.bert_model.split('/')[-1],
+        args.second_predict_result_path.split('/')[-1],
+        args.max_seq_length,
+    ))
+    logger = logger_config(log_path=log_path, log_prefix='')
+    logger.info('-' * 13 + '所有配置' + '-' * 13)
+    logger.info("所有参数配置如下：")
+    for arg in vars(args):
+        logger.info('{}: {}'.format(arg, getattr(args, arg)))
+    logger.info('-' * 30)
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
     else:
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
+        torch.cuda.set_device(rank)
+        device = torch.device("cuda", rank)
         n_gpu = 1
-        # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.distributed.init_process_group(backend='nccl')
+        torch.distributed.init_process_group(backend='nccl', rank=rank, world_size=world_size)
     logger.info("device: {} n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
         device, n_gpu, bool(args.local_rank != -1), args.fp16))
 
     # preprocess_data
 
-    tokenizer = RobertaTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
+    tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
     # Prepare model
     models_dict = {"RobertaForRelatedSentence": RobertaForRelatedSentence,
@@ -195,14 +228,20 @@ def run_predict(args):
     if args.fp16:
         model.half()
     model.to(device)
+    # if args.local_rank != -1:
+    #     try:
+    #         from apex.parallel import DistributedDataParallel as DDP
+    #     except ImportError:
+    #         raise ImportError(
+    #             "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+    #
+    #     model = DDP(model)
+    # elif n_gpu > 1:
+    #     model = torch.nn.DataParallel(model)
     if args.local_rank != -1:
-        try:
-            from apex.parallel import DistributedDataParallel as DDP
-        except ImportError:
-            raise ImportError(
-                "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
-
-        model = DDP(model)
+        logger.info("setting model {}..".format(rank))
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank], find_unused_parameters=True)
+        logger.info("setting model {} done!".format(rank))
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
     dev_examples = read_second_hotpotqa_examples(input_file=args.dev_file,
@@ -285,8 +324,6 @@ def run_predict(args):
                 dev_logits = model(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
                                    cls_mask=d_all_cls_mask, cls_weight=d_all_cls_weight)
                 for i, example_index in enumerate(d_example_indices):
-                    # start_position = start_positions[i].detach().cpu().tolist()
-                    # end_position = end_positions[i].detach().cpu().tolist()
                     if args.model_name == 'RobertaForParagraphClassification':
                         dev_logit = dev_logits[i].detach().cpu().tolist()
                         dev_logit.reverse()
@@ -380,62 +417,6 @@ def run_predict(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-
-    ## Required parameters
-    parser.add_argument("--bert_model", default='bert-base-uncased', type=str,
-                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                             "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
-                             "bert-base-multilingual-cased, bert-base-chinese.")
-    parser.add_argument("--checkpoint_path", default='../checkpoints/selector/second_hop_selector', type=str,
-                        help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--model_name", type=str, default='BertForRelated',
-                        help="The output directory where the model checkpoints and predictions will be written.")
-
-    ## Other parameters
-    parser.add_argument("--dev_file", default='../data/hotpot_data/hotpot_train_labeled_data_v2.json', type=str,
-                        help="dev file")
-    # parser.add_argument("--pred_output", type=str, default='round1_base/train_preds.json',
-    #                     help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--first_predict_result_path", default="../data/selector/first_hop_result/", type=str,
-                        help="The output directory of all result")
-    parser.add_argument("--second_predict_result_path", default="../data/selector/second_hop_result/", type=str,
-                        help="The output directory of all result")
-    parser.add_argument("--final_related_result", default="train_related.json", type=str,
-                        help="The output directory of all result")
-    parser.add_argument("--best_paragraph_file", default='train_best_paragraph.json', type=str,
-                        help="best_paragraph_file")
-    parser.add_argument("--related_paragraph_file", default='train_related_paragraph.json', type=str,
-                        help="related_paragraph_file")
-    parser.add_argument("--new_context_file", default='train_new_context.json', type=str,
-                        help="new_context_file")
-    parser.add_argument("--max_seq_length", default=512, type=int,
-                        help="The maximum total input sequence length after WordPiece tokenization. Sequences "
-                             "longer than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--sent_overlap", default=2, type=int,
-                        help="When splitting up a long document into chunks, how much stride to take between chunks.")
-    parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
-    parser.add_argument("--verbose_logging", action='store_true',
-                        help="If true, all of the warnings related to data processing will be printed. "
-                             "A number of warnings are expected for a normal SQuAD evaluation.")
-    parser.add_argument("--output_log", type=str, default='military_output_log.txt', )
-    parser.add_argument("--no_cuda",
-                        action='store_true',
-                        help="Whether not to use CUDA when available")
-    parser.add_argument("--do_lower_case",
-                        action='store_true', default=True,
-                        help="Whether to lower case the input text. True for uncased models, False for cased models.")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
-    parser.add_argument('--fp16',
-                        action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--loss_scale',
-                        type=float, default=0,
-                        help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
-                             "0 (default value): dynamic loss scaling.\n"
-                             "Positive power of 2: static loss scaling value.\n")
+    parser = get_config()
     args = parser.parse_args()
     run_predict(args=args)
