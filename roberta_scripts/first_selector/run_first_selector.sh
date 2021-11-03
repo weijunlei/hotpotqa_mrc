@@ -1,11 +1,15 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="1"
+export CUDA_VISIBLE_DEVICES="0,1"
 echo "start train first hop selector..."
 cd ../../roberta_src/selector
 python -u first_hop_selector.py \
     --bert_model roberta-large \
     --over_write_result True \
-    --output_dir ../../data/checkpoints/selector/roberta_first_hop_selector \
+    --use_ddp True \
+    --world_size 2 \
+    --log_prefix 20211102_first_selector_roberta_large \
+    --log_path ../../log \
+    --output_dir ../../data/checkpoints/selector/20211102_first_selector_roberta_large \
     --feature_cache_path ../../data/cache/selector/roberta_first_hop_selector \
     --model_name RobertaForRelatedSentence \
     --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
@@ -15,6 +19,7 @@ python -u first_hop_selector.py \
     --max_seq_length 512 \
     --train_batch_size 12 \
     --val_batch_size 128 \
+    --local_rank 0 \
     --save_model_step 10000 \
     --num_train_epochs 3.0
 echo "train first hop selector done!"

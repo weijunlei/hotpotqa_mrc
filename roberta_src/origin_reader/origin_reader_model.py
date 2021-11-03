@@ -62,8 +62,6 @@ model_dict = {
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
-
-
 logger = None
 
 
@@ -75,6 +73,7 @@ def logger_config(log_path, log_prefix='lwj', write2console=True):
     :param write2console: 是否输出到命令行
     :return:
     """
+    global logger
     logger = logging.getLogger(log_prefix)
     logger.setLevel(level=logging.DEBUG)
     handler = logging.FileHandler(log_path, encoding='UTF-8')
@@ -121,10 +120,7 @@ def get_dev_data(args, tokenizer, logger=None):
                 pickle.dump(dev_features, writer)
     logger.info('dev feature_num: {}'.format(len(dev_features)))
     dev_data = LazyLoadTensorDataset(dev_features, is_training=False)
-    # if args.local_rank == -1:
     dev_sampler = RandomSampler(dev_data)
-    # else:
-    #     dev_sampler = DistributedSampler(dev_data)
     dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.val_batch_size)
     return dev_examples, dev_dataloader, dev_features
 
@@ -242,7 +238,7 @@ def run_train(rank=0, world_size=1):
     if os.path.exists(new_model_path):
         args.bert_model = new_model_path
     # 配置日志文件
-    if not os.path.exists(args.log_path):
+    if rank == 0 and not os.path.exists(args.log_path):
         os.makedirs(args.log_path)
     log_path = os.path.join(args.log_path, 'log_{}_{}_{}_{}_{}_{}.log'.format(args.log_prefix,
                                                                               args.bert_model.split('/')[-1],

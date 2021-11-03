@@ -15,9 +15,9 @@ export CUDA_VISIBLE_DEVICES="1"
 cd ../../entity_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model bert-base-uncased \
-  --output_dir ../../data/checkpoints/20211028_naive_bert_best_with_cq_attention_with_entity_embedding_dim_20 \
-  --model_name BertForQuestionAnsweringCQAttentionWithEntity \
-  --log_prefix 20211028_naive_bert_best_with_cq_attention_with_entity_embedding_dim_20 \
+  --output_dir ../../data/checkpoints/20211029_naive_bert_best_with_cq_attention_with_dropout_02_02 \
+  --model_name BertForQuestionAnsweringCQAttention \
+  --log_prefix 20211029_naive_bert_best_with_cq_attention_with_dropout_02_02 \
   --overwrite_result True \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3_with_entity_label.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3_with_entity_label.json \

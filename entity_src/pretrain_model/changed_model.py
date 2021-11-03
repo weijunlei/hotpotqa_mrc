@@ -317,7 +317,8 @@ class BertForQuestionAnsweringCQAttention(BertPreTrainedModel):
         self.cq_attention = MyQANet(config.hidden_size)
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(0.2)
+        self.dropout2 = nn.Dropout(0.2)
         self.sent = nn.Linear(config.hidden_size, 1)
         self.init_weights()
 
@@ -356,6 +357,7 @@ class BertForQuestionAnsweringCQAttention(BertPreTrainedModel):
         question_embedding[question_embedding < -5000] = 0
         context_out = self.cq_attention(context_embedding, question_embedding, context_mask, 1 - context_mask)
         sequence_output = sequence_output + context_out
+        sequence_output = self.dropout2(sequence_output)
         start_logits = self.start_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
         end_logits = self.end_logits(sequence_output).squeeze(-1) + extended_context_mask #*context_mask.float()
         # 去除context mask

@@ -78,7 +78,7 @@ def write_predictions(all_examples, all_features, all_results, is_training='trai
         features = example_index2features[example_index]
         # TODO: check id格式
         # 将5a8b57f25542995d1e6f1371_0_0 qid_context_sent 切分为 qid_context
-        id = '_'.join(features[0].unique_id.split('_')[:-1])
+        q_id = '_'.join(features[0].unique_id.split('_')[:-1])
         sentence_result = []
         sentence_all_labels = []
         if len(features) == 1:
@@ -100,13 +100,13 @@ def write_predictions(all_examples, all_features, all_results, is_training='trai
                     if cls_mask != 0:
                         sentence_all_labels.append(cls_label)
                         sentence_result.append(label_result)
-                sentence_results[id] = sentence_result
+                sentence_results[q_id] = sentence_result
 
                 assert len(sentence_result) == sum(features[0].cls_mask) - 1
                 assert len(sentence_all_labels) == sum(features[0].cls_mask)
             else:
                 sentence_all_labels.append(cls_labels[0])
-            labels[id] = sentence_all_labels
+            labels[q_id] = sentence_all_labels
         else:
             # 对单实例的多结果处理
             paragraph_result = 0
@@ -156,9 +156,9 @@ def write_predictions(all_examples, all_features, all_results, is_training='trai
                         sentence_all_labels.append(cls_labels[0])
                     else:
                         sentence_all_labels[0] = max(sentence_all_labels[0], cls_labels[0])
-            paragraph_results[id] = paragraph_result
-            sentence_results[id] = sentence_result
-            labels[id] = sentence_all_labels
+            paragraph_results[q_id] = paragraph_result
+            sentence_results[q_id] = sentence_result
+            labels[q_id] = sentence_all_labels
             if has_sentence_result:
                 assert len(sentence_result) + overlap == mask1
                 assert len(sentence_all_labels) + overlap == mask1 + 1
