@@ -32,8 +32,9 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 # deltete swish
 from transformers.activations import gelu, gelu_new
-from transformers.configuration_bert import BertConfig
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+# from transformers.configuration_bert import BertConfig
+from transformers import BertConfig
+from transformers.file_utils import add_start_docstrings
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
 
 
@@ -659,7 +660,7 @@ class BertModel(BertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    # @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -835,7 +836,7 @@ class BertForPreTraining(BertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    # @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -925,7 +926,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    # @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -1027,7 +1028,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    # @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -1107,7 +1108,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    # @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
