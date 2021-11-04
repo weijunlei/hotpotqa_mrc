@@ -20,6 +20,7 @@ from __future__ import absolute_import, division, print_function
 import argparse
 import collections
 import json
+import os
 import random
 import sys
 from io import open
@@ -28,20 +29,18 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,Sampl
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from modeling_bert import *
+from modeling_roberta import *
 from optimization import BertAdam, warmup_linear
-from tokenization_bert import (BertTokenizer)
+from tokenization_roberta import (RobertaTokenizer)
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
     import pickle
-from collections import Counter
 import gc
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
-# os.environ["CUDA_VISIBLE_DEVICES"]="4,5,6,7"
 class SquadExample(object):
     """
     A single training/test example for the Squad dataset.
@@ -139,7 +138,7 @@ def read_examples(input_file, is_training):
                 para_related=related
             )
             examples.append(example)
-    print('pn:',pos,neg)
+    print(pos,neg)
     return examples
 
 def read_dev_examples(input_file, is_training):
@@ -161,8 +160,6 @@ def read_dev_examples(input_file, is_training):
                     related=True
                 else:
                     labels.append(0)
-            # if not related and random.random()>0.25:#为保证正负样本比例1:1
-            #     continue
             example = SquadExample(
                 qas_id=d['_id']+'_'+str(indc),
                 question_tokens=question,
@@ -180,14 +177,12 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
     features=[]
     related_sents = unrelated_sents = 0
     for (example_index, example) in tqdm(enumerate(examples)):
-        # if example_index != 41713:
-        #     continue
         query_tokens = tokenizer.tokenize(example.question_tokens)
         segment1_len=2+len(query_tokens)
-        max_len=max_seq_length-len(query_tokens)-3
+        max_len=max_seq_length-len(query_tokens)-4
         length=0
         unique_id=0
-        tokens=['[CLS]']+query_tokens+['[SEP]']
+        tokens=['<s>']+query_tokens+['</s>']+['</s>']
         cls_mask=[1]+[0]*(len(tokens)-1)
         cls_label=[1 if example.para_related else 0]+[0]*(len(tokens)-1)
         cls_weight = [1] + [0] * (len(tokens) - 1)
@@ -206,12 +201,12 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 sent_tokens=sent_tokens[:max_len-1]
             roll_back = 0
             if length+len(sent_tokens)+1>max_len:
-                tokens+=['[SEP]']
+                tokens+=['</s>']
                 cls_mask += [1]
                 cls_label += [0]
                 cls_weight += [0]
                 valid_len=len(tokens)
-                input_ids = tokenizer.convert_tokens_to_ids(tokens)+[0]*(max_seq_length-valid_len)
+                input_ids = tokenizer.convert_tokens_to_ids(tokens)+[1]*(max_seq_length-valid_len)
                 segment_ids=[0]*segment1_len+[1]*(valid_len-segment1_len)+[0]*(max_seq_length-valid_len)
                 input_mask=[1]*valid_len+[0]*(max_seq_length-valid_len)
                 cls_mask+=[0]*(max_seq_length-valid_len)
@@ -250,12 +245,12 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                         roll_back=roll_back))
                 length = 0
                 unique_id += 1
-                tokens = ['[CLS]'] + query_tokens + ['[SEP]']
+                tokens = ['<s>'] + query_tokens + ['</s>'] + ['</s>']
                 cls_mask = [1] + [0] * (len(tokens) - 1)
                 cls_label = [1 if example.para_related else 0] + [0] * (len(tokens) - 1)
                 cls_weight = [1] + [0] * (len(tokens) - 1)
             else:
-                tokens+=['[UNK]']+sent_tokens#unk
+                tokens+=['<unk>']+sent_tokens
                 cls_mask+=[1]+[0]*(len(sent_tokens)+0)
                 cls_label+=[label]+[0]*(len(sent_tokens)+0)
                 cls_weight += [1 if label else 0.2] + [0] * (len(sent_tokens) + 0)
@@ -263,12 +258,12 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 i+=1
             prev2 = prev1
             prev1 = len(sent_tokens) + 1
-        tokens += ['[SEP]']
+        tokens += ['</s>']
         cls_mask+=[1]
         cls_label+=[0]
         cls_weight+=[0]
         valid_len = len(tokens)
-        input_ids = tokenizer.convert_tokens_to_ids(tokens) + [0] * (max_seq_length - valid_len)
+        input_ids = tokenizer.convert_tokens_to_ids(tokens) + [1] * (max_seq_length - valid_len)
         segment_ids = [0] * segment1_len + [1] * (valid_len - segment1_len) + [0] * (max_seq_length - valid_len)
         input_mask = [1] * valid_len + [0] * (max_seq_length - valid_len)
         cls_mask += [0] * (max_seq_length - valid_len)
@@ -300,7 +295,6 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
     print(len(features))
     print(related_sents,unrelated_sents)
     return features
-
 
 def write_predictions_(all_examples, all_features, all_results):
     """Write final predictions to the json file and log-odds of null if needed."""
@@ -395,10 +389,10 @@ def write_predictions_(all_examples, all_features, all_results):
         th=0.5
         p11=p10=p01=p00=0
         # print(th,v[0])
-        vmax=max(v[0])
-        vmin=min(v[0])
         maxlogit=-100
         maxrs=False
+        vmax=max(v[0])
+        vmin=min(v[0])
         # maxpara=-1
         for indab,(a,b) in enumerate(zip(v[0],v[1])):
             if a>maxlogit:
@@ -445,28 +439,28 @@ def run_train():
     parser = argparse.ArgumentParser()
 
     ## Required parameters
-    parser.add_argument("--bert_model", default='bert-base', type=str,
+    parser.add_argument("--bert_model", default='roberta_large', type=str,
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
                              "bert-base-multilingual-cased, bert-base-chinese.")
-    parser.add_argument("--output_dir", default='selector_round1_base_2e-5', type=str,
+    parser.add_argument("--output_dir", default='selector_round1_large_1e-5', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
     parser.add_argument("--model_name", type=str, default='BertForRelated',
                         help="The output directory where the model checkpoints and predictions will be written.")
 
     ## Other parameters
     parser.add_argument("--train_file", default='hotpot_train_data.json', type=str,
-                        help="SQuAD json for training. ")
+                        help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--dev_file", default='hotpot_dev_data.json', type=str,
-                        help="SQuAD json for evaluation. ")
+                        help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--max_seq_length", default=512, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences "
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
     parser.add_argument("--sent_overlap", default=2, type=int,
-                        help="When splitting up a long document into chunks, how much sentences is overlapped between chunks.")
+                        help="When splitting up a long document into chunks, how much stride to take between chunks.")
     parser.add_argument("--train_batch_size", default=64, type=int, help="Total batch size for training.")
     parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
-    parser.add_argument("--learning_rate", default=2e-5, type=float, help="The initial learning rate for Adam.")
+    parser.add_argument("--learning_rate", default=1e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--num_train_epochs", default=3.0, type=float,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
@@ -475,7 +469,7 @@ def run_train():
     parser.add_argument("--verbose_logging", action='store_true',
                         help="If true, all of the warnings related to data processing will be printed. "
                              "A number of warnings are expected for a normal SQuAD evaluation.")
-    parser.add_argument("--output_log", type=str, default='selector_round1_base_2e-5.txt', )
+    parser.add_argument("--output_log", type=str, default='selector_round1_large_1e-5.txt', )
     parser.add_argument("--no_cuda",
                         action='store_true',
                         help="Whether not to use CUDA when available")
@@ -506,7 +500,6 @@ def run_train():
                         type=int, default=500,
                         help="The proportion of the validation set")
     args = parser.parse_args()
-    #output_dir,train_file,max_seq_length,doc_stride,max_query_length,validate_proportion, train_batch_size,val_train_size,learning_rate,warmup_proportion,save_model_step
 
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -543,11 +536,14 @@ def run_train():
 
     # preprocess_data
 
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
+    tokenizer = RobertaTokenizer.from_pretrained('roberta-large', do_lower_case=args.do_lower_case)
+
+    train_examples = None
+    num_train_optimization_steps = None
 
     # Prepare model
-    models={'BertForRelated':BertForParaClassification,}
-    model = models[args.model_name].from_pretrained('bert-base-uncased')
+    models={'BertForRelated':RobertaForTokenRegression,}
+    model = models[args.model_name].from_pretrained('roberta_large')
 
     if args.fp16:
         model.half()
@@ -576,13 +572,11 @@ def run_train():
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
 
-
-
     global_step = 0
 
     dev_examples = read_dev_examples(
         input_file=args.dev_file, is_training=True)
-    print('dev example_num:',len(dev_examples))#3243
+    print('dev example_num:',len(dev_examples))
     dev_feature_file = args.dev_file.split('.')[0] + '_r1_{0}_{1}_{2}'.format(
         list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.sent_overlap))
     try:
@@ -622,7 +616,6 @@ def run_train():
     train_examples = read_examples(
         input_file=args.train_file,is_training=True)
     example_num=len(train_examples)
-    # example_num=854911#fake_train
     print('train example_num:', example_num)
     start = list(range(0, example_num, 215000))
     end = []
@@ -649,7 +642,7 @@ def run_train():
                 with open(cached_train_features_file + '_' + str(i), "wb") as writer:
                     pickle.dump(train_features, writer)
         total_feature_num+=len(train_features)
-    print('train feature_num:', total_feature_num)
+    print('train feature_num:', total_feature_num)  # 168148
 
     num_train_optimization_steps = int(
         total_feature_num / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
@@ -676,6 +669,8 @@ def run_train():
                              lr=args.learning_rate,
                              warmup=args.warmup_proportion,
                              t_total=num_train_optimization_steps)
+    # RawResult = collections.namedtuple("RawResult",
+    #                                    ["unique_id", "start_pos", "end_pos", "start_logit", "end_logit"])
     RawResult = collections.namedtuple("RawResult",
                                        ["unique_id", "logit"])
     mmax=0
@@ -705,7 +700,7 @@ def run_train():
 
                 loss,_= model(input_ids, input_mask,segment_ids, cls_mask=cls_mask,cls_label=cls_label,cls_weight=cls_weight)
                 if n_gpu > 1:
-                    loss = loss.sum()  # mean() to average on multi-gpu.
+                    loss = loss.mean()  # mean() to average on multi-gpu.
                 logger.info("  step = %d, train_loss=%f", global_step, loss)
                 printloss += loss
                 if args.gradient_accumulation_steps > 1:
