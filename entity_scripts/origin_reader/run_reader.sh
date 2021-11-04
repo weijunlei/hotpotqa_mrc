@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "----------------------------------------------------"
 echo "start train reader model"
-export CUDA_VISIBLE_DEVICES="1"
+export CUDA_VISIBLE_DEVICES="2"
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
                # BertForQuestionAnsweringThreeSameCoAttention,

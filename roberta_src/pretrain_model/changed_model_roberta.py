@@ -60,8 +60,7 @@ class RobertaForRelatedSentence(RobertaModel):
                 cls_label = cls_label.unsqueeze(0)
                 cls_weight = cls_weight.unsqueeze(0)
         sequence_output = self.robert(input_ids,
-                            attention_mask=attention_mask,
-                            position_ids=position_ids)
+                            attention_mask=attention_mask)
         sequence_output = sequence_output[0]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output).squeeze(-1)

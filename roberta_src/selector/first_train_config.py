@@ -86,6 +86,6 @@ def get_config():
                              "0 (default value): dynamic loss scaling.\n"
                              "Positive power of 2: static loss scaling value.\n")
     parser.add_argument('--save_model_step',
-                        type=int, default=50,
+                        type=int, default=10000,
                         help="The proportion of the validation set")
     return parser

@@ -1,7 +1,7 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="0,1"
-echo "start train first hop selector..."
+export CUDA_VISIBLE_DEVICES="0"
 cd ../../roberta_src/selector
+echo "start train first hop selector..."
 python -u first_hop_selector.py \
     --bert_model roberta-large \
     --over_write_result True \
@@ -28,7 +28,7 @@ echo "----------------------------------------------------"
 
 echo "----------------------------------------------------"
 echo "start predict first hop result..."
-export CUDA_VISIBLE_DEVICES="0"
+export CUDA_VISIBLE_DEVICES="1"
 echo "start predict train first hop result !"
 python -u first_hop_selector_predictor.py \
     --bert_model roberta-large \
@@ -53,7 +53,7 @@ python -u first_hop_selector_predictor.py \
     --model_name RobertaForRelatedSentence \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
     --predict_result_path ../../data/selector/roberta_first_hop_related_paragraph_result/ \
-    --best_paragraph_file train_best_paragraph.json \
+    --best_paragraph_file dev_best_paragraph.json \
     --related_paragraph_file dev_related_paragraph.json \
     --new_context_file dev_new_context.json \
     --max_seq_length 512 \
@@ -64,7 +64,7 @@ echo "----------------------------------------------------"
 
 
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="0,1"
+export CUDA_VISIBLE_DEVICES="0"
 echo "start train second hop selector..."
 python -u second_hop_selector.py \
     --bert_model roberta-large \
@@ -88,7 +88,8 @@ python -u second_hop_selector.py \
     --use_file_cache True \
     --max_seq_length 512 \
     --train_batch_size 12 \
-    --val_batch_size 128 \
+    --val_batch_size 12 \
+    --local_rank 0 \
     --save_model_step 10000 \
     --num_train_epochs 3.0
 echo "----------------------------------------------------"
@@ -97,7 +98,7 @@ echo "train second hop selector done!"
 
 echo "----------------------------------------------------"
 echo "start predict second hop result..."
-export CUDA_VISIBLE_DEVICES="0"
+export CUDA_VISIBLE_DEVICES="1"
 python -u second_hop_selector_predictor.py \
     --bert_model roberta_large \
      --log_prefix 20211103_roberta_second_hop_selector \

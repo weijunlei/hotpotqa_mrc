@@ -1,5 +1,5 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="0,1"
+export CUDA_VISIBLE_DEVICES="2"
 echo "start train first hop selector..."
 cd ../../roberta_src/selector
 python -u first_hop_selector.py \
