@@ -194,7 +194,8 @@ def train_iterator(args,
                 loss, _ = model(input_ids, input_mask, segment_ids, cls_mask=cls_mask, cls_label=cls_label,
                                 cls_weight=cls_weight)
                 if n_gpu > 1:
-                    loss = loss.sum()  # mean() to average on multi-gpu.
+                    # loss = loss.sum()  # mean() to average on multi-gpu.
+                    loss = loss.mean()
                 logger.info("step = {}, train_loss={}".format(global_steps, loss))
                 train_loss += loss
                 if args.gradient_accumulation_steps > 1:

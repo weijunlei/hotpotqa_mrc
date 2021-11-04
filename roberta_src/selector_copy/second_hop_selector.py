@@ -14,11 +14,10 @@ from torch.utils.data.distributed import DistributedSampler
 
 from second_hop_data_helper import read_second_hotpotqa_examples, convert_examples_to_second_features
 from second_hop_prediction_helper import write_predictions
+from transformers import RobertaTokenizer
 sys.path.append("../pretrain_model")
-from changed_model import BertForParagraphClassification, BertForRelatedSentence
-from modeling_bert import *
+from changed_model_roberta import RobertaForParagraphClassification, RobertaForRelatedSentence
 from optimization import BertAdam, warmup_linear
-from tokenization import BertTokenizer
 
 # 日志设置
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -27,7 +26,7 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
 logger = logging.getLogger(__name__)
 
 
-def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelatedSentence'):
+def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='RobertaForRelatedSentence'):
     dev_examples, dev_features, dev_dataloader = dev_feature_getter(args, tokenizer=tokenizer)
     model.eval()
     all_results = []
@@ -35,7 +34,7 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
     RawResult = collections.namedtuple("RawResult",
                                        ["unique_id", "logit"])
     has_sentence_result = True
-    if model_name == 'BertForParagraphClassification':
+    if model_name == 'RobertaForParagraphClassification':
         has_sentence_result = False
     with torch.no_grad():
         for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Iteration")):
@@ -302,9 +301,9 @@ def run_train(args):
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
-                   "BertForParagraphClassification": BertForParagraphClassification}
+    tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    models_dict = {"RobertaForRelatedSentence": RobertaForRelatedSentence,
+                   "RobertaForParagraphClassification": RobertaForParagraphClassification}
     model = models_dict[args.model_name].from_pretrained(args.bert_model)
 
     if args.fp16:

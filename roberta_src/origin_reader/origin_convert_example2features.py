@@ -69,7 +69,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
-            tokens = ["</s>", "yes", "no"]
+            tokens = ["<s>", "yes", "no"]
             entity_tokens = ['', '', '']
             token_to_orig_map = {}
             token_is_max_context = {}
@@ -109,7 +109,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
             # Zero-pad up to the sequence length.
             while len(input_ids) < max_seq_length:
-                input_ids.append(0)
+                input_ids.append(1)
                 input_mask.append(0)
                 segment_ids.append(0)
                 entity_ids.append(0)
@@ -209,7 +209,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
-            tokens = ["</s>", "yes", "no"]
+            tokens = ["<s>", "yes", "no"]
             entity_tokens = ['', '', '']
             token_to_orig_map = {}
             token_is_max_context = {}
@@ -249,7 +249,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
 
             # Zero-pad up to the sequence length.
             while len(input_ids) < max_seq_length:
-                input_ids.append(0)
+                input_ids.append(1)
                 input_mask.append(0)
                 segment_ids.append(0)
                 entity_ids.append(0)

@@ -125,7 +125,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, is_trainin
         cur_context_length = 0
         query_length = len(query_tokens) + 2
         unique_id = 0
-        all_tokens = ['</s>'] + query_tokens + ['</s>'] + ['</s>']
+        all_tokens = ['<s>'] + query_tokens + ['</s>'] + ['</s>']
         cls_mask = [1] + [0] * (len(all_tokens) - 1)
         if is_training == 'train' or is_training == 'dev':
             cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
@@ -151,10 +151,10 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, is_trainin
                 """ 超出长度往后延两句 """
                 all_tokens += ['</s>']
                 tmp_len = len(all_tokens)
-                input_ids = tokenizer.convert_tokens_to_ids(all_tokens) + [0] * (max_seq_length - tmp_len)
+                input_ids = tokenizer.convert_tokens_to_ids(all_tokens) + [1] * (max_seq_length - tmp_len)
                 query_ids = [0] * query_length + [1] * (tmp_len - query_length) + [0] * (max_seq_length - tmp_len)
                 input_mask = [1] * tmp_len + [0] * (max_seq_length - tmp_len)
-                cls_mask += [1] + [0] * (max_seq_length - tmp_len)
+                cls_mask += [0] + [0] * (max_seq_length - tmp_len)
                 cls_label += [0] + [0] * (max_seq_length - tmp_len)
                 cls_weight += [0] + [0] * (max_seq_length - tmp_len)
                 if pre_sent2_length is not None:
@@ -192,7 +192,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, is_trainin
                 unique_id += 1
                 # 还原到未添加context前
                 cur_context_length = 0
-                all_tokens = ['<s>'] + query_tokens + ['<s>'] + ['<s>']
+                all_tokens = ['<s>'] + query_tokens + ['</s>'] + ['</s>']
                 cls_mask = [1] + [0] * (len(all_tokens) - 1)
                 cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
                 cls_weight = [1] + [0] * (len(all_tokens) - 1)
@@ -210,7 +210,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, is_trainin
         cls_label += [0]
         cls_weight += [0]
         tmp_len = len(all_tokens)
-        input_ids = tokenizer.convert_tokens_to_ids(all_tokens) + [0] * (max_seq_length - tmp_len)
+        # input id 1 pad_token <pad> == 1
+        input_ids = tokenizer.convert_tokens_to_ids(all_tokens) + [1] * (max_seq_length - tmp_len)
         query_ids = [0] * query_length + [1] * (tmp_len - query_length) + [0] * (max_seq_length - tmp_len)
         input_mask = [1] * tmp_len + [0] * (max_seq_length - tmp_len)
         cls_mask += [0] * (max_seq_length - tmp_len)

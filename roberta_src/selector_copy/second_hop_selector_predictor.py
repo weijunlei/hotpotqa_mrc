@@ -19,7 +19,7 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,Sampl
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from transformers.tokenization_bert import (BertTokenizer)
+from transformers.tokenization_bert import (RobertaTokenizer)
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
@@ -27,16 +27,15 @@ else:
 from collections import Counter
 import string
 import gc
+from transformers import RobertaTokenizer
 
 from second_hop_data_helper import (HotpotQAExample,
                                        HotpotInputFeatures,
                                        read_second_hotpotqa_examples,
                                        convert_examples_to_second_features)
 sys.path.append("../pretrain_model")
-from changed_model import BertForRelatedSentence, BertForParagraphClassification
-from modeling_bert import *
+from changed_model_roberta import RobertaForRelatedSentence, RobertaForParagraphClassification
 from optimization import BertAdam, warmup_linear
-from tokenization import BertTokenizer
 
 # 日志设置
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -186,11 +185,11 @@ def run_predict(args):
 
     # preprocess_data
 
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
+    tokenizer = RobertaTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
 
     # Prepare model
-    models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
-                   "BertForParagraphClassification": BertForParagraphClassification}
+    models_dict = {"RobertaForRelatedSentence": RobertaForRelatedSentence,
+                   "RobertaForParagraphClassification": RobertaForParagraphClassification}
     # 从文件中加载模型
     model = models_dict[args.model_name].from_pretrained(args.checkpoint_path)
 
@@ -269,7 +268,7 @@ def run_predict(args):
 
         model.eval()
         has_sentence_result = True
-        if args.model_name == 'BertForParagraphClassification':
+        if args.model_name == 'RobertaForParagraphClassification':
             has_sentence_result = False
         with torch.no_grad():
             cur_result = []
@@ -289,7 +288,7 @@ def run_predict(args):
                 for i, example_index in enumerate(d_example_indices):
                     # start_position = start_positions[i].detach().cpu().tolist()
                     # end_position = end_positions[i].detach().cpu().tolist()
-                    if args.model_name == 'BertForParagraphClassification':
+                    if args.model_name == 'RobertaForParagraphClassification':
                         dev_logit = dev_logits[i].detach().cpu().tolist()
                         dev_logit.reverse()
                     else:
