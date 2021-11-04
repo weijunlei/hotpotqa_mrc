@@ -15,7 +15,7 @@ python -u first_hop_selector.py \
     --max_seq_length 512 \
     --train_batch_size 36 \
     --val_batch_size 36 \
-    --save_model_step 1000 \
+    --save_model_step 1500 \
     --num_train_epochs 3.0
 echo "train first hop selector done!"
 echo "----------------------------------------------------"
