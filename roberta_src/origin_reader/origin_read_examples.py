@@ -256,6 +256,7 @@ def process_single_data(data):
     tmp_examples.append(example)
     return tmp_examples
 
+
 def read_examples(input_file, supporting_para_file, tokenizer, is_training):
     # 处理后的数据
     global is_training_global
