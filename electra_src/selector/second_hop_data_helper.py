@@ -80,12 +80,12 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
         # 当query+第一段结果长度大于512时的处理方法
         if len(query_tokens) >= 400:
             query_tokens = query_tokens[:300]
-        # special tokens <s> </s> </s> </s>
-        max_context_length = max_seq_length - len(query_tokens) - 4
+        # special tokens ['CLS'] ['SEP'] ['SEP']
+        max_context_length = max_seq_length - len(query_tokens) - 3
         cur_context_length = 0
         query_length = len(query_tokens) + 2
         unique_id = 0
-        all_tokens = ['<s>'] + query_tokens + ['</s>'] + ['</s>']
+        all_tokens = ['[CLS]'] + query_tokens + ['[SEP]']
         cls_mask = [1] + [0] * (len(all_tokens) - 1)
         if is_training == 'train' or is_training == 'dev':
             cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
@@ -111,10 +111,10 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
                 """ 超出长度往后延两句 """
                 all_tokens += ['[SEP]']
                 tmp_len = len(all_tokens)
-                input_ids = tokenizer.convert_tokens_to_ids(all_tokens) + [1] * (max_seq_length - tmp_len)
+                input_ids = tokenizer.convert_tokens_to_ids(all_tokens) + [0] * (max_seq_length - tmp_len)
                 query_ids = [0] * query_length + [1] * (tmp_len - query_length) + [0] * (max_seq_length - tmp_len)
                 input_mask = [1] * tmp_len + [0] * (max_seq_length - tmp_len)
-                cls_mask += [0] + [0] * (max_seq_length - tmp_len)
+                cls_mask += [1] + [0] * (max_seq_length - tmp_len)
                 cls_label += [0] + [0] * (max_seq_length - tmp_len)
                 cls_weight += [0] + [0] * (max_seq_length - tmp_len)
                 if pre_sent2_length is not None:
@@ -155,12 +155,12 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
                 unique_id += 1
                 # 还原到未添加context前
                 cur_context_length = 0
-                all_tokens = ['<s>'] + query_tokens + ['</s>'] + ['</s>']
+                all_tokens = ['[CLS]'] + query_tokens + ['[SEP]']
                 cls_mask = [1] + [0] * (len(all_tokens) - 1)
                 cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
                 cls_weight = [1] + [0] * (len(all_tokens) - 1)
             else:
-                all_tokens += ['<unk>'] + sentence_tokens  # unk
+                all_tokens += ['[UNK]'] + sentence_tokens  # unk
                 cls_mask += [1] + [0] * (len(sentence_tokens) + 0)
                 cls_label += [sent_label] + [0] * (len(sentence_tokens) + 0)
                 cls_weight += [1 if sent_label else 0.2] + [0] * (len(sentence_tokens) + 0)
@@ -168,7 +168,7 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
                 sent_idx += 1
             pre_sent2_length = pre_sent1_length
             pre_sent1_length = len(sentence_tokens) + 1
-        all_tokens += ['</s>']
+        all_tokens += ['[SEP]']
         cls_mask += [1]
         cls_label += [0]
         cls_weight += [0]

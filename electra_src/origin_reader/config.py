@@ -2,7 +2,7 @@ import argparse
 
 
 def str2bool(v):
-    if isinstance(v, bool):
+    if isinstance(v,bool):
         return v
     if v == 'True':
         return True
@@ -11,56 +11,49 @@ def str2bool(v):
 
 
 def get_config():
-    """ 参数配置 """
+    """ 模型配置 """
     parser = argparse.ArgumentParser()
-    # 必须参数
-    # 模型参数
-    parser.add_argument("--bert_model", default="bert-base-uncased", type=str,
+    ## Required parameters
+    parser.add_argument("--bert_model", default='roberta-large', type=str,
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
-                             "bert-base-multilingual-cased, bert-base-chinese."
-                        )
-    parser.add_argument("--overwrite_result", default=True, type=bool,
-                        help="over write the result")
-    parser.add_argument("--checkpoint_path", default="../../checkpoints/selector/20211107_roberta_base_second_hop_just_paragraph_selector_test")
-    parser.add_argument("--output_dir", default='../checkpoints/selector/first_hop_selector', type=str,
+                             "bert-base-multilingual-cased, bert-base-chinese.")
+    parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20211022_with_entity_wo_question_entity_dim_10_wi_context_mask', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--first_predict_result_path", default="../../data/result/first_hop_selector", type=str)
-    parser.add_argument("--best_paragraph_file", default="best_paragraph.json")
-    parser.add_argument("--predict_file", default='../../data/hotpot_data/hotpot_train_labeled_data.json')
-    parser.add_argument("--predict_result_path", default="../../data/result/selector/second_hop_selector")
-    parser.add_argument("--best_relate_paragraph_file", default="dev_related.json")
-    parser.add_argument("--all_paragraph_file", default="all_paragraph.json")
-    parser.add_argument("--feature_cache_path", default="../data/cache/selector/first_hop_selector")
-    parser.add_argument("--model_name", type=str, default='BertForRelated',
-                        help="The output directory where the model checkpoints and predictions will be written.")
-    # 数据输入
-    parser.add_argument("--train_file", default='../data/hotpot_data/hotpot_train_labeled_data.json', type=str,
-                        help="SQuAD json for training. ")
-    parser.add_argument("--dev_file", default='../data/hotpot_data/hotpot_dev_labeled_data.json', type=str,
-                        help="SQuAD json for evaluation. ")
-    parser.add_argument("--best_train_paragraph_file",
-                        default="train_best_paragraph.json",)
-    parser.add_argument("--best_dev_paragraph_file",
-                        default="train_dev_paragraph.json", )
-    # 其他参数
+    parser.add_argument("--model_name", type=str, default='RobertaForQuestionAnsweringForwardBest',
+                        help="must be BertForQuestionAnsweringCoAttention"
+                             "\BertForQuestionAnsweringThreeCoAttention"
+                             "\BertForQuestionAnsweringThreeSameCoAttention"
+                             "\BertForQuestionAnsweringForward")
+    parser.add_argument("--train_file", default='../../data/hotpot_data/hotpot_train_labeled_data_v3_with_entity_label.json', type=str,
+                        help="SQuAD json for training. E.g., train-v1.1.json")
+    # 设置是否重新写入结果
+    # parser.add_argument("--overwrite_result", dest='overwrite_result', action='store_true')
+    # parser.add_argument("--no-over_write_result", dest='overwrite_result', action='store_false')
+    parser.add_argument("--overwrite_result", type=str2bool, default=True)
+    parser.add_argument("--log_prefix", default="qa_base_20211022_with_entity_test", type=str)
     parser.add_argument("--log_path", default="../../log", type=str)
-    parser.add_argument("--use_ddp", default=False, type=str2bool)
-    parser.add_argument("--world_size", default=1, type=int)
-    parser.add_argument("--log_prefix", default="roberta_naive", type=str)
-    parser.add_argument("--doc_stride", default=256, type=int)
+    parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_labeled_data_v3_with_entity_label.json', type=str,
+                        help="SQuAD json for training. E.g., train-v1.1.json")
+    parser.add_argument("--train_supporting_para_file",
+                        default='../../data/selector/second_hop_related_paragraph_result/train_related.json', type=str,
+                        help="SQuAD json for training. E.g., train-v1.1.json")
+    parser.add_argument("--dev_supporting_para_file",
+                        default='../../data/selector/second_hop_related_paragraph_result/dev_related.json', type=str,
+                        help="SQuAD json for training. E.g., train-v1.1.json")
+    parser.add_argument("--feature_cache_path", default='../../data/cache/test', type=str,
+                        help="SQuAD json for training. E.g., train-v1.1.json")
+    parser.add_argument("--feature_suffix", default="origin_model", type=str,
+                        help="cache feature suffix")
     parser.add_argument("--max_seq_length", default=512, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences "
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--use_file_cache", default=True, type=bool,
-                        help="use the feature cache or not")
-    parser.add_argument("--sent_overlap", default=2, type=int,
-                        help="When splitting up a long document into chunks, "
-                             "how much sentences is overlapped between chunks.")
-    parser.add_argument("--train_batch_size", default=24, type=int, help="Total batch size for training.")
+    parser.add_argument("--doc_stride", default=256, type=int,
+                        help="When splitting up a long document into chunks, how much stride to take between chunks.")
+    parser.add_argument("--train_batch_size", default=12, type=int, help="Total batch size for training.")
     parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
-    parser.add_argument("--learning_rate", default=2e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--num_train_epochs", default=1.0, type=float,
+    parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
+    parser.add_argument("--num_train_epochs", default=5.0, type=float,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
                         help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10%% "
@@ -73,7 +66,7 @@ def get_config():
                         help="Whether not to use CUDA when available")
     parser.add_argument('--seed',
                         type=int,
-                        default=42,
+                        default=2021,
                         help="random seed for initialization")
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
@@ -95,6 +88,7 @@ def get_config():
                              "0 (default value): dynamic loss scaling.\n"
                              "Positive power of 2: static loss scaling value.\n")
     parser.add_argument('--save_model_step',
-                        type=int, default=5000,
+                        type=int, default=1000,
                         help="The proportion of the validation set")
+
     return parser

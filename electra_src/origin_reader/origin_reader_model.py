@@ -44,7 +44,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 import pickle
 import gc
-from transformers import RobertaTokenizer
+from transformers import ElectraTokenizer
 
 from origin_read_examples import read_examples
 from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
@@ -53,12 +53,12 @@ from lazy_dataloader import LazyLoadTensorDataset
 from config import get_config
 
 sys.path.append("../pretrain_model")
-from changed_model_roberta import RobertaForQuestionAnsweringForwardWithEntity, RobertaForQuestionAnsweringForwardBest
+from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, ElectraForQuestionAnsweringForwardBest
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
-    'RobertaForQuestionAnsweringForwardBest': RobertaForQuestionAnsweringForwardBest,
-    'RobertaForQuestionAnsweringForwardWithEntity': RobertaForQuestionAnsweringForwardWithEntity
+    'ElectraForQuestionAnsweringForwardBest': ElectraForQuestionAnsweringForwardBest,
+    'ElectraForQuestionAnsweringForwardWithEntity': ElectraForQuestionAnsweringForwardWithEntity
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
@@ -283,8 +283,7 @@ def run_train(rank=0, world_size=1):
         raise ValueError("Output directory () already exists and is not empty.")
     if rank == 0 and not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-
-    tokenizer = RobertaTokenizer.from_pretrained(args.bert_model,
+    tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
                                                  do_lower_case=args.do_lower_case)
 
     train_examples = None

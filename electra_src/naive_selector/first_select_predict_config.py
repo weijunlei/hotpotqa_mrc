@@ -22,14 +22,12 @@ def get_config():
                         )
     parser.add_argument("--overwrite_result", default=True, type=bool,
                         help="over write the result")
-    parser.add_argument("--checkpoint_path", default="../../checkpoints/selector/20211107_roberta_base_second_hop_just_paragraph_selector_test")
+    parser.add_argument("--checkpoint_path", default="../../checkpoints/selector/first_hop_selector", type=str)
     parser.add_argument("--output_dir", default='../checkpoints/selector/first_hop_selector', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--first_predict_result_path", default="../../data/result/first_hop_selector", type=str)
-    parser.add_argument("--best_paragraph_file", default="best_paragraph.json")
     parser.add_argument("--predict_file", default='../../data/hotpot_data/hotpot_train_labeled_data.json')
-    parser.add_argument("--predict_result_path", default="../../data/result/selector/second_hop_selector")
-    parser.add_argument("--best_relate_paragraph_file", default="dev_related.json")
+    parser.add_argument("--predict_result_path", default="../../data/result/selector/first_hop_selector")
+    parser.add_argument("--best_paragraph_file", default="best_paragraph.json")
     parser.add_argument("--all_paragraph_file", default="all_paragraph.json")
     parser.add_argument("--feature_cache_path", default="../data/cache/selector/first_hop_selector")
     parser.add_argument("--model_name", type=str, default='BertForRelated',
@@ -39,10 +37,6 @@ def get_config():
                         help="SQuAD json for training. ")
     parser.add_argument("--dev_file", default='../data/hotpot_data/hotpot_dev_labeled_data.json', type=str,
                         help="SQuAD json for evaluation. ")
-    parser.add_argument("--best_train_paragraph_file",
-                        default="train_best_paragraph.json",)
-    parser.add_argument("--best_dev_paragraph_file",
-                        default="train_dev_paragraph.json", )
     # 其他参数
     parser.add_argument("--log_path", default="../../log", type=str)
     parser.add_argument("--use_ddp", default=False, type=str2bool)

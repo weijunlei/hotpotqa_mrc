@@ -51,7 +51,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
         query_tokens = example.question_tokens
         all_doc_tokens = example.doc_tokens
         all_tokens_entity_info = example.tokens_entity_info
-        # The -5 accounts for '<s>','yes','no', </s> and </s>
+        # The -5 accounts for '[CLS]','yes','no', [SEP] and [SEP]
         max_tokens_for_doc = max_seq_length - len(query_tokens) - 5
 
         # We can have documents that are longer than the maximum sequence length.
@@ -69,7 +69,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
-            tokens = ["<s>", "yes", "no"]
+            tokens = ["[CLS]", "yes", "no"]
             entity_tokens = ['', '', '']
             token_to_orig_map = {}
             token_is_max_context = {}
@@ -86,7 +86,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 matrix.append(example.subwords_to_matrix[split_token_index])
                 segment_ids.append(0)
             content_len = len(tokens)
-            tokens.append("</s>")
+            tokens.append("[SEP]")
             entity_tokens.append('')
             segment_ids.append(0)
             matrix.append(0)
@@ -95,7 +95,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 tokens.append(query_token)
                 entity_tokens.append(question_token_entity_info)
                 segment_ids.append(1)
-            tokens.append("</s>")
+            tokens.append("[SEP]")
             entity_tokens.append('')
             segment_ids.append(1)
             matrix += [0] * len(query_tokens) + [-1]
@@ -109,7 +109,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
             # Zero-pad up to the sequence length.
             while len(input_ids) < max_seq_length:
-                input_ids.append(1)
+                input_ids.append(0)
                 input_mask.append(0)
                 segment_ids.append(0)
                 entity_ids.append(0)
@@ -191,7 +191,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
         all_doc_tokens = example.doc_tokens
         all_tokens_entity_info = example.tokens_entity_info
         # graph=full_graph[example.qas_id]
-        # The -5 accounts for '<s>','yes','no', </s> and </s>
+        # The -5 accounts for '[CLS]','yes','no', [SEP] and [SEP]
         max_tokens_for_doc = max_seq_length - len(query_tokens) - 5
 
         # We can have documents that are longer than the maximum sequence length.
@@ -209,7 +209,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
-            tokens = ["<s>", "yes", "no"]
+            tokens = ["[CLS]", "yes", "no"]
             entity_tokens = ['', '', '']
             token_to_orig_map = {}
             token_is_max_context = {}
@@ -226,7 +226,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 segment_ids.append(0)
                 matrix.append(example.subwords_to_matrix[split_token_index])
             content_len = len(tokens)
-            tokens.append("</s>")
+            tokens.append("[SEP]")
             entity_tokens.append('')
             segment_ids.append(0)
             matrix.append(-1)
@@ -235,7 +235,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 tokens.append(token)
                 entity_tokens.append(question_token_entity_info)
                 segment_ids.append(1)
-            tokens.append("</s>")
+            tokens.append("[SEP]")
             entity_tokens.append('')
             segment_ids.append(1)
             matrix += [0] * len(query_tokens) + [-1]
@@ -249,7 +249,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
 
             # Zero-pad up to the sequence length.
             while len(input_ids) < max_seq_length:
-                input_ids.append(1)
+                input_ids.append(0)
                 input_mask.append(0)
                 segment_ids.append(0)
                 entity_ids.append(0)

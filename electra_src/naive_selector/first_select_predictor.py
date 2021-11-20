@@ -17,9 +17,9 @@ import gc
 from transformers import RobertaTokenizer
 
 from roberta_model import RobertaForParagraphClassification
-from second_select_helper import read_hotpotqa_examples, convert_examples_to_features
+from first_select_helper import read_hotpotqa_examples, convert_examples_to_features
 from lazy_dataloader import LazyLoadTensorDataset
-from second_select_predict_config import get_config
+from first_select_predict_config import get_config
 
 sys.path.append("../pretrain_model")
 from optimization import BertAdam, warmup_linear
@@ -59,25 +59,26 @@ def logger_config(log_path, log_prefix='lwj', write2console=True):
 
 def get_dev_data(args, tokenizer):
     global logger
-    best_paragraph_file = os.path.join(args.first_predict_result_path, args.best_paragraph_file)
     dev_examples = read_hotpotqa_examples(input_file=args.predict_file,
-                                          best_paragraph_file=best_paragraph_file,
                                           tokenizer=tokenizer,
                                           is_training='dev')
     logger.info("dev examples: {}".format(len(dev_examples)))
-    cached_dev_features_file = '{}/naive_second_selector_dev_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
-                                                                                              args.bert_model.split(
-                                                                                                  '/')[-1],
-                                                                                              str(args.max_seq_length),
-                                                                                              str(args.doc_stride),
-                                                                                              args.log_prefix)
-
+    if not os.path.exists(args.feature_cache_path):
+        os.makedirs(args.feature_cache_path)
+    cached_dev_features_file = '{}/naive_predict_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
+                                                                              args.bert_model.split('/')[-1],
+                                                                              args.predict_file.split('/')[-1],
+                                                                              str(args.max_seq_length),
+                                                                              str(args.doc_stride),
+                                                                              args.log_prefix)
     dev_features = convert_examples_to_features(
         examples=dev_examples,
         tokenizer=tokenizer,
         max_seq_length=args.max_seq_length,
         is_training='dev'
     )
+    if args.local_rank == -1 or torch.distributed.get_rank() == 0:
+        logger.info(" Saving dev features into cached file %s", cached_dev_features_file)
     logger.info("dev feature num: {}".format(len(dev_features)))
     dev_data = LazyLoadTensorDataset(features=dev_features, is_training=False)
     dev_sampler = RandomSampler(dev_data)
@@ -86,13 +87,13 @@ def get_dev_data(args, tokenizer):
 
 
 def dev_predict(args,
-                 model,
-                 dev_dataloader,
-                 n_gpu,
-                 device,
-                 dev_features,
-                 tokenizer,
-                 dev_examples):
+                model,
+                dev_dataloader,
+                n_gpu,
+                device,
+                dev_features,
+                tokenizer,
+                dev_examples):
     """ 验证结果 """
     acc = pre = recall = f1 = em = 0
     model.eval()
@@ -102,24 +103,23 @@ def dev_predict(args,
     total_loss = 0
     with torch.no_grad():
         for step, d_batch in enumerate(tqdm(dev_dataloader, desc="Predict Iteration")):
-            try:
-                example_indices = d_batch[-1]
-                if n_gpu == 1:
-                    d_batch = tuple(x.squeeze(0).to(device) for x in d_batch[:-1])
-                else:
-                    d_batch = d_batch[:-1]
-                input_ids, input_mask, segment_ids = d_batch
-                dev_logits = model(input_ids=input_ids, attention_mask=input_mask, token_type_ids=segment_ids)
-                dev_logits = torch.sigmoid(dev_logits)
-                for i, example_index in enumerate(example_indices):
-                    dev_logit = dev_logits[i].detach().cpu().tolist()
-                    dev_logit.reverse()
-                    dev_feature = dev_features[example_index.item()]
-                    unique_id = dev_feature.unique_id
-                    all_results.append(RawResult(unique_id=unique_id,
-                                                 logit=dev_logit))
-            except Exception as e:
-                import pdb; pdb.set_trace()
+            example_indices = d_batch[-1]
+            if n_gpu == 1:
+                d_batch = tuple(x.squeeze(0).to(device) for x in d_batch[:-1])
+            else:
+                d_batch = d_batch[:-1]
+            input_ids, input_mask, segment_ids = d_batch
+            dev_logits = model(input_ids=input_ids,
+                               attention_mask=input_mask,
+                               token_type_ids=segment_ids)
+            dev_logits = torch.sigmoid(dev_logits)
+            for i, example_index in enumerate(example_indices):
+                dev_logit = dev_logits[i].detach().cpu().tolist()
+                dev_logit.reverse()
+                dev_feature = dev_features[example_index.item()]
+                unique_id = dev_feature.unique_id
+                all_results.append(RawResult(unique_id=unique_id,
+                                             logit=dev_logit))
     model.train()
     write_predictions(args, dev_features, dev_examples, all_results)
 
@@ -147,62 +147,35 @@ def write_predictions(args, features, examples, all_result):
                     paragraph_results[qas_id] = raw_result[0]
                 else:
                     paragraph_results[qas_id] = max(paragraph_results[qas_id], raw_result[0])
-    return evaluate_result(args, paragraph_results)
+    evaluate_result(args, paragraph_results)
 
 
 def evaluate_result(args, paragraph_results, thread=0.5):
-    dev_data = json.load(open(args.predict_file, "r"))
-    format_result = {}
-    best_paragraph_file = os.path.join(args.first_predict_result_path, args.best_paragraph_file)
-    first_predict_best_dict = json.load(open(best_paragraph_file, "r"))
-    error_num = 0
-    best_two_paragraph_dict = {}
-    all_paragraph_dict = {}
-    for info in dev_data:
-        q_id = info['_id']
-        format_result[q_id] = [[0] * 10, [0] * 10]
-        best_two_paragraph_dict[q_id] = []
-        all_paragraph_dict[q_id] = [0] * 10
-    for k, v in paragraph_results.items():
-        q_id, context_id = k.split('_')
-        try:
-            context_id = int(context_id)
-            if q_id not in format_result:
-                format_result[q_id] = [[0] * 10, [0] * 10]
-            format_result[q_id][0][context_id] = v
-            all_paragraph_dict[q_id][context_id] = v
-        except Exception as e:
-            import pdb; pdb.set_trace()
-    for info in dev_data:
-        q_id = info['_id']
-        context = info['context']
-        supporting_facts = info["supporting_facts"]
-        # title$index
-        supporting_facts_set = set(["{}${}".format(x[0], x[1]) for x in supporting_facts])
-        for paragraph_idx, paragraph in enumerate(context):
-            title, sentences = paragraph
-            for sent_idx, sent in enumerate(sentences):
-                if "{}${}".format(title, sent_idx) in supporting_facts_set:
-                    format_result[q_id][1][paragraph_idx] = 1
-    all_true_num = 0
-    for k, v in format_result.items():
-        predict_results, true_results = v
-        max_predict_result = max(predict_results)
-        true_num = 0
-        has_result = False
-        first_best_idx = first_predict_best_dict[k]
-        best_two_paragraph_dict[k].append(first_best_idx)
-        for context_idx, (predict_result, true_result) in enumerate(zip(predict_results, true_results)):
-            if predict_result == max_predict_result and not has_result:
-                if true_result == 1:
-                    has_result = True
-                    best_two_paragraph_dict[k].append(context_idx)
     if not os.path.exists(args.predict_result_path):
         os.makedirs(args.predict_result_path)
-    best_relate_paragraph_file = os.path.join(args.predict_result_path, args.best_relate_paragraph_file)
-    all_paragraph_file = os.path.join(args.predict_result_path, args.all_paragraph_file)
-    json.dump(best_two_paragraph_dict, open(best_relate_paragraph_file, "w", encoding="utf-8"))
-    json.dump(all_paragraph_dict, open(all_paragraph_file, "w", encoding="utf-8"))
+    format_result = {}
+    best_paragraph_dict = {}
+    for k, v in paragraph_results.items():
+        q_id, context_id = k.split('_')
+        context_id = int(context_id)
+        if q_id not in format_result:
+            format_result[q_id] = [0] * 10
+        format_result[q_id][context_id] = v
+    for k, v in format_result.items():
+        predict_results = v
+        max_idx = 0
+        max_predict_result = max(predict_results)
+        for predict_idx, predict_result in enumerate(predict_results):
+            if predict_result == max_predict_result:
+                max_idx = predict_idx
+                break
+        best_paragraph_dict[k] = max_idx
+    if not os.path.exists(args.predict_result_path):
+        os.makedirs(args.predict_result_path)
+    json.dump(best_paragraph_dict, open("{}/{}".format(args.predict_result_path, args.best_paragraph_file),
+                                        "w", encoding="utf-8"))
+    json.dump(format_result, open("{}/{}".format(args.predict_result_path, args.all_paragraph_file),
+                                  "w", encoding="utf-8"))
 
 
 def run_predict(args, rank=0, world_size=1):
@@ -245,6 +218,8 @@ def run_predict(args, rank=0, world_size=1):
     torch.manual_seed(args.seed)
     if n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
+    # 梯度积累设置
+    args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
     if not args.overwrite_result and os.path.exists(args.output_dir) and os.listdir(args.output_dir):
         raise ValueError("Output directory () already exists and is not empty.")
     if rank == 0 and not os.path.exists(args.output_dir):
@@ -273,7 +248,6 @@ def run_predict(args, rank=0, world_size=1):
                 dev_features,
                 tokenizer,
                 dev_examples)
-
 
 
 if __name__ == '__main__':

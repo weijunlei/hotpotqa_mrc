@@ -1,65 +1,31 @@
-#!/usr/bin/evn python
-# encoding: utf-8
-'''
-@author: xiaofenglei
-@contact: weijunlei01@163.com
-@file: train_qa_base.py
-@time: 2020/9/7 17:56
-@desc:
-'''
-# coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# """Run BERT on SQuAD."""
 from __future__ import absolute_import, division, print_function
-import argparse
 import collections
 import json
 import logging
-import math
 import os
 import random
 import sys
 from io import open
-import re
 import torch
 import numpy as np
-from torch.multiprocessing import Process
-import torch.multiprocessing as mp
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler,
-                              TensorDataset)
+from multiprocessing import Process
+from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 import pickle
 import gc
 from transformers import RobertaTokenizer
 
-from origin_read_examples import read_examples
-from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
-from origin_reader_helper import write_predictions, evaluate
+from roberta_model import RobertaForParagraphClassification
+from second_select_helper import read_hotpotqa_examples, convert_examples_to_features
 from lazy_dataloader import LazyLoadTensorDataset
-from config import get_config
+from second_select_config import get_config
 
 sys.path.append("../pretrain_model")
-from changed_model_roberta import RobertaForQuestionAnsweringForwardWithEntity, RobertaForQuestionAnsweringForwardBest
 from optimization import BertAdam, warmup_linear
-# 自定义好的模型
-model_dict = {
-    'RobertaForQuestionAnsweringForwardBest': RobertaForQuestionAnsweringForwardBest,
-    'RobertaForQuestionAnsweringForwardWithEntity': RobertaForQuestionAnsweringForwardWithEntity
-}
+
+model_dict = {'RobertaForParagraphClassification': RobertaForParagraphClassification}
+
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
 logger = None
@@ -91,152 +57,219 @@ def logger_config(log_path, log_prefix='lwj', write2console=True):
     return logger
 
 
-def get_dev_data(args, tokenizer, logger=None):
-    """ 获取验证集数据 """
-    dev_examples = read_examples(
-        input_file=args.dev_file,
-        supporting_para_file=args.dev_supporting_para_file,
-        tokenizer=tokenizer,
-        is_training=False)
-    logger.info('dev examples: {}'.format(len(dev_examples)))
-    cached_dev_features_file = '{}/dev_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
-                                                                      args.bert_model.split('/')[-1],
-                                                                      str(args.max_seq_length),
-                                                                      str(args.doc_stride),
-                                                                      args.feature_suffix)
+def get_dev_data(args, tokenizer):
+    global logger
+    best_paragraph_file = os.path.join(args.first_predict_result_path, args.best_dev_paragraph_file)
+    dev_examples = read_hotpotqa_examples(input_file=args.dev_file,
+                                          best_paragraph_file=best_paragraph_file,
+                                          tokenizer=tokenizer,
+                                          is_training='dev')
+    logger.info("dev examples: {}".format(len(dev_examples)))
+    cached_dev_features_file = '{}/naive_second_selector_dev_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
+                                                                                              args.bert_model.split(
+                                                                                                  '/')[-1],
+                                                                                              str(args.max_seq_length),
+                                                                                              str(args.doc_stride),
+                                                                                              args.log_prefix)
+
     if os.path.exists(cached_dev_features_file):
-        with open(cached_dev_features_file, "rb") as reader:
-            dev_features = pickle.load(reader)
+        with open(cached_dev_features_file, "rb") as f:
+            dev_features = pickle.load(f)
     else:
-        dev_features = convert_dev_examples_to_features(
+        dev_features = convert_examples_to_features(
             examples=dev_examples,
             tokenizer=tokenizer,
             max_seq_length=args.max_seq_length,
-            doc_stride=args.doc_stride,
-            is_training=True)
+            is_training='dev'
+        )
         if args.local_rank == -1 or torch.distributed.get_rank() == 0:
             logger.info(" Saving dev features into cached file %s", cached_dev_features_file)
             with open(cached_dev_features_file, "wb") as writer:
                 pickle.dump(dev_features, writer)
-    logger.info('dev feature_num: {}'.format(len(dev_features)))
-    dev_data = LazyLoadTensorDataset(dev_features, is_training=False)
+    logger.info("dev feature num: {}".format(len(dev_features)))
+    dev_data = LazyLoadTensorDataset(features=dev_features, is_training=False)
     dev_sampler = RandomSampler(dev_data)
     dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.val_batch_size)
     return dev_examples, dev_dataloader, dev_features
 
 
-def get_train_data(args, tokenizer, logger=None):
+def get_train_data(args, tokenizer):
     """ 获取训练数据 """
-    cached_train_features_file = '{}/train_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
-                                                                            args.bert_model.split('/')[-1],
-                                                                            str(args.max_seq_length),
-                                                                            str(args.doc_stride),
-                                                                            args.feature_suffix)
-    tmp_cache_file = cached_train_features_file + '_' + str(0)
-    logger.info("creating examples from origin file to {}".format(args.train_file))
-    train_examples = read_examples(
-        input_file=args.train_file,
-        supporting_para_file=args.train_supporting_para_file,
-        tokenizer=tokenizer,
-        is_training=True)
-    # 当数据配置不变时可以设置为定值
-    example_num = len(train_examples)
+    global logger
+    cached_train_features_file = '{}/naive_second_selector_train_feature_file_{}_{}_{}_{}'.format(
+        args.feature_cache_path,
+        args.bert_model.split('/')[-1],
+        str(args.max_seq_length),
+        str(args.doc_stride),
+        args.log_prefix)
+    logger.info("reading example from file...")
+    best_paragraph_file = os.path.join(args.first_predict_result_path, args.best_train_paragraph_file)
+    train_examples = read_hotpotqa_examples(input_file=args.train_file,
+                                            best_paragraph_file=best_paragraph_file,
+                                            tokenizer=tokenizer,
+                                            is_training='train')
     random.shuffle(train_examples)
-    # else:
-    #     logger.info("get examples from cache file {}".format(args.train_file))
-    #     example_num = 89541
+    example_num = len(train_examples)
     logger.info("train example num: {}".format(example_num))
-    max_train_num = 10000
+    max_train_num = 100000
     start_idxs = list(range(0, example_num, max_train_num))
     end_idxs = [x + max_train_num for x in start_idxs]
     end_idxs[-1] = example_num
     total_feature_num = 0
-
-    for i in range(len(start_idxs)):
-        new_cache_file = cached_train_features_file + '_' + str(i)
+    for idx in range(len(start_idxs)):
+        new_cache_file = cached_train_features_file + '_' + str(idx)
         if os.path.exists(new_cache_file):
-            logger.info("start reading features from cache file: {}".format(new_cache_file))
+            logger.info("start reading feature from cache file: {}...".format(new_cache_file))
             with open(new_cache_file, "rb") as f:
                 train_features = pickle.load(f)
             logger.info("read features done!")
         else:
             logger.info("start reading features from origin examples...")
-            train_examples_ = train_examples[start_idxs[i]: end_idxs[i]]
+            tmp_examples = train_examples[start_idxs[idx]: end_idxs[idx]]
             train_features = convert_examples_to_features(
-                examples=train_examples_,
+                examples=tmp_examples,
                 tokenizer=tokenizer,
                 max_seq_length=args.max_seq_length,
-                doc_stride=args.doc_stride,
-                is_training=True)
+                is_training='train'
+            )
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
-                logger.info("Saving train features into cached file {}".format(new_cache_file))
+                logger.info("Saving train features into cache file {}".format(new_cache_file))
                 with open(new_cache_file, "wb") as writer:
                     pickle.dump(train_features, writer)
+                logger.info("Saving features to file: {} done!".format(new_cache_file))
         total_feature_num += len(train_features)
         del train_features
         gc.collect()
-    logger.info('train feature_num: {}'.format(total_feature_num))
+    logger.info("train feature num: {}".format(total_feature_num))
     return total_feature_num, start_idxs, cached_train_features_file
 
 
-def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, dev_examples):
-    """ 模型验证 """
+def dev_evaluate(args,
+                 model,
+                 dev_dataloader,
+                 n_gpu,
+                 device,
+                 dev_features,
+                 tokenizer,
+                 dev_examples):
+    """ 验证结果 """
+    acc = pre = recall = f1 = em = 0
     model.eval()
     all_results = []
     RawResult = collections.namedtuple("RawResult",
-                                       ["unique_id", "start_logit", "end_logit", "sent_logit"])
-
+                                       ["unique_id", "logit"])
+    total_loss = 0
     with torch.no_grad():
-        for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Dev Iteration")):
-            d_example_indices = d_batch[-1].squeeze()
-            if n_gpu == 1:
-                d_batch = tuple(
-                    t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
-            else:
-                d_batch = d_batch[:-1]
-            input_ids, input_mask, segment_ids, sent_mask, content_len, entity_ids = d_batch
-            if len(input_ids.shape) < 2:
-                input_ids = input_ids.unsqueeze(0)
-                segment_ids = segment_ids.unsqueeze(0)
-                input_mask = input_mask.unsqueeze(0)
-                entity_ids = entity_ids.unsqueeze(0)
-                if start_positions is not None and len(start_positions.shape) < 2:
-                    start_positions = start_positions.unsqueeze(0)
-                    end_positions = end_positions.unsqueeze(0)
-                    sent_mask = sent_mask.unsqueeze(0)
-                    sent_lbs = sent_lbs.unsqueeze(0)
-                    sent_weight = sent_weight.unsqueeze(0)
-            dev_start_logits, dev_end_logits, dev_sent_logits = model(input_ids,
-                                                                      input_mask,
-                                                                      segment_ids,
-                                                                      # word_sim_matrix=d_word_sim_matrix,
-                                                                      entity_ids=entity_ids,
-                                                                      sent_mask=sent_mask)
-            for idx, example_index in enumerate(d_example_indices):
-                dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
-                dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
-                dev_sent_logit = dev_sent_logits[idx].detach().cpu().tolist()
-                dev_feature = dev_features[example_index.item()]
-                unique_id = dev_feature.unique_id
-                all_results.append(
-                    RawResult(unique_id=unique_id, start_logit=dev_start_logit, end_logit=dev_end_logit,
-                              sent_logit=dev_sent_logit))
-
-    _, preds, sp_pred = write_predictions(tokenizer, dev_examples, dev_features, all_results)
-    ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = evaluate(dev_examples, preds, sp_pred)
+        for step, d_batch in enumerate(tqdm(dev_dataloader, desc="Predict Iteration")):
+            try:
+                example_indices = d_batch[-1]
+                if n_gpu == 1:
+                    d_batch = tuple(x.squeeze(0).to(device) for x in d_batch[:-1])
+                else:
+                    d_batch = d_batch[:-1]
+                input_ids, input_mask, segment_ids = d_batch
+                dev_logits = model(input_ids=input_ids, attention_mask=input_mask, token_type_ids=segment_ids)
+                dev_logits = torch.sigmoid(dev_logits)
+                for i, example_index in enumerate(example_indices):
+                    dev_logit = dev_logits[i].detach().cpu().tolist()
+                    dev_logit.reverse()
+                    dev_feature = dev_features[example_index.item()]
+                    unique_id = dev_feature.unique_id
+                    all_results.append(RawResult(unique_id=unique_id,
+                                                 logit=dev_logit))
+            except Exception as e:
+                import pdb; pdb.set_trace()
     model.train()
-    return ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
+    acc, pre, recall, f1, em = write_predictions(args, dev_features, dev_examples, all_results)
+    return acc, pre, recall, f1, em
 
 
-def run_train(rank=0, world_size=1):
-    parser = get_config()
-    args = parser.parse_args()
-    # 模型缓存文件
-    pretrained_model_path = "/home/leiwj/mydata/pretrained_models/"
-    new_model_path = os.path.join(pretrained_model_path, args.bert_model)
-    if os.path.exists(new_model_path):
-        args.bert_model = new_model_path
+def write_predictions(args, features, examples, all_result):
+    """ 写入结果 """
+    acc = pre = recall = f1 = em = 0
+    example_index2features = collections.defaultdict(list)
+    for feature in features:
+        example_index2features[feature.example_id].append(feature)
+    unique_id2result = {x[0]: x for x in all_result}
+    paragraph_results = {}
+    for example_index, example in enumerate(examples):
+        features = example_index2features[example_index]
+        qas_id = '_'.join(features[0].unique_id.split('_')[:-1])
+        if len(features) == 0:
+            get_feature = feature[0]
+            get_feature_id = get_feature.unique_id
+            raw_result = unique_id2result[get_feature_id].logit
+            paragraph_results[qas_id] = raw_result[0]
+        else:
+            for get_feature in features:
+                get_feature_id = get_feature.unique_id
+                raw_result = unique_id2result[get_feature_id].logit
+                if qas_id not in paragraph_results:
+                    paragraph_results[qas_id] = raw_result[0]
+                else:
+                    paragraph_results[qas_id] = max(paragraph_results[qas_id], raw_result[0])
+    return evaluate_result(args, paragraph_results)
+
+
+def evaluate_result(args, paragraph_results, thread=0.5):
+    dev_data = json.load(open(args.dev_file, "r"))
+    acc = pre = recall = f1 = em = 0
+    format_result = {}
+    best_paragraph_file = os.path.join(args.first_predict_result_path, args.best_dev_paragraph_file)
+    first_predict_best_dict = json.load(open(best_paragraph_file, "r"))
+    error_num = 0
+    for info in dev_data:
+        q_id = info['_id']
+        format_result[q_id] = [[0] * 10, [0] * 10]
+    for k, v in paragraph_results.items():
+        q_id, context_id = k.split('_')
+        context_id = int(context_id)
+        if q_id not in format_result:
+            format_result[q_id] = [[0] * 10, [0] * 10]
+        format_result[q_id][0][context_id] = v
+    for info in dev_data:
+        q_id = info['_id']
+        context = info['context']
+        supporting_facts = info["supporting_facts"]
+        # title$index
+        supporting_facts_set = set(["{}${}".format(x[0], x[1]) for x in supporting_facts])
+        for paragraph_idx, paragraph in enumerate(context):
+            title, sentences = paragraph
+            for sent_idx, sent in enumerate(sentences):
+                if "{}${}".format(title, sent_idx) in supporting_facts_set:
+                    format_result[q_id][1][paragraph_idx] = 1
+    all_true_num = 0
+    for k, v in format_result.items():
+        predict_results, true_results = v
+        max_predict_result = max(predict_results)
+        true_num = 0
+        has_result = False
+        first_best_idx = first_predict_best_dict[k]
+        for context_idx, (predict_result, true_result) in enumerate(zip(predict_results, true_results)):
+            if predict_result == max_predict_result and not has_result:
+                if true_result == 1:
+                    has_result = True
+                    acc += 1
+                    true_num += 1
+            if true_result == 1:
+                all_true_num += 1
+                if first_best_idx == context_idx:
+                    true_num += 1
+                    acc += 1
+        recall += true_num if true_num <= 2 else 2
+        em += 1 if true_num == 2 else 0
+    predict_num = len(format_result) * 2
+    recall = 1.0 * acc / all_true_num
+    acc = 1.0 * acc / predict_num
+    pre = acc
+    f1 = 2 * (acc * recall) / (acc + recall)
+    em = 1.0 * em / len(format_result)
+    return acc, pre, recall, f1, em
+
+
+def run_train(args, rank=0, world_size=1):
     # 配置日志文件
+    global logger
     if rank == 0 and not os.path.exists(args.log_path):
         os.makedirs(args.log_path)
     log_path = os.path.join(args.log_path, 'log_{}_{}_{}_{}_{}_{}.log'.format(args.log_prefix,
@@ -251,7 +284,6 @@ def run_train(rank=0, world_size=1):
     for arg in vars(args):
         logger.info('{}: {}'.format(arg, getattr(args, arg)))
     logger.info('-' * 30)
-
     # 分布式训练设置
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -294,12 +326,6 @@ def run_train(rank=0, world_size=1):
     if args.fp16:
         model.half()
     model.to(device)
-    # if args.local_rank != -1:
-    #     try:
-    #         from apex.parallel import DistributedDataParallel as DDP
-    #     except ImportError:
-    #         raise ImportError(
-    #             "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
     if args.local_rank != -1:
         logger.info("setting model {}..".format(rank))
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank], find_unused_parameters=True)
@@ -310,8 +336,6 @@ def run_train(rank=0, world_size=1):
     # 参数配置
     logger.info("parameter setting...")
     param_optimizer = list(model.named_parameters())
-    # hack to remove pooler, which is not used
-    # thus it produce None grad that break apex
     param_optimizer = [n for n in param_optimizer if 'pooler' not in n[0]]
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
@@ -324,7 +348,7 @@ def run_train(rank=0, world_size=1):
     # 获取训练集数据
     if rank == 0 and not os.path.exists(args.feature_cache_path):
         os.makedirs(args.feature_cache_path)
-    total_feature_num, start_idxs, cached_train_features_file = get_train_data(args, tokenizer=tokenizer, logger=logger)
+    total_feature_num, start_idxs, cached_train_features_file = get_train_data(args=args, tokenizer=tokenizer)
     model.train()
     num_train_optimization_steps = int(
         total_feature_num / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
@@ -352,7 +376,6 @@ def run_train(rank=0, world_size=1):
                              warmup=args.warmup_proportion,
                              t_total=num_train_optimization_steps)
         logger.info("t_total: {}".format(num_train_optimization_steps))
-
     max_f1 = 0
     print_loss = 0
     for epoch_idx in trange(int(args.num_train_epochs), desc="Epoch"):
@@ -379,31 +402,19 @@ def run_train(rank=0, world_size=1):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, sent_mask, content_len, entity_ids, start_positions, end_positions, sent_lbs, sent_weight = batch
+                input_ids, input_mask, segment_ids, example_indexs, labels = batch
                 if len(input_ids.shape) < 2:
                     input_ids = input_ids.unsqueeze(0)
                     segment_ids = segment_ids.unsqueeze(0)
                     input_mask = input_mask.unsqueeze(0)
-                    entity_ids = entity_ids.unsqueeze(0)
-                    if start_positions is not None and len(start_positions.shape) < 2:
-                        start_positions = start_positions.unsqueeze(0)
-                        end_positions = end_positions.unsqueeze(0)
-                        sent_mask = sent_mask.unsqueeze(0)
-                        sent_lbs = sent_lbs.unsqueeze(0)
-                        sent_weight = sent_weight.unsqueeze(0)
-                loss, _, _, _ = model(input_ids,
-                                      input_mask,
-                                      segment_ids,
-                                      # word_sim_matrix=word_sim_matrix,
-                                      entity_ids=entity_ids,
-                                      start_positions=start_positions,
-                                      end_positions=end_positions,
-                                      sent_mask=sent_mask,
-                                      sent_lbs=sent_lbs,
-                                      sent_weight=sent_weight)
+                    if labels is not None and len(labels.shape) < 2:
+                        labels = labels.unsqueeze(0)
+                loss, _ = model(input_ids=input_ids,
+                                attention_mask=input_mask,
+                                token_type_ids=segment_ids,
+                                label=labels)
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
-                # logger.debug("step = %d, train_loss=%f", global_step, loss)
                 print_loss += loss
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
@@ -432,37 +443,38 @@ def run_train(rank=0, world_size=1):
                 if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
                     # 获取验证集数据
                     if rank == 0:
-                        dev_examples, dev_dataloader, dev_features = get_dev_data(args, tokenizer=tokenizer, logger=logger)
-                        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
-                                                                                        dev_dataloader,
-                                                                                        n_gpu,
-                                                                                        device,
-                                                                                        dev_features,
-                                                                                        tokenizer,
-                                                                                        dev_examples)
+                        dev_examples, dev_dataloader, dev_features = get_dev_data(args,
+                                                                                  tokenizer=tokenizer)
+                        acc, pre, recall, f1, em = dev_evaluate(args,
+                                                                model,
+                                                                dev_dataloader,
+                                                                n_gpu,
+                                                                device,
+                                                                dev_features,
+                                                                tokenizer,
+                                                                dev_examples)
                         logger.info("epoch:{} data: {} step: {}".format(epoch_idx, ind, global_step))
-                        logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
-                            ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
+                        logger.info("acc:{} pre:{} recall:{} em: {}".format(
+                            acc, pre, recall, em
                         ))
                         del dev_examples, dev_dataloader, dev_features
                         gc.collect()
-                    logger.info("max_f1: {}".format(max_f1))
-                    if rank == 0 and joint_f1 > max_f1:
-                        logger.info("get better model in step: {} with joint f1: {}".format(global_step, joint_f1))
-                        max_f1 = joint_f1
-                        model_to_save = model.module if hasattr(model,
-                                                                'module') else model  # Only save the model it-self
-                        output_model_file = os.path.join(args.output_dir, 'pytorch_model_best.bin')
-                        # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
-                        torch.save(model_to_save.state_dict(), output_model_file)
-                        output_config_file = os.path.join(args.output_dir, 'config.json')
-                        with open(output_config_file, 'w') as f:
-                            f.write(model_to_save.config.to_json_string())
-                        logger.info('saving step: {} model'.format(global_step))
+                        logger.info("max_f1: {}".format(max_f1))
+                        if f1 > max_f1:
+                            logger.info("get better model in step: {} with f1: {}".format(global_step, f1))
+                            max_f1 = f1
+                            model_to_save = model.module if hasattr(model,
+                                                                    'module') else model  # Only save the model it-self
+                            output_model_file = os.path.join(args.output_dir, 'pytorch_model_best.bin')
+                            # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
+                            torch.save(model_to_save.state_dict(), output_model_file)
+                            output_config_file = os.path.join(args.output_dir, 'config.json')
+                            with open(output_config_file, 'w') as f:
+                                f.write(model_to_save.config.to_json_string())
+                            logger.info('saving step: {} model'.format(global_step))
             # 内存清除
             del train_features, input_ids, input_mask, segment_ids
-            del start_positions, end_positions, sent_lbs, sent_mask
-            del sent_weight, train_data, train_dataloader
+            del labels, train_data, train_dataloader
             gc.collect()
     # 保存最后的模型
     logger.info("t_total: {} global steps: {}".format(num_train_optimization_steps, global_step))
@@ -477,15 +489,15 @@ def run_train(rank=0, world_size=1):
         logger.info('saving step: {} model'.format(global_step))
 
 
-if __name__ == "__main__":
-    use_ddp = False
-    if not use_ddp:
-        run_train()
+if __name__ == '__main__':
+    parser = get_config()
+    args = parser.parse_args()
+    if not args.use_ddp:
+        run_train(args)
     else:
-        world_size = 2
         processes = []
-        for rank in range(world_size):
-            p = Process(target=run_train, args=(rank, world_size))
+        for rank in range(args.world_size):
+            p = Process(target=run_train, args=(args, rank, args.world_size))
             p.start()
             processes.append(p)
         for p in processes:
