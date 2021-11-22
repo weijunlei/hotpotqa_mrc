@@ -1,68 +1,20 @@
 import json
-import random
 from tqdm import tqdm
 
+from first_hop_data_helper import HotpotQAExample
+from first_hop_data_helper import HotpotInputFeatures
 
-class HotpotQAExample(object):
-    """ HotpotQA 实例解析"""
-    def __init__(self,
-                 qas_id,
-                 question_tokens,
-                 context_tokens,
-                 sentences_label=None,
-                 paragraph_label=None):
-        self.qas_id = qas_id
-        self.question_tokens = question_tokens
-        self.context_tokens = context_tokens
-        self.sentences_label = sentences_label
-        self.paragraph_label = paragraph_label
-
-    def __repr__(self):
-        qa_info = "qas_id:{} question:{}".format(self.qas_id, self.question_tokens)
-        if self.sentences_label:
-            qa_info += " sentence label:{}".format(''.join([str(x) for x in self.sentences_label]))
-        if self.paragraph_label:
-            qa_info += " paragraph label: {}".format(self.paragraph_label)
-        return qa_info
-
-    def __str__(self):
-        return self.__repr__()
-
-
-class HotpotInputFeatures(object):
-    """ HotpotQA input features to model """
-    def __init__(self,
-                 unique_id,
-                 example_index,
-                 doc_span_index,
-                 tokens,
-                 input_ids,
-                 input_mask,
-                 segment_ids,
-                 cls_mask,
-                 cls_label=None,
-                 cls_weight=None,
-                 is_related=None,
-                 roll_back=None):
-        self.unique_id = unique_id
-        self.example_index = example_index
-        self.doc_span_index = doc_span_index
-        self.tokens = tokens
-        self.input_ids = input_ids
-        self.input_mask = input_mask
-        self.segment_ids = segment_ids
-        self.cls_mask = cls_mask
-        self.cls_label = cls_label
-        self.cls_weight = cls_weight
-        self.is_related = is_related
-        self.roll_back = roll_back
-
-
-def read_hotpotqa_examples(input_file,
-                           is_training: str = 'train',
-                           not_related_sample_rate: float = 0.25):
+def read_second_hotpotqa_examples(input_file,
+                                  best_paragraph_file,
+                                  related_paragraph_file,
+                                  new_context_file,
+                                  is_training: str = 'train',
+                                  not_related_sample_rate: float = 0.25):
     """ 获取原始数据 """
     data = json.load(open(input_file, 'r'))
+    best_paragraph = json.load(open(best_paragraph_file, 'r'))
+    related_paragraph = json.load(open(related_paragraph_file, 'r'))
+    new_context = json.load(open(new_context_file, 'r'))
     # 测试流程通过情况
     # data = data[:100]
     examples = []
@@ -77,7 +29,12 @@ def read_hotpotqa_examples(input_file,
         else:
             supporting_facts = info['supporting_facts']
         supporting_facts_dict = set(['{}${}'.format(x[0], x[1]) for x in supporting_facts])
+        qas_id = info['_id']
+        question = new_context[qas_id]
+        best_paragraph_idx = best_paragraph[qas_id]
         for idx, paragraph in enumerate(context):
+            if idx == best_paragraph_idx:
+                continue
             labels = []
             title, sentences = paragraph
             related = False
@@ -87,15 +44,15 @@ def read_hotpotqa_examples(input_file,
                     related = True
                 else:
                     labels.append(0)
-            # 控制训练时的负样本采样比例
-            if is_training == 'train' and not related and random.random() > not_related_sample_rate:
+            # 去除非相关的paragraph
+            if is_training == 'train' and not related and idx not in related_paragraph[qas_id]: # and random.random() > not_related_sample_rate:
                 continue
             if related:
                 related_num += 1
             else:
                 not_related_num += 1
             example = HotpotQAExample(
-                qas_id='{}_{}'.format(info['_id'], idx),
+                qas_id='{}_{}'.format(qas_id, idx),
                 question_tokens=question,
                 context_tokens=paragraph,
                 sentences_label=labels,
@@ -112,13 +69,17 @@ def read_hotpotqa_examples(input_file,
     return examples
 
 
-def convert_examples_to_features(examples, tokenizer, max_seq_length, is_training):
+def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_training):
     """ 将实例转化为特征 """
     features = []
     related_sent_num = 0
     not_related_sent_num = 0
+    get_qas_id = {}
     for example_index, example in enumerate(tqdm(examples, desc="convert examples to features...")):
         query_tokens = tokenizer.tokenize(example.question_tokens)
+        # 当query+第一段结果长度大于512时的处理方法
+        if len(query_tokens) >= 400:
+            query_tokens = query_tokens[:300]
         # special tokens ['CLS'] ['SEP'] ['SEP']
         max_context_length = max_seq_length - len(query_tokens) - 3
         cur_context_length = 0
@@ -129,7 +90,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, is_trainin
         if is_training == 'train' or is_training == 'dev':
             cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
         else:
-            cls_label = [0] * len(all_tokens)
+            cls_label = [0] + [0] * (len(all_tokens) - 1)
         cls_weight = [1] + [0] * (len(all_tokens) - 1)
         sent_idx = 0
         pre_sent1_length = None
@@ -161,14 +122,17 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, is_trainin
                         roll_back = 2
                     elif pre_sent1_length + len(sentence_tokens) + 1 <= max_context_length:
                         roll_back = 1
-                elif not pre_sent1_length and pre_sent1_length + len(sentence_tokens) + 1 <= max_context_length:
+                elif pre_sent1_length is not None and pre_sent1_length + len(sentence_tokens) + 1 <= max_context_length:
                     roll_back = 1
                 sent_idx -= roll_back
                 # 判断是否有支撑句，若无则新判别为非支撑段落
                 real_related = int(bool(sum(cls_label) - cls_label[0]))
                 if real_related != cls_label[0]:
                     cls_label[0] = real_related
-                assert len(cls_mask) == max_seq_length
+                try:
+                    assert len(cls_mask) == max_seq_length
+                except Exception as e:
+                    import pdb; pdb.set_trace()
                 assert len(cls_label) == max_seq_length
                 assert len(cls_weight) == max_seq_length
                 assert len(input_ids) == max_seq_length
@@ -197,9 +161,9 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, is_trainin
                 cls_weight = [1] + [0] * (len(all_tokens) - 1)
             else:
                 all_tokens += ['[UNK]'] + sentence_tokens  # unk
-                cls_mask += [1] + [0] * len(sentence_tokens)
-                cls_label += [sent_label] + [0] * len(sentence_tokens)
-                cls_weight += [1 if sent_label else 0.2] + [0] * len(sentence_tokens)
+                cls_mask += [1] + [0] * (len(sentence_tokens) + 0)
+                cls_label += [sent_label] + [0] * (len(sentence_tokens) + 0)
+                cls_weight += [1 if sent_label else 0.2] + [0] * (len(sentence_tokens) + 0)
                 cur_context_length += len(sentence_tokens) + 1
                 sent_idx += 1
             pre_sent2_length = pre_sent1_length
@@ -215,6 +179,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, is_trainin
         cls_mask += [0] * (max_seq_length - tmp_len)
         cls_label += [0] * (max_seq_length - tmp_len)
         cls_weight += [0] * (max_seq_length - tmp_len)
+        # 二次判别看是否删除掉了支撑句
         real_related = int(bool(sum(cls_label) - cls_label[0]))
         if real_related != cls_label[0]:
             cls_label[0] = real_related
