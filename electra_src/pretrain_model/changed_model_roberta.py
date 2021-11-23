@@ -24,7 +24,6 @@ class ElectraForParagraphClassification(ElectraModel):
                 cls_mask = cls_mask.unsqueeze(0)
                 cls_label = cls_label.unsqueeze(0)
                 cls_weight = cls_weight.unsqueeze(0)
-        token_type_ids = torch.zeros_like(token_type_ids).cuda()
         outputs = self.bert(input_ids=input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids)
@@ -61,7 +60,6 @@ class ElectraForRelatedSentence(ElectraModel):
                 cls_mask = cls_mask.unsqueeze(0)
                 cls_label = cls_label.unsqueeze(0)
                 cls_weight = cls_weight.unsqueeze(0)
-        token_type_ids = torch.zeros_like(token_type_ids).cuda()
         sequence_output = self.robert(input_ids=input_ids,
                                       attention_mask=attention_mask,
                                       token_type_ids=token_type_ids)
