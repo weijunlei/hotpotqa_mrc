@@ -10,14 +10,13 @@ import pickle
 import collections
 from tqdm import trange, tqdm
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler, TensorDataset)
-from transformers import BertTokenizer
+from transformers import ElectraTokenizer
 from torch.utils.data.distributed import DistributedSampler
 
 from first_hop_data_helper import convert_examples_to_features, read_hotpotqa_examples
 from first_hop_prediction_helper import prediction_evaluate, write_predictions
 sys.path.append("../pretrain_model")
-from changed_model import BertForParagraphClassification, BertForRelatedSentence
-from modeling_bert import *
+from changed_model_electra import ElectraForParagraphClassification, ElectraForRelatedSentence
 from optimization import BertAdam, warmup_linear
 
 
@@ -102,7 +101,7 @@ def convert_examples2file(examples,
     return total_feature_num
 
 
-def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelatedSentence'):
+def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='ElectraForRelatedSentence'):
     """ 评估验证集效果 """
     dev_examples, dev_features, dev_dataloader = dev_feature_getter(args, tokenizer=tokenizer)
     model.eval()
@@ -127,7 +126,7 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
             dev_logits = torch.sigmoid(dev_logits)
             total_loss += dev_loss
             for i, example_index in enumerate(d_example_indices):
-                if model_name == 'BertForParagraphClassification':
+                if model_name == 'ElectraForParagraphClassification':
                     dev_logit = dev_logits[i].detach().cpu().tolist()
                     dev_logit.reverse()
                 else:
@@ -136,7 +135,7 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
                 unique_id = dev_feature.unique_id
                 all_results.append(RawResult(unique_id=unique_id,
                                              logit=dev_logit))
-    if model_name == 'BertForParagraphClassification':
+    if model_name == 'ElectraForParagraphClassification':
         acc, prec, em, rec = write_predictions(dev_examples,
                                                dev_features,
                                                all_results,
@@ -302,9 +301,9 @@ def run_train(args):
         os.makedirs(args.output_dir)
 
     # 模型和分词器配置
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
-                   "BertForParagraphClassification": BertForParagraphClassification}
+    tokenizer = ElectraTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    models_dict = {"ElectraForRelatedSentence": ElectraForRelatedSentence,
+                   "ElectraForParagraphClassification": ElectraForParagraphClassification}
     model = models_dict[args.model_name].from_pretrained(args.bert_model)
 
     # fp16计算和并行化处理

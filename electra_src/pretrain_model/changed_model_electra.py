@@ -3,15 +3,16 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 import math
 
+from transformers import ElectraPreTrainedModel, ElectraModel
 from modeling_bert import BertPreTrainedModel, BertModel, BertOutput, BertSelfOutput, BertIntermediate
 from transformer import TransformerLayer
 
 
-class BertForParagraphClassification(BertPreTrainedModel):
+class ElectraForParagraphClassification(ElectraPreTrainedModel):
     def __init__(self, config):
-        super(BertForParagraphClassification, self).__init__(config)
+        super(ElectraForParagraphClassification, self).__init__(config)
 
-        self.bert = BertModel(config)
+        self.bert = ElectraModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
         self.init_weights()
@@ -28,7 +29,9 @@ class BertForParagraphClassification(BertPreTrainedModel):
                             position_ids=position_ids,
                             head_mask=head_mask)
 
-        cls_output = outputs[1]
+        cls_output = outputs[0]
+        cls_output = torch.index_select(cls_output, dim=1, index=torch.tensor([0, ]).cuda())
+        cls_output = cls_output.squeeze(-1)
         cls_output = self.dropout(cls_output)
         logits = self.classifier(cls_output).squeeze(-1)
         if cls_label is None:
@@ -40,12 +43,12 @@ class BertForParagraphClassification(BertPreTrainedModel):
         return loss, logits  # (loss), scores, (hidden_states), (attentions)
 
 
-class BertForRelatedSentence(BertPreTrainedModel):
+class ElectraForRelatedSentence(ElectraPreTrainedModel):
 
     def __init__(self, config):
-        super(BertForRelatedSentence, self).__init__(config)
+        super(ElectraForRelatedSentence, self).__init__(config)
 
-        self.bert = BertModel(config)
+        self.bert = ElectraModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -57,11 +60,12 @@ class BertForRelatedSentence(BertPreTrainedModel):
             input_ids = input_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
-        sequence_output, _ = self.bert(input_ids=input_ids,
+        sequence_output = self.bert(input_ids=input_ids,
                                        attention_mask=attention_mask,
                                        token_type_ids=token_type_ids,
                                        position_ids=position_ids,
                                        head_mask=head_mask)
+        sequence_output = sequence_output[0]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output).squeeze(-1)
         loss_fn1 = torch.nn.BCEWithLogitsLoss(reduce=False, size_average=False)
