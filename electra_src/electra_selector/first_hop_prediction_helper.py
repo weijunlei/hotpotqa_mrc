@@ -84,6 +84,8 @@ def write_predictions(all_examples, all_features, all_results, is_training='trai
             # 对max_seq预测的结果
             raw_result = unique_id2result[get_feature_id].logit
             # 第一个'[CLS]'为paragraph为支撑句标识
+            if len(raw_result) == 1:
+                raw_result = raw_result[0]
             paragraph_results[id] = raw_result[0]
             labels_result = raw_result
             cls_masks = get_feature.cls_mask
@@ -110,9 +112,14 @@ def write_predictions(all_examples, all_features, all_results, is_training='trai
             mask1 = 0
             roll_back = None
             for feature_idx, feature in enumerate(features):
-                feature_result = unique_id2result[feature.unique_id].logit
-                if feature_result[0] > paragraph_result:
-                    paragraph_result = feature_result[0]
+                try:
+                    feature_result = unique_id2result[feature.unique_id].logit
+                    if len(feature_result) == 1:
+                        feature_result = feature_result[0]
+                    if feature_result[0] > paragraph_result:
+                        paragraph_result = feature_result[0]
+                except Exception as e:
+                    import pdb; pdb.set_trace()
                 tmp_sent_result = []
                 tmp_label_result = []
                 mask1 += sum(feature.cls_mask[1:])
