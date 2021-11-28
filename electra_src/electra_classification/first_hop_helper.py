@@ -49,8 +49,8 @@ class HotpotInputFeatures(object):
 
 
 def read_hotpotqa_examples(input_file,
-                           is_training: str='train',
-                           not_related_sample_rate: float=1):
+                           is_training: str = 'train',
+                           not_related_sample_rate: float = 1.0):
     """ 获取原始数据 """
     data = json.load(open(input_file, 'r'))
     # if is_training == 'dev':
@@ -113,8 +113,9 @@ def convert_example_to_features(examples,
         query_tokens = tokenizer.tokenize(example.question_tokens)
         # cls + query + sep + context + sep
         max_context_length = max_seq_length - len(query_tokens) - 3
-        sentences = example.context_tokens[0]
+        title, sentences = example.context_tokens
         context_tokens = []
+        context_tokens.extend(tokenizer.tokenize(title))
         for sentence_idx, sentence in enumerate(sentences):
             context_tokens.extend(tokenizer.tokenize(sentence))
         if len(context_tokens) > max_context_length:

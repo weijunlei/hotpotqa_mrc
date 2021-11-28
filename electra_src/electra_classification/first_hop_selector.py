@@ -14,7 +14,13 @@ from tqdm import trange, tqdm
 from torch.multiprocessing import Process
 from torch.utils.data import DataLoader, RandomSampler, TensorDataset, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-from transformers import ElectraTokenizer, ElectraForSequenceClassification, get_linear_schedule_with_warmup
+from transformers import (ElectraTokenizer,
+                          ElectraForSequenceClassification,
+                          get_linear_schedule_with_warmup,
+                          BertTokenizer,
+                          BertForSequenceClassification,
+                          RobertaTokenizer,
+                          RobertaForSequenceClassification)
 from transformers import AdamW
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -88,11 +94,17 @@ def evaluate(args, model, eval_dataloader, features, tokenizer, prefix='dev', st
             model.eval()
             batch = tuple(t.to(args.device) for t in batch)
             with torch.no_grad():
-                inputs = {
-                    "input_ids": batch[0],
-                    "attention_mask": batch[1],
-                    "token_type_ids": batch[2]
-                }
+                if 'roberta' in args.bert_model.lower():
+                    inputs = {
+                        "input_ids": batch[0],
+                        "attention_mask": batch[1],
+                    }
+                else:
+                    inputs = {
+                        "input_ids": batch[0],
+                        "attention_mask": batch[1],
+                        "token_type_ids": batch[2],
+                    }
                 example_indices = batch[3]
                 outputs = model(**inputs)
                 outputs = outputs.logits
@@ -111,6 +123,7 @@ def evaluate(args, model, eval_dataloader, features, tokenizer, prefix='dev', st
                 if new_prob >= origin_predict_result:
                     predict_result[qas_id] = new_prob
         example_result = {}
+        write_result = {}
         for qas_id, qas_prob in predict_result.items():
             qa_id, paragraph_idx = qas_id.rsplit('_', 1)
             paragraph_idx = int(paragraph_idx)
@@ -127,6 +140,7 @@ def evaluate(args, model, eval_dataloader, features, tokenizer, prefix='dev', st
             is_first = True
             for paragraph_idx, paragraph_prob in enumerate(example_info):
                 if is_first and paragraph_prob == max_thread:
+                    write_result[qa_id] = paragraph_idx
                     if true_info[paragraph_idx] == 1:
                         best_acc_num += 1
                         best_precision_num += 1
@@ -140,6 +154,11 @@ def evaluate(args, model, eval_dataloader, features, tokenizer, prefix='dev', st
         eval_result['acc'] = 1.0 * best_acc_num / len(example_result)
         eval_result['best_precision_num'] = 1.0 * best_precision_num / len(example_result)
         eval_result['recall'] = 1.0 * recall_num / all_true_num
+        if not os.path.exists(args.output_dir):
+            os.makedirs(args.output_dir)
+        write_result_file = "{}/{}_eval_result.json".format(args.output_dir, step)
+        with open(write_result_file, "w") as f:
+            json.dump(write_result, f)
     except Exception as e:
         import pdb; pdb.set_trace()
     return eval_result
@@ -196,7 +215,7 @@ def run_train(rank=0, world_size=1):
     args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
     if not args.train_file:
         raise ValueError('`train_file` is not specified!')
-    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and not args.over_write_result:
+    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and not args.overwrite_result:
         raise ValueError('output_dir {} already exists!'.format(args.output_dir))
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -217,8 +236,23 @@ def run_train(rank=0, world_size=1):
         os.makedirs(args.output_dir)
     # TODO check do lower case work?
     # 设置分词器和模型
-    tokenizer = ElectraTokenizer.from_pretrained(args.bert_model)
-    model = ElectraForSequenceClassification.from_pretrained(args.bert_model)
+    cls_token = '[CLS]'
+    sep_token = '[SEP]'
+    unk_token = '[UNK]'
+    pad_token = '[PAD]'
+    if 'roberta' in args.bert_model.lower():
+        tokenizer = RobertaTokenizer.from_pretrained(args.bert_model)
+        model = RobertaForSequenceClassification.from_pretrained(args.bert_model)
+        cls_token = '<s>'
+        sep_token = '</s>'
+        unk_token = '<unk>'
+        pad_token = '<pad>'
+    elif 'bert' in args.bert_model.lower():
+        tokenizer = BertTokenizer.from_pretrained(args.bert_model)
+        model = BertForSequenceClassification.from_pretrained(args.bert_model)
+    elif 'electra' in args.bert_model.lower():
+        tokenizer = ElectraTokenizer.from_pretrained(args.bert_model)
+        model = ElectraForSequenceClassification.from_pretrained(args.bert_model)
     train_examples = None
     num_train_optimization_steps = None
 
@@ -246,10 +280,10 @@ def run_train(rank=0, world_size=1):
                                                      tokenizer=tokenizer,
                                                      max_seq_length=args.max_seq_length,
                                                      is_training='train',
-                                                     cls_token='[CLS]',
-                                                     sep_token='[SEP]',
-                                                     unk_token='[UNK]',
-                                                     pad_token='[PAD]'
+                                                     cls_token=cls_token,
+                                                     sep_token=sep_token,
+                                                     unk_token=unk_token,
+                                                     pad_token=pad_token
                                                      )
         with open(cached_train_features_file, "wb") as writer:
             pickle.dump(train_features, writer)
@@ -271,10 +305,10 @@ def run_train(rank=0, world_size=1):
                                                    tokenizer=tokenizer,
                                                    max_seq_length=args.max_seq_length,
                                                    is_training='dev',
-                                                   cls_token='[CLS]',
-                                                   sep_token='[SEP]',
-                                                   unk_token='[UNK]',
-                                                   pad_token='[PAD]')
+                                                   cls_token='<s>',
+                                                   sep_token='</s>',
+                                                   unk_token='<unk>',
+                                                   pad_token='<pad>')
         with open(cached_dev_features_file, "wb") as writer:
             pickle.dump(dev_features, writer)
     logger.info("load dev feature done!")
@@ -387,12 +421,20 @@ def run_train(rank=0, world_size=1):
                 continue
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
-            inputs = {
-                "input_ids": batch[0],
-                "attention_mask": batch[1],
-                "token_type_ids": batch[2],
-                "labels": batch[3]
-            }
+            if 'roberta' in args.bert_model.lower():
+                inputs = {
+                    "input_ids": batch[0],
+                    "attention_mask": batch[1],
+                    # "token_type_ids": batch[2],
+                    "labels": batch[3]
+                }
+            else:
+                inputs = {
+                    "input_ids": batch[0],
+                    "attention_mask": batch[1],
+                    "token_type_ids": batch[2],
+                    "labels": batch[3]
+                }
             outputs = model(**inputs)
             # model outputs are always tuple in transformers (see doc)
             loss = outputs[0]
