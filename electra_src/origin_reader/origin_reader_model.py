@@ -470,6 +470,7 @@ def run_train(rank=0, world_size=1):
             del start_positions, end_positions, sent_lbs, sent_mask
             del sent_weight, train_data, train_dataloader
             gc.collect()
+
     # 保存最后的模型
     logger.info("t_total: {} global steps: {}".format(num_train_optimization_steps, global_step))
     if rank == 0:
