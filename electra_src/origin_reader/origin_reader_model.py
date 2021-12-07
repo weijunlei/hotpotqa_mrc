@@ -96,11 +96,22 @@ def logger_config(log_path, log_prefix='lwj', write2console=True):
 
 def get_dev_data(args, tokenizer, logger=None):
     """ 获取验证集数据 """
-    dev_examples = read_examples(
-        input_file=args.dev_file,
-        supporting_para_file=args.dev_supporting_para_file,
-        tokenizer=tokenizer,
-        is_training=False)
+    cached_dev_example_file = '{}/dev_example_file_{}_{}_{}_{}'.format(args.feature_cache_path,
+                                                                       args.bert_model.split('/')[-1],
+                                                                       str(args.max_seq_length),
+                                                                       str(args.doc_stride),
+                                                                       args.feature_suffix)
+    if os.path.exists(cached_dev_example_file):
+        with open(cached_dev_example_file, "rb") as reader:
+            dev_examples = pickle.load(reader)
+    else:
+        dev_examples = read_examples(
+            input_file=args.dev_file,
+            supporting_para_file=args.dev_supporting_para_file,
+            tokenizer=tokenizer,
+            is_training=False)
+        with open(cached_dev_example_file, "wb") as writer:
+            pickle.dump(dev_examples, writer)
     logger.info('dev examples: {}'.format(len(dev_examples)))
     cached_dev_features_file = '{}/dev_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
                                                                       args.bert_model.split('/')[-1],
@@ -130,6 +141,11 @@ def get_dev_data(args, tokenizer, logger=None):
 
 def get_train_data(args, tokenizer, logger=None):
     """ 获取训练数据 """
+    cached_train_example_file = '{}/train_example_file_{}_{}_{}_{}'.format(args.feature_cache_path,
+                                                                           args.bert_model.split('/')[-1],
+                                                                           str(args.max_seq_length),
+                                                                           str(args.doc_stride),
+                                                                           args.feature_suffix)
     cached_train_features_file = '{}/train_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
                                                                             args.bert_model.split('/')[-1],
                                                                             str(args.max_seq_length),
@@ -137,11 +153,20 @@ def get_train_data(args, tokenizer, logger=None):
                                                                             args.feature_suffix)
     tmp_cache_file = cached_train_features_file + '_' + str(0)
     logger.info("creating examples from origin file to {}".format(args.train_file))
-    train_examples = read_examples(
-        input_file=args.train_file,
-        supporting_para_file=args.train_supporting_para_file,
-        tokenizer=tokenizer,
-        is_training=True)
+    if os.path.exists(cached_train_example_file):
+        logger.info("read examples from cache file: {}".format(cached_train_example_file))
+        with open(cached_train_example_file, "rb") as reader:
+            train_examples = pickle.load(reader)
+    else:
+        logger.info("read examples from origin file")
+        train_examples = read_examples(
+            input_file=args.train_file,
+            supporting_para_file=args.train_supporting_para_file,
+            tokenizer=tokenizer,
+            is_training=True)
+        with open(cached_train_example_file, "wb") as writer:
+            logger.info("saving {} examples to file: {}".format(len(train_examples), cached_train_example_file))
+            pickle.dump(train_examples, writer)
     # 当数据配置不变时可以设置为定值
     example_num = len(train_examples)
     random.shuffle(train_examples)
