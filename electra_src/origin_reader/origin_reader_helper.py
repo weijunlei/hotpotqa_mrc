@@ -77,6 +77,7 @@ class InputFeatures(object):
                  input_mask,
                  segment_ids,
                  entity_ids,
+                 pq_end_pos=None,
                  start_position=None,
                  end_position=None,
                  sent_mask=None,
@@ -96,6 +97,7 @@ class InputFeatures(object):
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.entity_ids = entity_ids
+        self.pq_end_pos = pq_end_pos
         self.start_position = start_position
         self.end_position = end_position
         self.sent_mask = sent_mask

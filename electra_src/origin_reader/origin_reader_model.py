@@ -53,12 +53,15 @@ from lazy_dataloader import LazyLoadTensorDataset
 from config import get_config
 
 sys.path.append("../pretrain_model")
-from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, ElectraForQuestionAnsweringForwardBest
+from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, ElectraForQuestionAnsweringForwardBest, \
+    ElectraForQuestionAnsweringMatchAttention, ElectraForQuestionAnsweringCrossAttention
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
     'ElectraForQuestionAnsweringForwardBest': ElectraForQuestionAnsweringForwardBest,
-    'ElectraForQuestionAnsweringForwardWithEntity': ElectraForQuestionAnsweringForwardWithEntity
+    'ElectraForQuestionAnsweringForwardWithEntity': ElectraForQuestionAnsweringForwardWithEntity,
+    'ElectraForQuestionAnsweringMatchAttention': ElectraForQuestionAnsweringMatchAttention,
+    'ElectraForQuestionAnsweringCrossAttention': ElectraForQuestionAnsweringCrossAttention
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
@@ -194,12 +197,13 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                     t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
             else:
                 d_batch = d_batch[:-1]
-            input_ids, input_mask, segment_ids, sent_mask, content_len, entity_ids = d_batch
+            input_ids, input_mask, segment_ids, sent_mask, content_len, entity_ids, pq_end_pos = d_batch
             if len(input_ids.shape) < 2:
                 input_ids = input_ids.unsqueeze(0)
                 segment_ids = segment_ids.unsqueeze(0)
                 input_mask = input_mask.unsqueeze(0)
                 entity_ids = entity_ids.unsqueeze(0)
+                pq_end_pos = pq_end_pos.unsqueeze(0)
                 if start_positions is not None and len(start_positions.shape) < 2:
                     start_positions = start_positions.unsqueeze(0)
                     end_positions = end_positions.unsqueeze(0)
@@ -211,6 +215,7 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                                                                       segment_ids,
                                                                       # word_sim_matrix=d_word_sim_matrix,
                                                                       entity_ids=entity_ids,
+                                                                      pq_end_pos=pq_end_pos,
                                                                       sent_mask=sent_mask)
             for idx, example_index in enumerate(d_example_indices):
                 dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
@@ -378,12 +383,13 @@ def run_train(rank=0, world_size=1):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, sent_mask, content_len, entity_ids, start_positions, end_positions, sent_lbs, sent_weight = batch
+                input_ids, input_mask, segment_ids, sent_mask, content_len, entity_ids, pq_end_pos, start_positions, end_positions, sent_lbs, sent_weight = batch
                 if len(input_ids.shape) < 2:
                     input_ids = input_ids.unsqueeze(0)
                     segment_ids = segment_ids.unsqueeze(0)
                     input_mask = input_mask.unsqueeze(0)
                     entity_ids = entity_ids.unsqueeze(0)
+                    pq_end_pos = pq_end_pos.unsqueeze(0)
                     if start_positions is not None and len(start_positions.shape) < 2:
                         start_positions = start_positions.unsqueeze(0)
                         end_positions = end_positions.unsqueeze(0)
@@ -395,6 +401,7 @@ def run_train(rank=0, world_size=1):
                                       segment_ids,
                                       # word_sim_matrix=word_sim_matrix,
                                       entity_ids=entity_ids,
+                                      pq_end_pos=pq_end_pos,
                                       start_positions=start_positions,
                                       end_positions=end_positions,
                                       sent_mask=sent_mask,

@@ -86,6 +86,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 matrix.append(example.subwords_to_matrix[split_token_index])
                 segment_ids.append(0)
             content_len = len(tokens)
+            context_end_index = content_len
             tokens.append("[SEP]")
             entity_tokens.append('')
             segment_ids.append(0)
@@ -95,10 +96,12 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 tokens.append(query_token)
                 entity_tokens.append(question_token_entity_info)
                 segment_ids.append(1)
+            doc_end_index = len(tokens)
             tokens.append("[SEP]")
             entity_tokens.append('')
             segment_ids.append(1)
             matrix += [0] * len(query_tokens) + [-1]
+            pq_end_pos = [context_end_index, doc_end_index]
 
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
             entity_ids = convert_entity_info_to_ids(entity_tokens)
@@ -169,7 +172,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     sent_mask=sent_mask,
                     sent_lbs=sent_lbs,
                     sent_weight=sent_weight,
-                    content_len=content_len
+                    content_len=content_len,
+                    pq_end_pos=pq_end_pos
                     ))
             unique_id += 1
     # print(datetime.datetime.now())
@@ -226,6 +230,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 segment_ids.append(0)
                 matrix.append(example.subwords_to_matrix[split_token_index])
             content_len = len(tokens)
+            context_end_index = content_len
             tokens.append("[SEP]")
             entity_tokens.append('')
             segment_ids.append(0)
@@ -235,10 +240,12 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 tokens.append(token)
                 entity_tokens.append(question_token_entity_info)
                 segment_ids.append(1)
+            doc_end_index = len(tokens)
             tokens.append("[SEP]")
             entity_tokens.append('')
             segment_ids.append(1)
             matrix += [0] * len(query_tokens) + [-1]
+            pq_end_pos = [context_end_index, doc_end_index]
 
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
             entity_ids = convert_entity_info_to_ids(entity_tokens)
@@ -279,7 +286,9 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                     segment_ids=segment_ids,
                     entity_ids=entity_ids,
                     sent_mask=sent_mask,
-                    content_len=content_len))
+                    content_len=content_len,
+                    pq_end_pos=pq_end_pos,
+                ))
             unique_id += 1
     # print(datetime.datetime.now())
     # word_sim_matrixs = word_sim_matrix_generator(features, max_seq_length)

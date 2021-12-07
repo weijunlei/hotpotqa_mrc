@@ -18,8 +18,8 @@ import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,Sampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
+from transformers import BertTokenizer
 from tqdm import tqdm, trange
-from transformers.tokenization_bert import (BertTokenizer)
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
@@ -36,7 +36,6 @@ sys.path.append("../pretrain_model")
 from changed_model import BertForRelatedSentence, BertForParagraphClassification
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
-from tokenization import BertTokenizer
 
 # 日志设置
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
