@@ -266,6 +266,11 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
     datas = json.load(open(input_file, 'r', encoding='utf-8'))
     # 支撑段落
     sp_dict = json.load(open(supporting_para_file, 'r'))
+    # 增加squad 的支撑段落
+    for data in datas:
+        get_id = data['_id']
+        if data['level'] == 'squad':
+            sp_dict[get_id] = [0, ]
     # 转换后的examples
     examples = []
     no_answer_examples = 0
