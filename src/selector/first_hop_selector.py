@@ -9,6 +9,7 @@ import logging
 import pickle
 import collections
 from tqdm import trange, tqdm
+from transformers import BertTokenizer
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler, TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 
@@ -18,7 +19,6 @@ sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
-from tokenization import BertTokenizer
 
 
 # 日志设置
@@ -114,9 +114,9 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
     with torch.no_grad():
         for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Iteration")):
             d_example_indices = d_batch[-1]
-            # if n_gpu == 1:
-            #     d_batch = tuple(
-            #         t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
+            if n_gpu == 1:
+                d_batch = tuple(
+                    t.squeeze(0).to(device) for t in d_batch)  # multi-gpu does scattering it-self
             d_all_input_ids, d_all_input_mask, \
             d_all_segment_ids, d_all_cls_mask, \
             d_all_cls_label, d_all_cls_weight = d_batch[:-1]

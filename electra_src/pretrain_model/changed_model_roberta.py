@@ -341,7 +341,7 @@ class ElectraForQuestionAnsweringForwardBest(ElectraModel):
             start_loss = loss_fct(start_logits, start_positions)  # bsz*seq bsz*n
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
-            total_loss = ans_loss + 0.15 * sent_loss
+            total_loss = ans_loss + 0.2 * sent_loss
             return total_loss, start_logits, end_logits, sent_logits
         else:
             start_logits = nn.Softmax(dim=-1)(start_logits)
@@ -431,7 +431,7 @@ class ElectraForQuestionAnsweringMatchAttention(ElectraModel):
             start_loss = loss_fct(start_logits, start_positions)  # bsz*seq bsz*n
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
-            total_loss = ans_loss + 0.15 * sent_loss
+            total_loss = ans_loss + 0.2 * sent_loss
             return total_loss, start_logits, end_logits, sent_logits
         else:
             start_logits = nn.Softmax(dim=-1)(start_logits)
@@ -521,7 +521,7 @@ class ElectraForQuestionAnsweringCrossAttention(ElectraModel):
             start_loss = loss_fct(start_logits, start_positions)  # bsz*seq bsz*n
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
-            total_loss = ans_loss + 0.15 * sent_loss
+            total_loss = ans_loss + 0.2 * sent_loss
             return total_loss, start_logits, end_logits, sent_logits
         else:
             start_logits = nn.Softmax(dim=-1)(start_logits)
@@ -594,7 +594,7 @@ class ElectraForQuestionAnsweringForwardWithEntity(ElectraModel):
             start_loss = loss_fct(start_logits, start_positions)  # bsz * seq bsz*n
             end_loss = loss_fct(end_logits, end_positions)
             ans_loss = start_loss + end_loss
-            total_loss = ans_loss + 0.15 * sent_loss
+            total_loss = ans_loss + 0.2 * sent_loss
             return total_loss, start_logits, end_logits, sent_logits
         else:
             start_logits = nn.Softmax(dim=-1)(start_logits)
