@@ -54,14 +54,17 @@ from config import get_config
 
 sys.path.append("../pretrain_model")
 from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, ElectraForQuestionAnsweringForwardBest, \
-    ElectraForQuestionAnsweringMatchAttention, ElectraForQuestionAnsweringCrossAttention
+    ElectraForQuestionAnsweringMatchAttention, ElectraForQuestionAnsweringCrossAttention, \
+    ElectraForQuestionAnsweringCrossAttentionOnReader, ElectraForQuestionAnsweringThreeCrossAttention
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
     'ElectraForQuestionAnsweringForwardBest': ElectraForQuestionAnsweringForwardBest,
     'ElectraForQuestionAnsweringForwardWithEntity': ElectraForQuestionAnsweringForwardWithEntity,
     'ElectraForQuestionAnsweringMatchAttention': ElectraForQuestionAnsweringMatchAttention,
-    'ElectraForQuestionAnsweringCrossAttention': ElectraForQuestionAnsweringCrossAttention
+    'ElectraForQuestionAnsweringCrossAttention': ElectraForQuestionAnsweringCrossAttention,
+    'ElectraForQuestionAnsweringCrossAttentionOnReader': ElectraForQuestionAnsweringCrossAttentionOnReader,
+    'ElectraForQuestionAnsweringThreeCrossAttention': ElectraForQuestionAnsweringThreeCrossAttention
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'

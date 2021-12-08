@@ -15,11 +15,11 @@ from pathlib import Path
 import re
 import numpy as np
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,Sampler,
+from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from transformers.tokenization_bert import (BertTokenizer)
+from transformers import BertTokenizer
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
@@ -38,7 +38,6 @@ sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
-from tokenization import BertTokenizer
 
 # 日志设置
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -309,12 +308,15 @@ def run_predict(args):
                 mask = []
                 cur_all_text = question
                 for idx, paragraph in enumerate(get_best_paragraphs[1]):
-                    if has_sentence_result:
-                        if get_sent_labels[0][idx] > del_thread[del_idx]:
-                            cur_all_text += paragraph
-                            mask.append(1)
-                        else:
-                            mask.append(0)
+                    try:
+                        if has_sentence_result:
+                            if get_sent_labels[0][idx] > del_thread[del_idx]:
+                                cur_all_text += paragraph
+                                mask.append(1)
+                            else:
+                                mask.append(0)
+                    except Exception as e:
+                        import pdb; pdb.set_trace()
                     else:
                         cur_all_text += paragraph
                         mask.append(1)

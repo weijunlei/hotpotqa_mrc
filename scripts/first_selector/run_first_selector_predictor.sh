@@ -1,11 +1,11 @@
 echo "----------------------------------------------------"
 echo "start predict second hop result..."
-export CUDA_VISIBLE_DEVICES="2,3"
+export CUDA_VISIBLE_DEVICES="0"
 cd ../../src/selector
 echo "start predict train first hop result !"
 python -u first_hop_selector_predictor.py \
     --bert_model bert-base-uncased \
-    --checkpoint_path ../../data/checkpoints/selector/20211207_first_hop_related_paragraph_selector_test \
+    --checkpoint_path ../../data/checkpoints/selector/2021_1207_first_hop_related_paragraph_selector \
     --model_name BertForRelatedSentence \
     --dev_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
     --predict_result_path ../../data/selector/first_hop_related_paragraph_result/ \
@@ -18,7 +18,7 @@ echo "predict train first hop result done!"
 echo "start predict dev first hop result !"
 python -u first_hop_selector_predictor.py \
     --bert_model bert-base-uncased \
-    --checkpoint_path ../../data/checkpoints/selector/20211207_first_hop_related_paragraph_selector_test \
+    --checkpoint_path ../../data/checkpoints/selector/2021_1207_first_hop_related_paragraph_selector \
     --model_name BertForRelatedSentence \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
     --predict_result_path ../../data/selector/first_hop_related_paragraph_result/ \
