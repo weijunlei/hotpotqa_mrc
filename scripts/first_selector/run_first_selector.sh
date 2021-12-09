@@ -10,7 +10,6 @@ python -u first_hop_selector.py \
     --model_name BertForRelatedSentence \
     --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
-    --output_log ../log/selector_1_paragraph_base_2e-5.txt \
     --use_file_cache True \
     --max_seq_length 512 \
     --train_batch_size 12 \
