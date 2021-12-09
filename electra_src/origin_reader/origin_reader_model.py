@@ -55,7 +55,9 @@ from config import get_config
 sys.path.append("../pretrain_model")
 from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, ElectraForQuestionAnsweringForwardBest, \
     ElectraForQuestionAnsweringMatchAttention, ElectraForQuestionAnsweringCrossAttention, \
-    ElectraForQuestionAnsweringCrossAttentionOnReader, ElectraForQuestionAnsweringThreeCrossAttention
+    ElectraForQuestionAnsweringCrossAttentionOnReader, ElectraForQuestionAnsweringThreeCrossAttention, \
+    ElectraForQuestionAnsweringCrossAttentionOnSent, ElectraForQuestionAnsweringForwardBestWithNoise, \
+    ElectraForQuestionAnsweringCrossAttentionWithDP
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
@@ -64,7 +66,10 @@ model_dict = {
     'ElectraForQuestionAnsweringMatchAttention': ElectraForQuestionAnsweringMatchAttention,
     'ElectraForQuestionAnsweringCrossAttention': ElectraForQuestionAnsweringCrossAttention,
     'ElectraForQuestionAnsweringCrossAttentionOnReader': ElectraForQuestionAnsweringCrossAttentionOnReader,
-    'ElectraForQuestionAnsweringThreeCrossAttention': ElectraForQuestionAnsweringThreeCrossAttention
+    'ElectraForQuestionAnsweringThreeCrossAttention': ElectraForQuestionAnsweringThreeCrossAttention,
+    'ElectraForQuestionAnsweringCrossAttentionOnSent': ElectraForQuestionAnsweringCrossAttentionOnSent,
+    'ElectraForQuestionAnsweringForwardBestWithNoise': ElectraForQuestionAnsweringForwardBestWithNoise,
+    'ElectraForQuestionAnsweringCrossAttentionWithDP': ElectraForQuestionAnsweringCrossAttentionWithDP
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
@@ -513,7 +518,7 @@ def run_train(rank=0, world_size=1):
 
 
 if __name__ == "__main__":
-    use_ddp = False
+    use_ddp = True
     if not use_ddp:
         run_train()
     else:
