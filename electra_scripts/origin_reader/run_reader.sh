@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "----------------------------------------------------"
 echo "start train reader model"
-export CUDA_VISIBLE_DEVICES="2"
+export CUDA_VISIBLE_DEVICES="0"
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
                # BertForQuestionAnsweringThreeSameCoAttention,
@@ -18,9 +18,9 @@ export CUDA_VISIBLE_DEVICES="2"
 cd ../../electra_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model albert-xxlarge-v2 \
-  --output_dir ../../data/checkpoints/20211210_sent_loss20_3e_albert_xxlarge_forwardbest_test_bs8 \
-  --model_name AlbertForQuestionAnsweringCrossAttention \
-  --log_prefix 20211210_sent_loss20_3e_albert_xxlarge_forwardbest_test_bs8 \
+  --output_dir ../../data/checkpoints/20211210_sent_loss20_3e_albert_xxlarge_forwardbest_test_bs8_truly \
+  --model_name AlbertForQuestionAnsweringForwardBest \
+  --log_prefix 20211210_sent_loss20_3e_albert_xxlarge_forwardbest_test_bs8_truly \
   --overwrite_result True \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3_with_entity_label.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3_with_entity_label.json \

@@ -24,7 +24,7 @@ def read_second_hotpotqa_examples(args,
     related_num = 0
     not_related_num = 0
 
-    for info in data:
+    for info in tqdm(data, desc="reading examples..."):
         context = info['context']
         question = info['question']
         if is_training == 'test':
