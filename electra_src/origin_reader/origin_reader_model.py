@@ -572,7 +572,7 @@ def run_train(rank=0, world_size=1):
 
 
 if __name__ == "__main__":
-    use_ddp = True
+    use_ddp = False
     if not use_ddp:
         run_train()
     else:

@@ -17,6 +17,7 @@ from torch.utils.data.distributed import DistributedSampler
 from second_hop_data_helper import read_second_hotpotqa_examples, convert_examples_to_second_features
 from second_hop_prediction_helper import write_predictions
 from second_selector_config import get_config
+
 sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence
 from modeling_bert import *
@@ -76,7 +77,6 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
             dev_loss = torch.sum(dev_loss)
             dev_logits = torch.sigmoid(dev_logits)
             total_loss += dev_loss
-            # print(dev_logits.shape)
             for i, example_index in enumerate(d_example_indices):
                 # start_position = start_positions[i].detach().cpu().tolist()
                 # end_position = end_positions[i].detach().cpu().tolist()
@@ -104,21 +104,22 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
 
 
 def dev_feature_getter(args, tokenizer):
-    dev_examples = read_second_hotpotqa_examples(args.dev_file,
+    dev_examples = read_second_hotpotqa_examples(args=args,
+                                                 input_file=args.dev_file,
                                                  best_paragraph_file="{}/{}".format(args.first_predict_result_path,
                                                                                     args.dev_best_paragraph_file),
                                                  related_paragraph_file="{}/{}".format(args.first_predict_result_path,
                                                                                        args.dev_related_paragraph_file),
-                                                 new_context_file="{}/{}".format(args.first_predict_result_path,
-                                                                                 args.dev_new_context_file),
+                                                 # new_context_file="{}/{}".format(args.first_predict_result_path,
+                                                 #                                 args.dev_new_context_file),
 
                                                  is_training='dev')
     if not os.path.exists(args.feature_cache_path):
         os.makedirs(args.feature_cache_path)
     dev_feature_file = '{}/selector_2_dev_{}_{}_{}'.format(args.feature_cache_path,
-                                                              list(filter(None, args.bert_model.split('/'))).pop(),
-                                                              str(args.max_seq_length),
-                                                              str(args.sent_overlap))
+                                                           list(filter(None, args.bert_model.split('/'))).pop(),
+                                                           str(args.max_seq_length),
+                                                           str(args.sent_overlap))
     if os.path.exists(dev_feature_file) and args.use_file_cache:
         with open(dev_feature_file, "rb") as dev_f:
             dev_features = pickle.load(dev_f)
@@ -133,7 +134,7 @@ def dev_feature_getter(args, tokenizer):
             logger.info("  Saving dev features into cached file %s", dev_feature_file)
             with open(dev_feature_file, "wb") as writer:
                 pickle.dump(dev_features, writer)
-    print("dev feature num: {}".format(len(dev_features)))
+    logger.info("dev feature num: {}".format(len(dev_features)))
     d_all_input_ids = torch.tensor([f.input_ids for f in dev_features], dtype=torch.long)
     d_all_input_mask = torch.tensor([f.input_mask for f in dev_features], dtype=torch.long)
     d_all_segment_ids = torch.tensor([f.segment_ids for f in dev_features], dtype=torch.long)
@@ -219,7 +220,7 @@ def train_iterator(args,
                 train_sampler = DistributedSampler(train_data)
             train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
             for step, batch in enumerate(tqdm(train_dataloader, desc="Epoch:{}/{} data:{}/{}Iteration".format(
-                epoch_idx, int(args.num_train_epochs), start_idx, len(start_idxs)
+                    epoch_idx, int(args.num_train_epochs), start_idx, len(start_idxs)
             ))):
                 if global_steps < steps_trained_in_current_epoch:
                     if (step + 1) % args.gradient_accumulation_steps == 0:
@@ -240,9 +241,11 @@ def train_iterator(args,
 
                 if (global_steps + 1) % 100 == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
                     logger.info(
-                        "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, start_idx, global_steps, train_loss))
+                        "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, start_idx,
+                                                                                       global_steps, train_loss))
                     train_loss = 0
-                if (global_steps + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
+                if (global_steps + 1) % args.save_model_step == 0 and (
+                        step + 1) % args.gradient_accumulation_steps == 0:
                     acc, prec, em, rec, total_loss = dev_evaluate(args=args,
                                                                   model=model,
                                                                   tokenizer=tokenizer,
@@ -317,13 +320,15 @@ def run_train(rank=0, world_size=1):
     if rank == 0 and not os.path.exists(args.log_path):
         os.makedirs(args.log_path)
     log_path = os.path.join(args.log_path, 'log_second_selector_{}_{}_{}_{}_{}_{}.log'.format(args.log_prefix,
-                                                                                             args.bert_model.split('/')[
-                                                                                                 -1],
-                                                                                             args.output_dir.split('/')[
-                                                                                                 -1],
-                                                                                             args.train_batch_size,
-                                                                                             args.max_seq_length,
-                                                                                             args.doc_stride))
+                                                                                              args.bert_model.split(
+                                                                                                  '/')[
+                                                                                                  -1],
+                                                                                              args.output_dir.split(
+                                                                                                  '/')[
+                                                                                                  -1],
+                                                                                              args.train_batch_size,
+                                                                                              args.max_seq_length,
+                                                                                              args.doc_stride))
     logger = logger_config(log_path=log_path, log_prefix='')
     logger.info('-' * 15 + '所有配置' + '-' * 15)
     logger.info("所有参数配置如下：")
@@ -418,23 +423,24 @@ def run_train(rank=0, world_size=1):
     if not os.path.exists(args.feature_cache_path):
         os.makedirs(args.feature_cache_path)
     cached_train_features_file = "{}/selector_second_train_{}_{}_{}".format(args.feature_cache_path,
-                                                                 list(filter(None, args.bert_model.split('/'))).pop(),
-                                                                 str(args.max_seq_length),
-                                                                 str(args.sent_overlap))
+                                                                            list(filter(None, args.bert_model.split(
+                                                                                '/'))).pop(),
+                                                                            str(args.max_seq_length),
+                                                                            str(args.sent_overlap))
     train_features = None
     model.train()
     if not os.path.exists(args.first_predict_result_path):
         raise ValueError("first hop result not be predicted! " + args.first_predict_result_path)
 
-    train_examples = read_second_hotpotqa_examples(
-                                        input_file=args.train_file,
-                                        best_paragraph_file="{}/{}".format(args.first_predict_result_path,
-                                                                             args.best_paragraph_file),
-                                        related_paragraph_file="{}/{}".format(args.first_predict_result_path,
-                                                                             args.related_paragraph_file),
-                                        new_context_file="{}/{}".format(args.first_predict_result_path,
-                                                                        args.new_context_file),
-                                        is_training='train')
+    train_examples = read_second_hotpotqa_examples(args=args,
+                                                   input_file=args.train_file,
+                                                   best_paragraph_file="{}/{}".format(args.first_predict_result_path,
+                                                                                      args.best_paragraph_file),
+                                                   related_paragraph_file="{}/{}".format(args.first_predict_result_path,
+                                                                                         args.related_paragraph_file),
+                                                   # new_context_file="{}/{}".format(args.first_predict_result_path,
+                                                   #                                 args.new_context_file),
+                                                   is_training='train')
 
     example_num = len(train_examples)
     max_train_data_size = 100000
@@ -485,7 +491,7 @@ def run_train(rank=0, world_size=1):
                    optimizer=optimizer,
                    num_train_optimization_steps=num_train_optimization_steps,
                    steps_trained_in_current_epoch=steps_trained_in_current_epoch
-    )
+                   )
 
 
 if __name__ == '__main__':
