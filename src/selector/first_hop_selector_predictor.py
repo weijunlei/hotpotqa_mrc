@@ -310,7 +310,7 @@ def run_predict(args):
                 for idx, paragraph in enumerate(get_best_paragraphs[1]):
                     try:
                         if has_sentence_result:
-                            if get_sent_labels[0][idx] > del_thread[del_idx]:
+                            if get_sent_labels[0][idx] > del_thread[max(del_idx, len(del_thread) - 1)]:
                                 cur_all_text += paragraph
                                 mask.append(1)
                             else:

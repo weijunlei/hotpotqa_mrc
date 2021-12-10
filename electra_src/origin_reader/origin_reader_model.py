@@ -57,7 +57,7 @@ from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, 
     ElectraForQuestionAnsweringMatchAttention, ElectraForQuestionAnsweringCrossAttention, \
     ElectraForQuestionAnsweringCrossAttentionOnReader, ElectraForQuestionAnsweringThreeCrossAttention, \
     ElectraForQuestionAnsweringCrossAttentionOnSent, ElectraForQuestionAnsweringForwardBestWithNoise, \
-    ElectraForQuestionAnsweringCrossAttentionWithDP
+    ElectraForQuestionAnsweringCrossAttentionWithDP, AlbertForQuestionAnsweringCrossAttention
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
@@ -69,7 +69,8 @@ model_dict = {
     'ElectraForQuestionAnsweringThreeCrossAttention': ElectraForQuestionAnsweringThreeCrossAttention,
     'ElectraForQuestionAnsweringCrossAttentionOnSent': ElectraForQuestionAnsweringCrossAttentionOnSent,
     'ElectraForQuestionAnsweringForwardBestWithNoise': ElectraForQuestionAnsweringForwardBestWithNoise,
-    'ElectraForQuestionAnsweringCrossAttentionWithDP': ElectraForQuestionAnsweringCrossAttentionWithDP
+    'ElectraForQuestionAnsweringCrossAttentionWithDP': ElectraForQuestionAnsweringCrossAttentionWithDP,
+    'AlbertForQuestionAnsweringCrossAttention': AlbertForQuestionAnsweringCrossAttention
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
@@ -342,11 +343,19 @@ def run_train(rank=0, world_size=1):
         raise ValueError("Output directory () already exists and is not empty.")
     if rank == 0 and not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-
+    # 设置分词器和模型
+    cls_token = '[CLS]'
+    sep_token = '[SEP]'
+    unk_token = '[UNK]'
+    pad_token = '[PAD]'
     if 'electra' in args.bert_model.lower():
         tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
                                                      do_lower_case=args.do_lower_case)
     elif 'albert' in args.bert_model.lower():
+        cls_token = '[CLS]'
+        sep_token = '[SEP]'
+        pad_token = '<pad>'
+        unk_token = '<unk>'
         tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     elif 'roberta' in args.bert_model.lower():
         cls_token = '<s>'
@@ -563,7 +572,7 @@ def run_train(rank=0, world_size=1):
 
 
 if __name__ == "__main__":
-    use_ddp = False
+    use_ddp = True
     if not use_ddp:
         run_train()
     else:

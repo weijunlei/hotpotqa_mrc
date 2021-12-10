@@ -188,7 +188,8 @@ def train_iterator(args,
                    model,
                    device,
                    optimizer,
-                   num_train_optimization_steps):
+                   num_train_optimization_steps,
+                   steps_trained_in_current_epoch=0):
     """ 依据设定参数进行模型训练 """
     global logger
     best_predict_acc = 0
@@ -196,7 +197,7 @@ def train_iterator(args,
     global_steps = 0
     train_features = None
     for epoch_idx in trange(int(args.num_train_epochs), desc="Epoch"):
-        for start_idx in trange(len(start_idxs), desc="Epoch Index: {}".format(epoch_idx)):
+        for start_idx in trange(len(start_idxs), desc="Split Data Index: {}".format(epoch_idx)):
             with open('{}_{}'.format(cached_train_features_file, str(start_idx)), "rb") as reader:
                 train_features = pickle.load(reader)
             # 展开数据
@@ -217,6 +218,10 @@ def train_iterator(args,
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration epoch:{}/{} data:{}/{}".format(
                 epoch_idx, int(args.num_train_epochs), start_idx, len(start_idxs)
             ))):
+                if global_steps < steps_trained_in_current_epoch:
+                    if (step + 1) % args.gradient_accumulation_steps == 0:
+                        global_steps += 1
+                    continue
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 input_ids, input_mask, segment_ids, cls_mask, cls_label, cls_weight = batch
@@ -250,9 +255,17 @@ def train_iterator(args,
                         best_predict_acc = acc
                         model_to_save = model.module if hasattr(model,
                                                                 'module') else model  # Only save the model it-self
+                        step_model_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_steps))
+                        if not os.path.exists(step_model_dir):
+                            os.mkdir(step_model_dir)
                         output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
+                        step_model_file = os.path.join(step_model_dir, 'pytorch_model.bin')
                         torch.save(model_to_save.state_dict(), output_model_file)
+                        torch.save(model_to_save.state_dict(), step_model_file)
                         output_config_file = os.path.join(args.output_dir, 'config.json')
+                        step_output_config_file = os.path.join(step_model_dir, 'config.json')
+                        with open(step_output_config_file, "w") as f:
+                            f.write(model_to_save.config.to_json_string())
                         with open(output_config_file, 'w') as f:
                             f.write(model_to_save.config.to_json_string())
                         logger.info('saving model')
@@ -289,9 +302,17 @@ def train_iterator(args,
             best_predict_acc = acc
             model_to_save = model.module if hasattr(model,
                                                     'module') else model  # Only save the model it-self
+            step_model_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_steps))
+            if not os.path.exists(step_model_dir):
+                os.mkdir(step_model_dir)
             output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
+            step_model_file = os.path.join(step_model_dir, 'pytorch_model.bin')
             torch.save(model_to_save.state_dict(), output_model_file)
+            torch.save(model_to_save.state_dict(), step_model_file)
             output_config_file = os.path.join(args.output_dir, 'config.json')
+            step_output_config_file = os.path.join(step_model_dir, 'config.json')
+            with open(step_output_config_file, "w") as f:
+                f.write(model_to_save.config.to_json_string())
             with open(output_config_file, 'w') as f:
                 f.write(model_to_save.config.to_json_string())
             logger.info('saving model')
@@ -351,7 +372,30 @@ def run_train(rank=0, world_size=1):
     models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
                    "BertForParagraphClassification": BertForParagraphClassification}
     model = models_dict[args.model_name].from_pretrained(args.bert_model)
+    steps_trained_in_current_epoch = 0
+    has_step = False
+    # Check if continuing training from a checkpoint
+    if os.path.exists(args.output_dir):
+        try:
+            # set global_step to gobal_step of last saved checkpoint from model path
+            dir_names = [name for name in os.listdir(args.output_dir) if os.path.isdir(os.path.join(args.output_dir, name))]
+            final_step_name = ''
+            max_step = 0
+            for dir_name in dir_names:
+                checkpoint_suffix = dir_name.split("-")[-1].split("/")[0]
+                trained_steps = int(checkpoint_suffix)
+                if trained_steps > max_step:
+                    max_step = trained_steps
+                    final_step_name = dir_name
+                    has_step = True
+                    steps_trained_in_current_epoch = trained_steps
 
+        except ValueError:
+            logger.info("  Starting fine-tuning.")
+    if has_step:
+        logger.info("  Continuing training from checkpoint, will skip to saved global_step")
+        logger.info("  Continuing training from global step %d", steps_trained_in_current_epoch)
+        model = models_dict[args.model_name].from_pretrained(os.path.join(args.output_dir, final_step_name))
     # fp16计算和并行化处理
     if args.fp16:
         model.half()
@@ -435,7 +479,8 @@ def run_train(rank=0, world_size=1):
                    model=model,
                    device=device,
                    optimizer=optimizer,
-                   num_train_optimization_steps=num_train_optimization_steps)
+                   num_train_optimization_steps=num_train_optimization_steps,
+                   steps_trained_in_current_epoch=steps_trained_in_current_epoch)
 
 
 if __name__ == '__main__':

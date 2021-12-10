@@ -9,6 +9,7 @@ import logging
 import pickle
 import collections
 from tqdm import trange, tqdm
+from transformers import BertTokenizer
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler, TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 
@@ -18,7 +19,6 @@ sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
-from tokenization import BertTokenizer
 
 # 日志设置
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
