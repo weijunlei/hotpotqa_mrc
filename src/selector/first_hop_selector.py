@@ -10,9 +10,11 @@ import pickle
 import collections
 from tqdm import trange, tqdm
 from transformers import BertTokenizer
+from torch.multiprocessing import Process
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler, TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 
+from first_selector_config import get_config
 from first_hop_data_helper import convert_examples_to_features, read_hotpotqa_examples
 from first_hop_prediction_helper import prediction_evaluate, write_predictions
 sys.path.append("../pretrain_model")
@@ -22,10 +24,33 @@ from optimization import BertAdam, warmup_linear
 
 
 # 日志设置
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = None
+
+
+def logger_config(log_path, log_prefix='lwj', write2console=True):
+    """
+    日志配置
+    :param log_path: 输出的日志路径
+    :param log_prefix: 记录中的日志前缀
+    :param write2console: 是否输出到命令行
+    :return:
+    """
+    global logger
+    logger = logging.getLogger(log_prefix)
+    logger.setLevel(level=logging.DEBUG)
+    handler = logging.FileHandler(log_path, encoding='UTF-8')
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    if write2console:
+        # console相当于控制台输出，handler文件输出。获取流句柄并设置日志级别，第二层过滤
+        console = logging.StreamHandler()
+        console.setLevel(logging.DEBUG)
+        logger.addHandler(console)
+    # 为logger对象添加句柄
+    logger.addHandler(handler)
+
+    return logger
 
 
 def dev_feature_getter(args, tokenizer):
@@ -51,7 +76,7 @@ def dev_feature_getter(args, tokenizer):
             logger.info("  Saving dev features into cached file {}".format(dev_feature_file))
             with open(dev_feature_file, "wb") as writer:
                 pickle.dump(dev_features, writer)
-    print("dev feature num: {}".format(len(dev_features)))
+    logger.info("dev feature num: {}".format(len(dev_features)))
     d_all_input_ids = torch.tensor([f.input_ids for f in dev_features], dtype=torch.long)
     d_all_input_mask = torch.tensor([f.input_mask for f in dev_features], dtype=torch.long)
     d_all_segment_ids = torch.tensor([f.segment_ids for f in dev_features], dtype=torch.long)
@@ -69,7 +94,8 @@ def dev_feature_getter(args, tokenizer):
     return dev_examples, dev_features, dev_dataloader
 
 
-def convert_examples2file(examples,
+def convert_examples2file(args,
+                          examples,
                           start_idxs,
                           end_idxs,
                           cached_train_features_file,
@@ -164,12 +190,13 @@ def train_iterator(args,
                    optimizer,
                    num_train_optimization_steps):
     """ 依据设定参数进行模型训练 """
+    global logger
     best_predict_acc = 0
     train_loss = 0
     global_steps = 0
     train_features = None
     for epoch_idx in trange(int(args.num_train_epochs), desc="Epoch"):
-        for start_idx in trange(len(start_idxs), desc="Split Data"):
+        for start_idx in trange(len(start_idxs), desc="Epoch Index: {}".format(epoch_idx)):
             with open('{}_{}'.format(cached_train_features_file, str(start_idx)), "rb") as reader:
                 train_features = pickle.load(reader)
             # 展开数据
@@ -187,7 +214,9 @@ def train_iterator(args,
                 train_sampler = DistributedSampler(train_data)
             train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
             # 对每个Iteration进行模型训练
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration epoch:{}/{} data:{}/{}".format(
+                epoch_idx, int(args.num_train_epochs), start_idx, len(start_idxs)
+            ))):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 input_ids, input_mask, segment_ids, cls_mask, cls_label, cls_weight = batch
@@ -196,7 +225,6 @@ def train_iterator(args,
                                 cls_weight=cls_weight)
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
-                logger.info("step = {}, train_loss={}".format(global_steps, loss))
                 train_loss += loss
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
@@ -269,8 +297,25 @@ def train_iterator(args,
             logger.info('saving model')
 
 
-def run_train(args):
+def run_train(rank=0, world_size=1):
     """ 模型训练 """
+    parser = get_config()
+    args = parser.parse_args()
+    # 配置日志文件
+    if rank == 0 and not os.path.exists(args.log_path):
+        os.makedirs(args.log_path)
+    log_path = os.path.join(args.log_path, 'log_first_selector_{}_{}_{}_{}_{}_{}.log'.format(args.log_prefix,
+                                                                              args.bert_model.split('/')[-1],
+                                                                              args.output_dir.split('/')[-1],
+                                                                              args.train_batch_size,
+                                                                              args.max_seq_length,
+                                                                              args.doc_stride))
+    logger = logger_config(log_path=log_path, log_prefix='')
+    logger.info('-' * 15 + '所有配置' + '-' * 15)
+    logger.info("所有参数配置如下：")
+    for arg in vars(args):
+        logger.info('{}: {}'.format(arg, getattr(args, arg)))
+    logger.info('-' * 30)
     # 分布式或多卡训练
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -350,7 +395,8 @@ def run_train(args):
     logger.info('{} examples and {} example file(s)'.format(example_num, len(start_idxs)))
 
     random.shuffle(train_examples)
-    total_feature_num = convert_examples2file(train_examples,
+    total_feature_num = convert_examples2file(args=args,
+                                              examples=train_examples,
                                               start_idxs=start_idxs,
                                               end_idxs=end_idxs,
                                               cached_train_features_file=cached_train_features_file,
@@ -393,77 +439,17 @@ def run_train(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    # 必须参数
-    # 模型参数
-    parser.add_argument("--bert_model", default="bert-base-uncased", type=str,
-                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                             "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
-                             "bert-base-multilingual-cased, bert-base-chinese."
-                        )
-    parser.add_argument("--over_write_result", default=True, type=bool,
-                        help="over write the result")
-    # parser.add_argument("--continue_training", default=True, type=bool,
-    #                     help="start rerun from result")
-    parser.add_argument("--output_dir", default='../checkpoints/selector/first_hop_selector', type=str,
-                        help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--feature_cache_path", default="../data/cache/selector/first_hop_selector")
-    parser.add_argument("--model_name", type=str, default='BertForRelated',
-                        help="The output directory where the model checkpoints and predictions will be written.")
-    # 数据输入
-    parser.add_argument("--train_file", default='../data/hotpot_data/hotpot_train_labeled_data.json', type=str,
-                        help="SQuAD json for training. ")
-    parser.add_argument("--dev_file", default='../data/hotpot_data/hotpot_dev_labeled_data.json', type=str,
-                        help="SQuAD json for evaluation. ")
-    # 其他参数
-    parser.add_argument("--max_seq_length", default=512, type=int,
-                        help="The maximum total input sequence length after WordPiece tokenization. Sequences "
-                             "longer than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--use_file_cache", default=True, type=bool,
-                        help="use the feature cache or not")
-    parser.add_argument("--sent_overlap", default=2, type=int,
-                        help="When splitting up a long document into chunks, "
-                             "how much sentences is overlapped between chunks.")
-    parser.add_argument("--train_batch_size", default=24, type=int, help="Total batch size for training.")
-    parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
-    parser.add_argument("--learning_rate", default=2e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--num_train_epochs", default=1.0, type=float,
-                        help="Total number of training epochs to perform.")
-    parser.add_argument("--warmup_proportion", default=0.1, type=float,
-                        help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10%% "
-                             "of training.")
-    parser.add_argument("--verbose_logging", action='store_true',
-                        help="If true, all of the warnings related to data processing will be printed. "
-                             "A number of warnings are expected for a normal SQuAD evaluation.")
-    parser.add_argument("--no_cuda",
-                        action='store_true',
-                        help="Whether not to use CUDA when available")
-    parser.add_argument('--seed',
-                        type=int,
-                        default=42,
-                        help="random seed for initialization")
-    parser.add_argument('--gradient_accumulation_steps',
-                        type=int,
-                        default=1,
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")
-    parser.add_argument("--do_lower_case",
-                        action='store_true', default=True,
-                        help="Whether to lower case the input text. True for uncased models, False for cased models.")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
-    parser.add_argument('--fp16',
-                        action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--loss_scale',
-                        type=float, default=0,
-                        help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
-                             "0 (default value): dynamic loss scaling.\n"
-                             "Positive power of 2: static loss scaling value.\n")
-    parser.add_argument('--save_model_step',
-                        type=int, default=5000,
-                        help="The proportion of the validation set")
-    args = parser.parse_args()
-    run_train(args)
+    use_ddp = False
+    if not use_ddp:
+        run_train()
+    else:
+        world_size = 2
+        processes = []
+        for rank in range(world_size):
+            p = Process(target=run_train, args=(rank, world_size))
+            p.start()
+            processes.append(p)
+        for p in processes:
+            p.join()
+
 

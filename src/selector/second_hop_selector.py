@@ -191,7 +191,9 @@ def train_iterator(args,
             else:
                 train_sampler = DistributedSampler(train_data)
             train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Epoch:{}/{} data:{}/{}Iteration".format(
+                epoch_idx, int(args.num_train_epochs), start_idx, len(start_idxs)
+            ))):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 input_ids, input_mask, segment_ids, cls_mask, cls_label, cls_weight = batch
@@ -200,7 +202,7 @@ def train_iterator(args,
                                 cls_weight=cls_weight)
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
-                logger.info("step = %d, train_loss=%f", global_steps, loss)
+                # logger.info("step = %d, train_loss=%f", global_steps, loss)
                 train_loss += loss
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
