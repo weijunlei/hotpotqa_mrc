@@ -319,6 +319,7 @@ def train_iterator(args,
 
 
 def run_train(rank=0, world_size=1):
+    #TODO rank world size setting
     """ 模型训练 """
     parser = get_config()
     args = parser.parse_args()

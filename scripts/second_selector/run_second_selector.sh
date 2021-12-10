@@ -17,12 +17,11 @@ python -u second_hop_selector.py \
     --dev_best_paragraph_file dev_best_paragraph.json \
     --dev_related_paragraph_file dev_related_paragraph.json \
     --dev_new_context_file dev_new_context.json \
-    --output_log ../log/selector_2_base_2e-5.txt \
     --use_file_cache True \
     --max_seq_length 512 \
     --train_batch_size 24 \
     --val_batch_size 128 \
-    --save_model_step 50000 \
+    --save_model_step 10000 \
     --num_train_epochs 3.0
 echo "----------------------------------------------------"
 echo "train second hop selector done!"
