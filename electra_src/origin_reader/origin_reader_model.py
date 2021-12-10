@@ -44,7 +44,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 import pickle
 import gc
-from transformers import ElectraTokenizer
+from transformers import ElectraTokenizer, BertTokenizer, RobertaTokenizer, AlbertTokenizer
 
 from origin_read_examples import read_examples
 from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
@@ -102,7 +102,14 @@ def logger_config(log_path, log_prefix='lwj', write2console=True):
     return logger
 
 
-def get_dev_data(args, tokenizer, logger=None):
+def get_dev_data(args,
+                 tokenizer,
+                 logger=None,
+                 cls_token='',
+                 sep_token='',
+                 unk_token='',
+                 pad_token='',
+                 ):
     """ 获取验证集数据 """
     cached_dev_example_file = '{}/dev_example_file_{}_{}_{}_{}'.format(args.feature_cache_path,
                                                                        args.bert_model.split('/')[-1],
@@ -135,7 +142,12 @@ def get_dev_data(args, tokenizer, logger=None):
             tokenizer=tokenizer,
             max_seq_length=args.max_seq_length,
             doc_stride=args.doc_stride,
-            is_training=True)
+            is_training=True,
+            cls_token=cls_token,
+            sep_token=sep_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+        )
         if args.local_rank == -1 or torch.distributed.get_rank() == 0:
             logger.info(" Saving dev features into cached file %s", cached_dev_features_file)
             with open(cached_dev_features_file, "wb") as writer:
@@ -147,7 +159,14 @@ def get_dev_data(args, tokenizer, logger=None):
     return dev_examples, dev_dataloader, dev_features
 
 
-def get_train_data(args, tokenizer, logger=None):
+def get_train_data(args,
+                   tokenizer,
+                   logger=None,
+                   cls_token='',
+                   sep_token='',
+                   unk_token='',
+                   pad_token='',
+                   ):
     """ 获取训练数据 """
     cached_train_example_file = '{}/train_example_file_{}_{}_{}_{}'.format(args.feature_cache_path,
                                                                            args.bert_model.split('/')[-1],
@@ -178,9 +197,6 @@ def get_train_data(args, tokenizer, logger=None):
     # 当数据配置不变时可以设置为定值
     example_num = len(train_examples)
     random.shuffle(train_examples)
-    # else:
-    #     logger.info("get examples from cache file {}".format(args.train_file))
-    #     example_num = 89541
     logger.info("train example num: {}".format(example_num))
     max_train_num = 10000
     start_idxs = list(range(0, example_num, max_train_num))
@@ -203,7 +219,12 @@ def get_train_data(args, tokenizer, logger=None):
                 tokenizer=tokenizer,
                 max_seq_length=args.max_seq_length,
                 doc_stride=args.doc_stride,
-                is_training=True)
+                is_training=True,
+                cls_token=cls_token,
+                sep_token=sep_token,
+                unk_token=unk_token,
+                pad_token=pad_token
+            )
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
                 logger.info("Saving train features into cached file {}".format(new_cache_file))
                 with open(new_cache_file, "wb") as writer:
@@ -321,9 +342,20 @@ def run_train(rank=0, world_size=1):
         raise ValueError("Output directory () already exists and is not empty.")
     if rank == 0 and not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-    tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
-                                                 do_lower_case=args.do_lower_case)
 
+    if 'electra' in args.bert_model.lower():
+        tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
+                                                     do_lower_case=args.do_lower_case)
+    elif 'albert' in args.bert_model.lower():
+        tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    elif 'roberta' in args.bert_model.lower():
+        cls_token = '<s>'
+        sep_token = '</s>'
+        unk_token = '<unk>'
+        pad_token = '<pad>'
+        tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    elif 'bert' in args.bert_model.lower():
+        tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     train_examples = None
     num_train_optimization_steps = None
     model = model_dict[args.model_name].from_pretrained(args.bert_model)
@@ -361,7 +393,13 @@ def run_train(rank=0, world_size=1):
     # 获取训练集数据
     if rank == 0 and not os.path.exists(args.feature_cache_path):
         os.makedirs(args.feature_cache_path)
-    total_feature_num, start_idxs, cached_train_features_file = get_train_data(args, tokenizer=tokenizer, logger=logger)
+    total_feature_num, start_idxs, cached_train_features_file = get_train_data(args,
+                                                                               tokenizer=tokenizer,
+                                                                               logger=logger,
+                                                                               cls_token=cls_token,
+                                                                               sep_token=sep_token,
+                                                                               unk_token=unk_token,
+                                                                               pad_token=pad_token)
     model.train()
     num_train_optimization_steps = int(
         total_feature_num / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
@@ -471,7 +509,14 @@ def run_train(rank=0, world_size=1):
                 if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
                     # 获取验证集数据
                     if rank == 0:
-                        dev_examples, dev_dataloader, dev_features = get_dev_data(args, tokenizer=tokenizer, logger=logger)
+                        dev_examples, dev_dataloader, dev_features = get_dev_data(args,
+                                                                                  tokenizer=tokenizer,
+                                                                                  logger=logger,
+                                                                                  cls_token=cls_token,
+                                                                                  sep_token=sep_token,
+                                                                                  unk_token=unk_token,
+                                                                                  pad_token=pad_token
+                                                                                  )
                         ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
                                                                                         dev_dataloader,
                                                                                         n_gpu,

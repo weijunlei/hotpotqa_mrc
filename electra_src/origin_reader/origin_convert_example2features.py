@@ -42,8 +42,16 @@ def convert_entity_info_to_ids(entity_infos):
     return entity_ids
 
 
-def convert_examples_to_features(examples, tokenizer, max_seq_length,
-                                 doc_stride,  is_training):
+def convert_examples_to_features(examples,
+                                 tokenizer,
+                                 max_seq_length,
+                                 doc_stride,
+                                 is_training,
+                                 cls_token,
+                                 sep_token,
+                                 unk_token,
+                                 pad_token,
+                                 ):
     """Loads a data file into a list of `InputBatch`s."""
     unique_id = 1000000000
     features = []
@@ -69,7 +77,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
-            tokens = ["[CLS]", "yes", "no"]
+            tokens = [cls_token, "yes", "no"]
             entity_tokens = ['', '', '']
             token_to_orig_map = {}
             token_is_max_context = {}
@@ -87,7 +95,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 segment_ids.append(0)
             content_len = len(tokens)
             context_end_index = content_len
-            tokens.append("[SEP]")
+            tokens.append(sep_token)
             entity_tokens.append('')
             segment_ids.append(0)
             matrix.append(0)
@@ -97,27 +105,24 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 entity_tokens.append(question_token_entity_info)
                 segment_ids.append(1)
             doc_end_index = len(tokens)
-            tokens.append("[SEP]")
+            tokens.append(sep_token)
             entity_tokens.append('')
             segment_ids.append(1)
             matrix += [0] * len(query_tokens) + [-1]
             pq_end_pos = [context_end_index, doc_end_index]
-
-            input_ids = tokenizer.convert_tokens_to_ids(tokens)
             entity_ids = convert_entity_info_to_ids(entity_tokens)
-
+            input_mask = [1] * len(tokens)
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
             # tokens are attended to.
-            input_mask = [1] * len(input_ids)
 
             # Zero-pad up to the sequence length.
-            while len(input_ids) < max_seq_length:
-                input_ids.append(0)
+            while len(tokens) < max_seq_length:
+                tokens.append(pad_token)
                 input_mask.append(0)
                 segment_ids.append(0)
                 entity_ids.append(0)
                 matrix.append(-1)
-
+            input_ids = tokenizer.convert_tokens_to_ids(tokens)
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
@@ -184,8 +189,16 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
     return features
 
 
-def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
-                                 doc_stride,  is_training):
+def convert_dev_examples_to_features(examples,
+                                     tokenizer,
+                                     max_seq_length,
+                                     doc_stride,
+                                     is_training,
+                                     cls_token,
+                                     sep_token,
+                                     unk_token,
+                                     pad_token,
+                                     ):
     """Loads a data file into a list of `InputBatch`s."""
     # full_graph = json.load(open(graph, 'r'))
     unique_id = 1000000000
@@ -213,7 +226,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 break
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
-            tokens = ["[CLS]", "yes", "no"]
+            tokens = [cls_token, "yes", "no"]
             entity_tokens = ['', '', '']
             token_to_orig_map = {}
             token_is_max_context = {}
@@ -231,7 +244,7 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 matrix.append(example.subwords_to_matrix[split_token_index])
             content_len = len(tokens)
             context_end_index = content_len
-            tokens.append("[SEP]")
+            tokens.append(sep_token)
             entity_tokens.append('')
             segment_ids.append(0)
             matrix.append(-1)
@@ -241,27 +254,25 @@ def convert_dev_examples_to_features(examples, tokenizer, max_seq_length,
                 entity_tokens.append(question_token_entity_info)
                 segment_ids.append(1)
             doc_end_index = len(tokens)
-            tokens.append("[SEP]")
+            tokens.append(sep_token)
             entity_tokens.append('')
             segment_ids.append(1)
             matrix += [0] * len(query_tokens) + [-1]
             pq_end_pos = [context_end_index, doc_end_index]
-
-            input_ids = tokenizer.convert_tokens_to_ids(tokens)
             entity_ids = convert_entity_info_to_ids(entity_tokens)
 
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
             # tokens are attended to.
-            input_mask = [1] * len(input_ids)
+            input_mask = [1] * len(tokens)
 
             # Zero-pad up to the sequence length.
-            while len(input_ids) < max_seq_length:
-                input_ids.append(0)
+            while len(tokens) < max_seq_length:
+                tokens.append(pad_token)
                 input_mask.append(0)
                 segment_ids.append(0)
                 entity_ids.append(0)
                 matrix.append(-1)
-
+            input_ids = tokenizer.convert_tokens_to_ids(tokens)
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
