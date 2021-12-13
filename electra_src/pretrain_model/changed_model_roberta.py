@@ -354,7 +354,7 @@ class ElectraForQuestionAnsweringForwardBest(ElectraModel):
 
 class AlbertForQuestionAnsweringForwardBest(AlbertModel):
     def __init__(self, config):
-        super(ElectraForQuestionAnsweringForwardBest, self).__init__(config)
+        super(AlbertForQuestionAnsweringForwardBest, self).__init__(config)
         self.albert = AlbertModel(config)
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)

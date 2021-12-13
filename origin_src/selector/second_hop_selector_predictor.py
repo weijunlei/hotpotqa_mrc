@@ -18,8 +18,8 @@ import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,Sampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
-from transformers import BertTokenizer
 from tqdm import tqdm, trange
+from transformers import BertTokenizer
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
@@ -27,6 +27,7 @@ else:
 from collections import Counter
 import string
 import gc
+from transformers import BertTokenizer
 
 from second_hop_data_helper import (HotpotQAExample,
                                        HotpotInputFeatures,
@@ -206,12 +207,13 @@ def run_predict(args):
         model = DDP(model)
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
-    dev_examples = read_second_hotpotqa_examples(args=args,
-                                                 input_file=args.dev_file,
+    dev_examples = read_second_hotpotqa_examples(input_file=args.dev_file,
                                                  best_paragraph_file="{}/{}".format(args.first_predict_result_path,
                                                                                     args.best_paragraph_file),
                                                  related_paragraph_file="{}/{}".format(args.first_predict_result_path,
                                                                                        args.related_paragraph_file),
+                                                 new_context_file="{}/{}".format(args.first_predict_result_path,
+                                                                                 args.new_context_file),
 
                                                  is_training='test')
     example_num = len(dev_examples)
@@ -322,58 +324,58 @@ def run_predict(args):
     logger.info("write result done!")
 
     # write third context
-    # new_context = {}
-    # data = json.load(open(args.dev_file, 'r', encoding='utf-8'))
-    # # data = data[:100]
-    # over_half_num = 0
-    # for info in data:
-    #     context = info['context']
-    #     qas_id = info['_id']
-    #     # (title, list(sent))
-    #     get_best_paragraphs = context[final_related_paragraph_dict[qas_id][1]]
-    #     get_second_paragraphs = context[final_related_paragraph_dict[qas_id][0]]
-    #     question = info['question']
-    #     # 1 指示句子s
-    #     all_input_text = question + ''.join(get_best_paragraphs[1])
-    #     all_input_text += ''.join(get_second_paragraphs[1])
-    #     # [10*predict, 10 * label]测试的时候无
-    #     if has_sentence_result:
-    #         get_sent_labels = related_sentence[qas_id]
-    #         del_thread = sorted(get_sent_labels[0][:-1])
-    #         del_idx = 0
-    #     all_tokens = tokenizer.tokenize(all_input_text)
-    #     cur_all_text = ''
-    #     if len(all_tokens) <= 256:
-    #         question += ''.join(get_best_paragraphs[1])
-    #         cur_all_text = question
-    #     else:
-    #         over_half_num += 1
-    #         while len(all_tokens) > 256:
-    #             mask = []
-    #             cur_all_text = question
-    #             for idx, paragraph in enumerate(get_best_paragraphs[1]):
-    #                 if has_sentence_result:
-    #                     if get_sent_labels[0][idx] > del_thread[min(del_idx, len(del_thread) - 1)]:
-    #                         cur_all_text += paragraph
-    #                         mask.append(1)
-    #                     else:
-    #                         mask.append(0)
-    #                 else:
-    #                     cur_all_text += paragraph
-    #                     mask.append(1)
-    #             all_tokens = tokenizer.tokenize(cur_all_text)
-    #             if not has_sentence_result and len(all_tokens) > 256:
-    #                 all_tokens = all_tokens[:256]
-    #             if has_sentence_result:
-    #                 del_idx += 1
-    #     all_tokens_len = len(tokenizer.tokenize(cur_all_text))
-    #     total += all_tokens_len
-    #     if all_tokens_len > 256:
-    #         max_len += 1
-    #     new_context[qas_id] = cur_all_text
-    # logger.info("over half length number: {}".format(over_half_num))
-    # json.dump(new_context, open("{}/{}".format(args.second_predict_result_path, args.new_context_file),
-    #                             "w", encoding="utf-8"))
+    new_context = {}
+    data = json.load(open(args.dev_file, 'r', encoding='utf-8'))
+    # data = data[:100]
+    over_half_num = 0
+    for info in data:
+        context = info['context']
+        qas_id = info['_id']
+        # (title, list(sent))
+        get_best_paragraphs = context[final_related_paragraph_dict[qas_id][1]]
+        get_second_paragraphs = context[final_related_paragraph_dict[qas_id][0]]
+        question = info['question']
+        # 1 指示句子s
+        all_input_text = question + ''.join(get_best_paragraphs[1])
+        all_input_text += ''.join(get_second_paragraphs[1])
+        # [10*predict, 10 * label]测试的时候无
+        if has_sentence_result:
+            get_sent_labels = related_sentence[qas_id]
+            del_thread = sorted(get_sent_labels[0][:-1])
+            del_idx = 0
+        all_tokens = tokenizer.tokenize(all_input_text)
+        cur_all_text = ''
+        if len(all_tokens) <= 256:
+            question += ''.join(get_best_paragraphs[1])
+            cur_all_text = question
+        else:
+            over_half_num += 1
+            while len(all_tokens) > 256:
+                mask = []
+                cur_all_text = question
+                for idx, paragraph in enumerate(get_best_paragraphs[1]):
+                    if has_sentence_result:
+                        if get_sent_labels[0][idx] > del_thread[del_idx]:
+                            cur_all_text += paragraph
+                            mask.append(1)
+                        else:
+                            mask.append(0)
+                    else:
+                        cur_all_text += paragraph
+                        mask.append(1)
+                all_tokens = tokenizer.tokenize(cur_all_text)
+                if not has_sentence_result and len(all_tokens) > 256:
+                    all_tokens = all_tokens[:256]
+                if has_sentence_result:
+                    del_idx += 1
+        all_tokens_len = len(tokenizer.tokenize(cur_all_text))
+        total += all_tokens_len
+        if all_tokens_len > 256:
+            max_len += 1
+        new_context[qas_id] = cur_all_text
+    logger.info("over half length number: {}".format(over_half_num))
+    json.dump(new_context, open("{}/{}".format(args.second_predict_result_path, args.new_context_file),
+                                "w", encoding="utf-8"))
     json.dump(related_paragraph, open("{}/{}".format(args.second_predict_result_path, args.related_paragraph_file),
                                       "w", encoding='utf-8'))
     logger.info("write result done!")

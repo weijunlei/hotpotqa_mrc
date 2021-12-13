@@ -1,8 +1,7 @@
 import collections
-import json
 
-def prediction_evaluate_origin(args,
-                        paragraph_results,
+
+def prediction_evaluate(paragraph_results,
                         labels,
                         thread=0.5):
     """ 对预测进行评估 """
@@ -61,65 +60,8 @@ def prediction_evaluate_origin(args,
             sent_acc += 1
     return sent_acc / all_count, p_precision / all_count, sent_em / all_count, sent_recall / all_count
 
-def prediction_evaluate(args,
-                        paragraph_results,
-                        labels,
-                        thread=0.5):
-    """ 对预测进行评估 """
-    p_recall = p_precision = sent_em = sent_acc = sent_recall = 0
-    all_count = 0
-    new_para_result = {}
-    for k, v in paragraph_results.items():
-        q_id, context_id = k.split('_')
-        context_id = int(context_id)
-        if q_id not in new_para_result:
-            new_para_result[q_id] = [-100000] * 10
-        new_para_result[q_id][context_id] = v
-    with open(args.dev_file, "r") as f:
-        dev_data = json.load(f)
-    first_best_paragraph_file = "{}/{}".format(args.first_predict_result_path, args.dev_best_paragraph_file)
-    first_best_paragraph = json.load(open(first_best_paragraph_file, 'r', encoding='utf-8'))
-    # 读取验证集数据
-    dev_dict = {}
-    for info in dev_data:
-        get_id = info['_id']
-        sfs = info['supporting_facts']
-        paragraphs = info['context']
-        for context_idx, context in enumerate(paragraphs):
-            title, sentences = context
-            for sent_idx, sent in enumerate(sentences):
-                if [title, sent_idx] in sfs:
-                    if get_id not in dev_dict:
-                        dev_dict[get_id] = []
-                    dev_dict[get_id].append(context_idx)
-                    dev_dict[get_id] = list(set(dev_dict[get_id]))
-    predict_true_num = 0
-    em_num = 0
-    for q_id, info in dev_dict.items():
-        first_paragraph = first_best_paragraph[q_id]
-        predict_info = new_para_result[q_id]
-        predict_info[first_paragraph] = -10000
-        max_value = max(predict_info)
-        second_paragraph = 0
-        for predict_idx, predict_val in enumerate(predict_info):
-            if predict_val == max_value:
-                second_paragraph = predict_idx
-                break
-        all_count += len(info)
-        if first_paragraph in info:
-            predict_true_num += 1
-        if second_paragraph in info:
-            predict_true_num += 1
-        if first_paragraph in info and second_paragraph in info:
-            em_num += 1
-    recall = 1.0 * predict_true_num / all_count
-    precision = 1.0 * predict_true_num / (len(new_para_result) * 2)
-    f1 = 2.0 * (recall * precision) / (recall + precision)
-    em = 1.0 * em_num / len(dev_dict)
-    return recall, precision, f1, em
 
-
-def write_predictions(args, all_examples, all_features, all_results, is_training='train', has_sentence_result=True):
+def write_predictions(all_examples, all_features, all_results, is_training='train', has_sentence_result=True):
     """ 将预测结果写入json文件 """
     example_index2features = collections.defaultdict(list)
     for feature in all_features:
@@ -155,6 +97,7 @@ def write_predictions(args, all_examples, all_features, all_results, is_training
                         sentence_all_labels.append(cls_label)
                         sentence_result.append(label_result)
                 sentence_results[id] = sentence_result
+
                 assert len(sentence_result) == sum(features[0].cls_mask) - 1
                 assert len(sentence_all_labels) == sum(features[0].cls_mask)
             else:
@@ -215,9 +158,8 @@ def write_predictions(args, all_examples, all_features, all_results, is_training
             if has_sentence_result:
                 assert len(sentence_result) + overlap == mask1
                 assert len(sentence_all_labels) + overlap == mask1 + 1
-    # return paragraph_results, sentence_results, labels
     if is_training == 'test':
         return 0, 0, 0, 0
     else:
-        return prediction_evaluate(args, paragraph_results=paragraph_results,
+        return prediction_evaluate(paragraph_results=paragraph_results,
                                    labels=labels)

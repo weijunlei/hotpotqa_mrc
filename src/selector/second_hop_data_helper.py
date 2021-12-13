@@ -228,6 +228,9 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
     global global_tokenizer
     global global_max_seq_length
     global global_is_training
+    global_tokenizer = tokenizer
+    global_max_seq_length = max_seq_length
+    global_is_training = is_training
     features = []
     related_sent_num = 0
     not_related_sent_num = 0

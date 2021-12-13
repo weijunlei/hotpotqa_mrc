@@ -15,26 +15,24 @@ from pathlib import Path
 import re
 import numpy as np
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,Sampler,
+from torch.utils.data import (DataLoader, SequentialSampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
-from transformers import BertTokenizer
 from tqdm import tqdm, trange
-if sys.version_info[0] == 2:
-    import cPickle as pickle
-else:
-    import pickle
+from transformers import BertTokenizer
+import pickle
 from collections import Counter
 import string
 import gc
 
-from second_hop_data_helper import (HotpotQAExample,
+
+from first_hop_data_helper import (HotpotQAExample,
                                        HotpotInputFeatures,
-                                       read_second_hotpotqa_examples,
-                                       convert_examples_to_second_features)
+                                       read_hotpotqa_examples,
+                                       convert_examples_to_features)
+from first_hop_selector import dev_feature_getter, write_predictions
 sys.path.append("../pretrain_model")
-from changed_model import BertForRelatedSentence, BertForParagraphClassification
-from modeling_bert import *
+from changed_model import BertForParagraphClassification, BertForRelatedSentence
 from optimization import BertAdam, warmup_linear
 
 # 日志设置
@@ -43,13 +41,8 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-
-def write_second_predict_result(examples, features, results, has_sentence_result=True):
+def write_predict_result(examples, features, results, has_sentence_result=True):
     """ 给出预测结果 """
     tmp_best_paragraph = {}
     tmp_related_sentence = {}
@@ -78,8 +71,8 @@ def write_second_predict_result(examples, features, results, has_sentence_result
             labels_result = raw_result
             cls_masks = get_feature.cls_mask
             if has_sentence_result:
-                for get_idx, (label_result, cls_mask) in enumerate(zip(labels_result, cls_masks)):
-                    if get_idx == 0:
+                for idx, (label_result, cls_mask) in enumerate(zip(labels_result, cls_masks)):
+                    if idx == 0:
                         continue
                     if cls_mask != 0:
                         sentence_result.append(label_result)
@@ -101,7 +94,7 @@ def write_second_predict_result(examples, features, results, has_sentence_result
                     mask1 += sum(feature.cls_mask[1:])
                     label_results = feature_result[1:]
                     cls_masks = feature.cls_mask[1:]
-                    for get_idx, (label_result, cls_mask) in enumerate(zip(label_results, cls_masks)):
+                    for idx, (label_result, cls_mask) in enumerate(zip(label_results, cls_masks)):
                         if cls_mask != 0:
                             tmp_sent_result.append(label_result)
                     if roll_back is None:
@@ -126,10 +119,8 @@ def write_second_predict_result(examples, features, results, has_sentence_result
         context_id, paragraph_id = k.split('_')
         paragraph_id = int(paragraph_id)
         if context_id not in context_dict:
-            context_dict[context_id] = [[0]*10,[0]*10]
+            context_dict[context_id] = [[0]*10, [0]*10]
         context_dict[context_id][0][paragraph_id] = v
-        # 在预测时只做标记位，为1标记可以被选中，为0不能被选中
-        context_dict[context_id][1][paragraph_id] = 1
     # 将context最大结果导出
     for k, v in context_dict.items():
         thread = 0.01
@@ -139,17 +130,13 @@ def write_second_predict_result(examples, features, results, has_sentence_result
         max_result = False
         get_related_paras = []
         max_para = -1
-        for para_idx, para_pro in enumerate(v[0]):
-            # 后面的筛选条件保证两个段落不会相同
-            if para_pro > max_logit and v[1][para_idx] != 0:
+        for idx, para_pro in enumerate(v[0]):
+            if para_pro > max_logit:
                 max_logit = para_pro
-                max_para = para_idx
-            if max_v - min_v == 0:
-                para_pro = 0
-            else:
-                para_pro = (para_pro - min_v) / (max_v - min_v)
-            if para_pro > thread and v[1][para_idx] != 0:
-                get_related_paras.append(para_idx)
+                max_para = idx
+            para_pro = (para_pro - min_v)/ (max_v - min_v)
+            if para_pro > thread:
+                get_related_paras.append(idx)
         tmp_best_paragraph[k] = max_para
         tmp_related_paragraph[k] = get_related_paras
     # 获取相关段落和句子
@@ -187,7 +174,6 @@ def run_predict(args):
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
 
-    # Prepare model
     models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
                    "BertForParagraphClassification": BertForParagraphClassification}
     # 从文件中加载模型
@@ -206,15 +192,10 @@ def run_predict(args):
         model = DDP(model)
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
-    dev_examples = read_second_hotpotqa_examples(args=args,
-                                                 input_file=args.dev_file,
-                                                 best_paragraph_file="{}/{}".format(args.first_predict_result_path,
-                                                                                    args.best_paragraph_file),
-                                                 related_paragraph_file="{}/{}".format(args.first_predict_result_path,
-                                                                                       args.related_paragraph_file),
-
-                                                 is_training='test')
+    dev_examples = read_hotpotqa_examples(input_file=args.dev_file,
+                                          is_training='test')
     example_num = len(dev_examples)
+    logger.info("all examples number: {}".format(example_num))
     max_train_data_size = 100000
     start_idxs = list(range(0, example_num, max_train_data_size))
     end_idxs = [x + max_train_data_size for x in start_idxs]
@@ -223,26 +204,19 @@ def run_predict(args):
     best_paragraph = {}
     related_sentence = {}
     related_paragraph = {}
+    new_context = {}
     total = 0
     max_len = 0
 
-    data = json.load(open(args.dev_file, 'r', encoding='utf-8'))
-    # data = data[:100]
-    first_hop_dict = {}
-    first_best_paragraph_file = "{}/{}".format(args.first_predict_result_path, args.best_paragraph_file)
-    first_best_paragraph = json.load(open(first_best_paragraph_file, 'r', encoding='utf-8'))
-    for info in data:
-        title = info['context'][first_best_paragraph[info['_id']]][0]
-        first_hop_dict[info['_id']] = 0
-        for supporting_fact in info['supporting_facts']:
-            if title == supporting_fact[0]:
-                first_hop_dict[info['_id']] = 1
-                break
+    has_sentence_result = True
 
-    for start_idx in range(len(start_idxs)):
-        logger.info("start idx: {} all idx length: {}".format(start_idx, len(start_idxs)))
-        truly_examples = dev_examples[start_idxs[start_idx]: end_idxs[start_idx]]
-        truly_features = convert_examples_to_second_features(
+    if args.model_name == 'BertForParagraphClassification':
+        has_sentence_result = False
+
+    for idx in range(len(start_idxs)):
+        logger.info("predict idx: {} all length: {}".format(idx, len(start_idxs)))
+        truly_examples = dev_examples[start_idxs[idx]: end_idxs[idx]]
+        truly_features = convert_examples_to_features(
             examples=truly_examples,
             tokenizer=tokenizer,
             max_seq_length=args.max_seq_length,
@@ -266,18 +240,14 @@ def run_predict(args):
                                            ["unique_id", "logit"])
 
         model.eval()
-        has_sentence_result = True
-        if args.model_name == 'BertForParagraphClassification':
-            has_sentence_result = False
         with torch.no_grad():
             cur_result = []
-            for batch_idx, batch in enumerate(tqdm(dev_dataloader, desc="predict interation: {}".format(args.dev_file))):
+            for idx, batch in enumerate(tqdm(dev_dataloader, desc="predict interation: {}".format(args.dev_file))):
                 # example index getter
                 d_example_indices = batch[-1]
                 # 多gpu训练的scatter
                 if n_gpu == 1:
-                    # 去除example index
-                    batch = tuple(x.squeeze(0).to(device) for x in batch[:-1])
+                    batch = tuple(t.squeeze(0).to(device) for t in batch[:-1])
                 else:
                     batch = batch[:-1]
                 d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_weight = batch
@@ -296,112 +266,92 @@ def run_predict(args):
                     unique_id = dev_feature.unique_id
                     cur_result.append(RawResult(unique_id=unique_id,
                                              logit=dev_logit))
-            tmp_best_paragraph, tmp_related_sentence, tmp_related_paragraph = write_second_predict_result(
-                examples=truly_examples,
-                features=truly_features,
-                results=cur_result,
-                has_sentence_result=has_sentence_result
-            )
+
+            tmp_best_paragraph, tmp_related_sentence, tmp_related_paragraph = write_predict_result(examples=truly_examples,
+                                                                                                   features=truly_features,
+                                                                                                   results=cur_result,
+                                                                                                   has_sentence_result=has_sentence_result)
             all_results += cur_result
             best_paragraph.update(tmp_best_paragraph)
             related_sentence.update(tmp_related_sentence)
             related_paragraph.update(tmp_related_paragraph)
-        del truly_examples, truly_features, dev_data
-        gc.collect()
+            del truly_examples, truly_features, dev_data
+            gc.collect()
+    # 获取新的文档
+    logger.info("start saving data...")
+    data = json.load(open(args.dev_file, 'r', encoding='utf-8'))
+    # data = data[:100]
+    for info in data:
+        context = info['context']
+        qas_id = info['_id']
+        # (title, list(sent))
+        get_best_paragraphs = context[best_paragraph[qas_id]]
+        question = info['question']
+        all_input_text = question + ''.join(get_best_paragraphs[1])
+        # [10*predict, 10 * label]测试的时候无
+        if has_sentence_result:
+            get_sent_labels = related_sentence[qas_id]
+            del_thread = sorted(get_sent_labels[0][:-1])
+        del_idx = 0
+        all_tokens = tokenizer.tokenize(all_input_text)
+        cur_all_text = ''
+        if len(all_tokens) <= 256:
+            question += ''.join(get_best_paragraphs[1])
+            cur_all_text = question
+        else:
+            while len(all_tokens) > 256:
+                mask = []
+                cur_all_text = question
+                for idx, paragraph in enumerate(get_best_paragraphs[1]):
+                    if has_sentence_result:
+                        if get_sent_labels[0][idx] > del_thread[del_idx]:
+                            cur_all_text += paragraph
+                            mask.append(1)
+                        else:
+                            mask.append(0)
+                    else:
+                        cur_all_text += paragraph
+                        mask.append(1)
+                all_tokens = tokenizer.tokenize(cur_all_text)
+                if not has_sentence_result and len(all_tokens) > 256:
+                    all_tokens = all_tokens[:256]
+                del_idx += 1
+        all_tokens_len = len(tokenizer.tokenize(cur_all_text))
+        total += all_tokens_len
+        if all_tokens_len > 256:
+            max_len += 1
+        new_context[qas_id] = cur_all_text
     logger.info("writing result to file...")
-    if not os.path.exists(args.second_predict_result_path):
-        logger.info("make new output dir:{}".format(args.second_predict_result_path))
-        os.makedirs(args.second_predict_result_path)
-    final_related_paragraph_file = "{}/{}".format(args.second_predict_result_path, args.final_related_result)
-    final_second_related_paragraph_file = ""
-    final_related_paragraph_dict = {}
-    for k, v in best_paragraph.items():
-        final_related_paragraph_dict[k] = [first_best_paragraph[k], best_paragraph[k]]
-    logger.info(len(final_related_paragraph_dict))
-    json.dump(final_related_paragraph_dict, open(final_related_paragraph_file, 'w', encoding='utf-8'))
-    logger.info("write result done!")
-
-    # write third context
-    # new_context = {}
-    # data = json.load(open(args.dev_file, 'r', encoding='utf-8'))
-    # # data = data[:100]
-    # over_half_num = 0
-    # for info in data:
-    #     context = info['context']
-    #     qas_id = info['_id']
-    #     # (title, list(sent))
-    #     get_best_paragraphs = context[final_related_paragraph_dict[qas_id][1]]
-    #     get_second_paragraphs = context[final_related_paragraph_dict[qas_id][0]]
-    #     question = info['question']
-    #     # 1 指示句子s
-    #     all_input_text = question + ''.join(get_best_paragraphs[1])
-    #     all_input_text += ''.join(get_second_paragraphs[1])
-    #     # [10*predict, 10 * label]测试的时候无
-    #     if has_sentence_result:
-    #         get_sent_labels = related_sentence[qas_id]
-    #         del_thread = sorted(get_sent_labels[0][:-1])
-    #         del_idx = 0
-    #     all_tokens = tokenizer.tokenize(all_input_text)
-    #     cur_all_text = ''
-    #     if len(all_tokens) <= 256:
-    #         question += ''.join(get_best_paragraphs[1])
-    #         cur_all_text = question
-    #     else:
-    #         over_half_num += 1
-    #         while len(all_tokens) > 256:
-    #             mask = []
-    #             cur_all_text = question
-    #             for idx, paragraph in enumerate(get_best_paragraphs[1]):
-    #                 if has_sentence_result:
-    #                     if get_sent_labels[0][idx] > del_thread[min(del_idx, len(del_thread) - 1)]:
-    #                         cur_all_text += paragraph
-    #                         mask.append(1)
-    #                     else:
-    #                         mask.append(0)
-    #                 else:
-    #                     cur_all_text += paragraph
-    #                     mask.append(1)
-    #             all_tokens = tokenizer.tokenize(cur_all_text)
-    #             if not has_sentence_result and len(all_tokens) > 256:
-    #                 all_tokens = all_tokens[:256]
-    #             if has_sentence_result:
-    #                 del_idx += 1
-    #     all_tokens_len = len(tokenizer.tokenize(cur_all_text))
-    #     total += all_tokens_len
-    #     if all_tokens_len > 256:
-    #         max_len += 1
-    #     new_context[qas_id] = cur_all_text
-    # logger.info("over half length number: {}".format(over_half_num))
-    # json.dump(new_context, open("{}/{}".format(args.second_predict_result_path, args.new_context_file),
-    #                             "w", encoding="utf-8"))
-    json.dump(related_paragraph, open("{}/{}".format(args.second_predict_result_path, args.related_paragraph_file),
+    if not os.path.exists(args.predict_result_path):
+        logger.info("make new output dir:{}".format(args.predict_result_path))
+        os.makedirs(args.predict_result_path)
+    json.dump(best_paragraph, open("{}/{}".format(args.predict_result_path, args.best_paragraph_file),
+                                   "w", encoding="utf-8"))
+    json.dump(new_context, open("{}/{}".format(args.predict_result_path, args.new_context_file),
+                                "w", encoding="utf-8"))
+    json.dump(related_paragraph, open("{}/{}".format(args.predict_result_path, args.related_paragraph_file),
                                       "w", encoding='utf-8'))
     logger.info("write result done!")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-
     ## Required parameters
     parser.add_argument("--bert_model", default='bert-base-uncased', type=str,
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
                              "bert-base-multilingual-cased, bert-base-chinese.")
-    parser.add_argument("--checkpoint_path", default='../checkpoints/selector/second_hop_selector', type=str,
+    parser.add_argument("--checkpoint_path", default='../checkpoints/selector/first_hop_selector', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
     parser.add_argument("--model_name", type=str, default='BertForRelated',
                         help="The output directory where the model checkpoints and predictions will be written.")
 
     ## Other parameters
-    parser.add_argument("--dev_file", default='../data/hotpot_data/hotpot_train_labeled_data_v2.json', type=str,
+    parser.add_argument("--dev_file", default='../data/hotpot_data/hotpot_train_labeled_data.json', type=str,
                         help="dev file")
     # parser.add_argument("--pred_output", type=str, default='round1_base/train_preds.json',
     #                     help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--first_predict_result_path", default="../data/selector/first_hop_result/", type=str,
-                        help="The output directory of all result")
-    parser.add_argument("--second_predict_result_path", default="../data/selector/second_hop_result/", type=str,
-                        help="The output directory of all result")
-    parser.add_argument("--final_related_result", default="train_related.json", type=str,
+    parser.add_argument("--predict_result_path", default="../data/selector/first_hop_result/", type=str,
                         help="The output directory of all result")
     parser.add_argument("--best_paragraph_file", default='train_best_paragraph.json', type=str,
                         help="best_paragraph_file")
@@ -439,3 +389,7 @@ if __name__ == '__main__':
                              "Positive power of 2: static loss scaling value.\n")
     args = parser.parse_args()
     run_predict(args=args)
+
+
+
+
