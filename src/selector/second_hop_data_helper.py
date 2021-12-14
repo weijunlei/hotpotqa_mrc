@@ -6,6 +6,7 @@ from multiprocessing import Pool
 from first_hop_data_helper import HotpotQAExample
 from first_hop_data_helper import HotpotInputFeatures
 
+
 def read_second_hotpotqa_examples(args,
                                   input_file,
                                   best_paragraph_file,

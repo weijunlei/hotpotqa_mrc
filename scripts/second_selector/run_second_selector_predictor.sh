@@ -5,7 +5,7 @@ cd ../../src/selector
 echo "start predict dev second hop result !"
 python -u second_hop_selector_predictor.py \
     --bert_model bert-base-uncased \
-    --checkpoint_path ../../data/checkpoints/selector/20211211_second_related_paragraph_hop_selector_truly \
+    --checkpoint_path ../../data/checkpoints/selector/20211214_second_related_paragraph_hop_selector_truly \
     --model_name BertForRelatedSentence \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
     --first_predict_result_path ../../data/selector/first_hop_related_paragraph_result/ \
@@ -20,7 +20,7 @@ echo "predict dev second hop result done!"
 echo "----------------------------------------------------"
 python -u second_hop_selector_predictor.py \
     --bert_model bert-base-uncased \
-    --checkpoint_path ../../data/checkpoints/selector/20211211_second_related_paragraph_hop_selector_truly \
+    --checkpoint_path ../../data/checkpoints/selector/20211214_second_related_paragraph_hop_selector_truly \
     --model_name BertForRelatedSentence \
     --dev_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
     --first_predict_result_path ../../data/selector/first_hop_related_paragraph_result/ \
@@ -32,3 +32,9 @@ python -u second_hop_selector_predictor.py \
     --max_seq_length 512 \
     --val_batch_size 128
 echo "predict train second hop result done!"
+
+echo "----------------------------------------------------"
+echo "train second hop selector done!"
+echo "start send email"
+cd ../../src/preprocess
+python send_email.py 20211214_second_related_paragraph_hop_selector_truly predict完成

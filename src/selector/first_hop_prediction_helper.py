@@ -1,7 +1,62 @@
+import json
+import os
 import collections
 
 
-def prediction_evaluate(paragraph_results,
+def prediction_evaluate(args,
+                        paragraph_results,
+                        labels,
+                        thread=0.5,
+                        step=0):
+    """ 对预测进行评估 """
+    true_dev_dict = json.load(open(args.dev_file, "r"))
+    all_dev_related_paragraph_dict = {}
+    for info in true_dev_dict:
+        get_id = info['_id']
+        sfs = info['supporting_facts']
+        paragraphs = info['context']
+        true_values = set()
+        for context_idx, context in enumerate(paragraphs):
+            title, sentences = context
+            for sent_idx, sent in enumerate(sentences):
+                if [title, sent_idx] in sfs:
+                    true_values.add(context_idx)
+        all_dev_related_paragraph_dict[get_id] = list(true_values)
+    new_para_result = {}
+    for k, v in paragraph_results.items():
+        q_id, context_id = k.split('_')
+        context_id = int(context_id)
+        if q_id not in new_para_result:
+            new_para_result[q_id] = [0] * 10
+        new_para_result[q_id][context_id] = v
+    predict_dict = {}
+    for k, v in new_para_result.items():
+        max_value = max(v)
+        max_idx = 0
+        for pre_idx, pre_v in enumerate(v):
+            if pre_v == max_value:
+                max_idx = pre_idx
+                break
+        predict_dict[k] = max_idx
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+    with open(os.path.join(args.output_dir, "predict_all_dev_result_{}.json".format(step)), "w") as writer:
+        json.dump(new_para_result, writer)
+    with open(os.path.join(args.output_dir, "predict_dev_result_{}.json".format(step)), "w") as writer:
+        json.dump(predict_dict, writer)
+    true_num = 0
+    bad_num = 0
+    for k, v in predict_dict.items():
+        if v in all_dev_related_paragraph_dict[k]:
+            true_num += 1
+        else:
+            bad_num += 1
+    acc = 1.0 * true_num / len(predict_dict)
+    return acc, acc, acc, acc
+
+
+def prediction_evaluate_tmp(args,
+                        paragraph_results,
                         labels,
                         thread=0.5):
     """ 对预测进行评估 """
@@ -61,7 +116,7 @@ def prediction_evaluate(paragraph_results,
     return sent_acc / all_count, p_precision / all_count, sent_em / all_count, sent_recall / all_count
 
 
-def write_predictions(all_examples, all_features, all_results, is_training='train', has_sentence_result=True):
+def write_predictions(args, all_examples, all_features, all_results, is_training='train', has_sentence_result=True, step=0):
     """ 将预测结果写入json文件 """
     example_index2features = collections.defaultdict(list)
     for feature in all_features:
@@ -161,5 +216,7 @@ def write_predictions(all_examples, all_features, all_results, is_training='trai
     if is_training == 'test':
         return 0, 0, 0, 0
     else:
-        return prediction_evaluate(paragraph_results=paragraph_results,
-                                   labels=labels)
+        return prediction_evaluate(args=args,
+                                   paragraph_results=paragraph_results,
+                                   labels=labels,
+                                   step=step)

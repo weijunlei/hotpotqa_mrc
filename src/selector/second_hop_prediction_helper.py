@@ -1,3 +1,4 @@
+import os
 import collections
 import json
 
@@ -61,14 +62,21 @@ def prediction_evaluate_origin(args,
             sent_acc += 1
     return sent_acc / all_count, p_precision / all_count, sent_em / all_count, sent_recall / all_count
 
+
 def prediction_evaluate(args,
                         paragraph_results,
                         labels,
-                        thread=0.5):
+                        thread=0.5,
+                        step=0):
     """ 对预测进行评估 """
     p_recall = p_precision = sent_em = sent_acc = sent_recall = 0
     all_count = 0
     new_para_result = {}
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+    print("predict paragraph result length: {}".format(len(paragraph_results)))
+    with open(os.path.join(args.output_dir, "predict_second_dev_paragraph_result_{}.json".format(step)), "w") as writer:
+        json.dump(paragraph_results, writer)
     for k, v in paragraph_results.items():
         q_id, context_id = k.split('_')
         context_id = int(context_id)
@@ -95,6 +103,7 @@ def prediction_evaluate(args,
                     dev_dict[get_id] = list(set(dev_dict[get_id]))
     predict_true_num = 0
     em_num = 0
+    predict_dict = {}
     for q_id, info in dev_dict.items():
         first_paragraph = first_best_paragraph[q_id]
         predict_info = new_para_result[q_id]
@@ -112,6 +121,12 @@ def prediction_evaluate(args,
             predict_true_num += 1
         if first_paragraph in info and second_paragraph in info:
             em_num += 1
+        predict_dict[q_id] = [first_paragraph, second_paragraph]
+
+    with open(os.path.join(args.output_dir, "predict_second_all_dev_result_{}.json".format(step)), "w") as writer:
+        json.dump(new_para_result, writer)
+    with open(os.path.join(args.output_dir, "predict_second_dev_result_{}.json".format(step)), "w") as writer:
+        json.dump(predict_dict, writer)
     recall = 1.0 * predict_true_num / all_count
     precision = 1.0 * predict_true_num / (len(new_para_result) * 2)
     f1 = 2.0 * (recall * precision) / (recall + precision)
@@ -119,7 +134,7 @@ def prediction_evaluate(args,
     return recall, precision, f1, em
 
 
-def write_predictions(args, all_examples, all_features, all_results, is_training='train', has_sentence_result=True):
+def write_predictions(args, all_examples, all_features, all_results, is_training='train', has_sentence_result=True, step=0):
     """ 将预测结果写入json文件 """
     example_index2features = collections.defaultdict(list)
     for feature in all_features:
@@ -132,7 +147,7 @@ def write_predictions(args, all_examples, all_features, all_results, is_training
         features = example_index2features[example_index]
         # TODO: check id格式
         # 将5a8b57f25542995d1e6f1371_0_0 qid_context_sent 切分为 qid_context
-        id = '_'.join(features[0].unique_id.split('_')[:-1])
+        get_id = '_'.join(features[0].unique_id.split('_')[:-1])
         sentence_result = []
         sentence_all_labels = []
         if len(features) == 1:
@@ -142,7 +157,7 @@ def write_predictions(args, all_examples, all_features, all_results, is_training
             # 对max_seq预测的结果
             raw_result = unique_id2result[get_feature_id].logit
             # 第一个'[CLS]'为paragraph为支撑句标识
-            paragraph_results[id] = raw_result[0]
+            paragraph_results[get_id] = raw_result[0]
             labels_result = raw_result
             cls_masks = get_feature.cls_mask
             cls_labels = get_feature.cls_label
@@ -154,12 +169,12 @@ def write_predictions(args, all_examples, all_features, all_results, is_training
                     if cls_mask != 0:
                         sentence_all_labels.append(cls_label)
                         sentence_result.append(label_result)
-                sentence_results[id] = sentence_result
+                sentence_results[get_id] = sentence_result
                 assert len(sentence_result) == sum(features[0].cls_mask) - 1
                 assert len(sentence_all_labels) == sum(features[0].cls_mask)
             else:
                 sentence_all_labels.append(cls_labels[0])
-            labels[id] = sentence_all_labels
+            labels[get_id] = sentence_all_labels
         else:
             # 对单实例的多结果处理
             paragraph_result = 0
@@ -209,9 +224,9 @@ def write_predictions(args, all_examples, all_features, all_results, is_training
                         sentence_all_labels.append(cls_labels[0])
                     else:
                         sentence_all_labels[0] = max(sentence_all_labels[0], cls_labels[0])
-            paragraph_results[id] = paragraph_result
-            sentence_results[id] = sentence_result
-            labels[id] = sentence_all_labels
+            paragraph_results[get_id] = paragraph_result
+            sentence_results[get_id] = sentence_result
+            labels[get_id] = sentence_all_labels
             if has_sentence_result:
                 assert len(sentence_result) + overlap == mask1
                 assert len(sentence_all_labels) + overlap == mask1 + 1
@@ -219,5 +234,7 @@ def write_predictions(args, all_examples, all_features, all_results, is_training
     if is_training == 'test':
         return 0, 0, 0, 0
     else:
-        return prediction_evaluate(args, paragraph_results=paragraph_results,
-                                   labels=labels)
+        return prediction_evaluate(args,
+                                   paragraph_results=paragraph_results,
+                                   labels=labels,
+                                   step=step)

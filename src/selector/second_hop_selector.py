@@ -53,7 +53,7 @@ def logger_config(log_path, log_prefix='lwj', write2console=True):
     return logger
 
 
-def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelatedSentence'):
+def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelatedSentence', step=0):
     dev_examples, dev_features, dev_dataloader = dev_feature_getter(args, tokenizer=tokenizer)
     model.eval()
     all_results = []
@@ -80,7 +80,7 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
             for i, example_index in enumerate(d_example_indices):
                 # start_position = start_positions[i].detach().cpu().tolist()
                 # end_position = end_positions[i].detach().cpu().tolist()
-                if has_sentence_result:
+                if not has_sentence_result:
                     dev_logit = dev_logits[i].detach().cpu().tolist()
                     dev_logit.reverse()
                 else:
@@ -89,13 +89,13 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
                 unique_id = dev_feature.unique_id
                 all_results.append(RawResult(unique_id=unique_id,
                                              logit=dev_logit))
-
     recall, precision, f1, em = write_predictions(args,
                                            dev_examples,
                                            dev_features,
                                            all_results,
                                            is_training='train',
-                                           has_sentence_result=has_sentence_result)
+                                           has_sentence_result=has_sentence_result,
+                                           step=step)
     # pickle.dump(all_results, open('all_results.pkl', 'wb'))
     model.train()
     del dev_examples, dev_features, dev_dataloader
@@ -251,7 +251,8 @@ def train_iterator(args,
                                                                   tokenizer=tokenizer,
                                                                   n_gpu=n_gpu,
                                                                   device=device,
-                                                                  model_name=args.model_name)
+                                                                  model_name=args.model_name,
+                                                                  step=global_steps)
                     logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
                     logger.info(
                         "recall: {} precision: {} f1: {} em: {} total loss: {}".format(recall, precision, f1, em, total_loss))
@@ -296,7 +297,8 @@ def train_iterator(args,
                                                   tokenizer=tokenizer,
                                                   n_gpu=n_gpu,
                                                   device=device,
-                                                  model_name=args.model_name)
+                                                  model_name=args.model_name,
+                                                  step=global_steps)
     logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
     logger.info("recall: {} precision: {} f1: {} em: {} total loss: {}".format(recall, precision, f1, em, total_loss))
 
@@ -374,29 +376,29 @@ def run_train(rank=0, world_size=1):
     # 从断点开始重新训练
     steps_trained_in_current_epoch = 0
     has_step = False
-    # Check if continuing training from a checkpoint
-    if os.path.exists(args.output_dir):
-        try:
-            # set global_step to gobal_step of last saved checkpoint from model path
-            dir_names = [name for name in os.listdir(args.output_dir) if
-                         os.path.isdir(os.path.join(args.output_dir, name))]
-            final_step_name = ''
-            max_step = 0
-            for dir_name in dir_names:
-                checkpoint_suffix = dir_name.split("-")[-1].split("/")[0]
-                trained_steps = int(checkpoint_suffix)
-                if trained_steps > max_step:
-                    max_step = trained_steps
-                    final_step_name = dir_name
-                    has_step = True
-                    steps_trained_in_current_epoch = trained_steps
-
-        except ValueError:
-            logger.info("  Starting fine-tuning.")
-    if has_step:
-        logger.info("  Continuing training from checkpoint, will skip to saved global_step")
-        logger.info("  Continuing training from global step %d", steps_trained_in_current_epoch)
-        model = models_dict[args.model_name].from_pretrained(os.path.join(args.output_dir, final_step_name))
+    # # Check if continuing training from a checkpoint
+    # if os.path.exists(args.output_dir):
+    #     try:
+    #         # set global_step to gobal_step of last saved checkpoint from model path
+    #         dir_names = [name for name in os.listdir(args.output_dir) if
+    #                      os.path.isdir(os.path.join(args.output_dir, name))]
+    #         final_step_name = ''
+    #         max_step = 0
+    #         for dir_name in dir_names:
+    #             checkpoint_suffix = dir_name.split("-")[-1].split("/")[0]
+    #             trained_steps = int(checkpoint_suffix)
+    #             if trained_steps > max_step:
+    #                 max_step = trained_steps
+    #                 final_step_name = dir_name
+    #                 has_step = True
+    #                 steps_trained_in_current_epoch = trained_steps
+    #
+    #     except ValueError:
+    #         logger.info("  Starting fine-tuning.")
+    # if has_step:
+    #     logger.info("  Continuing training from checkpoint, will skip to saved global_step")
+    #     logger.info("  Continuing training from global step %d", steps_trained_in_current_epoch)
+    #     model = models_dict[args.model_name].from_pretrained(os.path.join(args.output_dir, final_step_name))
 
     if args.fp16:
         model.half()
