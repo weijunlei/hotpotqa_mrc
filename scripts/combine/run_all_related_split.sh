@@ -52,6 +52,7 @@ echo "start send email"
 cd ../../src/preprocess
 python send_email.py 20211213_first_hop_related_paragraph_selector predict完成
 echo "----------------------------------------------------"
+cd ../../src/selector
 echo "start predict train first hop result !"
 python -u first_hop_selector_predictor.py \
     --bert_model bert-base-uncased \
