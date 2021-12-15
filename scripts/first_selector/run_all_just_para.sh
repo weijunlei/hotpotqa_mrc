@@ -35,6 +35,7 @@ echo "----------------------------------------------------"
 echo "start predict first hop result..."
 cd ../../src/selector
 echo "start predict dev first hop result !"
+cd ../../src/selector
 python -u first_hop_selector_predictor.py \
     --bert_model bert-base-uncased \
     --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \
@@ -52,6 +53,7 @@ cd ../../src/preprocess
 python send_email.py 20211213_first_hop_related_paragraph_selector predict完成
 echo "----------------------------------------------------"
 echo "start predict train first hop result !"
+cd ../../src/selector
 python -u first_hop_selector_predictor.py \
     --bert_model bert-base-uncased \
     --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \

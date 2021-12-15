@@ -255,10 +255,16 @@ def run_predict(args):
                     batch = tuple(x.squeeze(0).to(device) for x in batch[:-1])
                 else:
                     batch = batch[:-1]
+                inputs = {
+                    "input_ids": batch[0],
+                    "attention_mask": batch[1],
+                    "token_type_ids": batch[2],
+                    "cls_mask": batch[3],
+                    "cls_weight": batch[5]
+                }
                 d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_weight = batch
                 # 获取预测结果
-                dev_logits = model(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-                                   cls_mask=d_all_cls_mask, cls_weight=d_all_cls_weight)
+                dev_logits = model(**inputs)
                 for i, example_index in enumerate(d_example_indices):
                     # start_position = start_positions[i].detach().cpu().tolist()
                     # end_position = end_positions[i].detach().cpu().tolist()

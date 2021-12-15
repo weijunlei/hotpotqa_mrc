@@ -144,12 +144,15 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
             if n_gpu == 1:
                 d_batch = tuple(
                     t.squeeze(0).to(device) for t in d_batch)  # multi-gpu does scattering it-self
-            d_all_input_ids, d_all_input_mask, \
-            d_all_segment_ids, d_all_cls_mask, \
-            d_all_cls_label, d_all_cls_weight = d_batch[:-1]
-            dev_loss, dev_logits = model(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-                                         cls_mask=d_all_cls_mask, cls_label=d_all_cls_label,
-                                         cls_weight=d_all_cls_weight)
+            inputs = {
+                "input_ids": d_batch[0],
+                "attention_mask": d_batch[1],
+                "token_type_ids": d_batch[2],
+                "cls_mask": d_batch[3],
+                "cls_label": d_batch[4],
+                "cls_weight": d_batch[5]
+            }
+            dev_loss, dev_logits = model(**inputs)
             dev_loss = torch.sum(dev_loss)
             dev_logits = torch.sigmoid(dev_logits)
             total_loss += dev_loss
@@ -229,10 +232,15 @@ def train_iterator(args,
                     continue
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
-                input_ids, input_mask, segment_ids, cls_mask, cls_label, cls_weight = batch
-
-                loss, _ = model(input_ids, input_mask, segment_ids, cls_mask=cls_mask, cls_label=cls_label,
-                                cls_weight=cls_weight)
+                inputs = {
+                    "input_ids": batch[0],
+                    "attention_mask": batch[1],
+                    "token_type_ids": batch[2],
+                    "cls_mask": batch[3],
+                    "cls_label": batch[4],
+                    "cls_weight": batch[5]
+                }
+                loss, _ = model(**inputs)
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
                 train_loss += loss

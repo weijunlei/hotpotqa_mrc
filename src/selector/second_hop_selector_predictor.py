@@ -33,9 +33,15 @@ from second_hop_data_helper import (HotpotQAExample,
                                        read_second_hotpotqa_examples,
                                        convert_examples_to_second_features)
 sys.path.append("../pretrain_model")
-from changed_model import BertForRelatedSentence, BertForParagraphClassification
+from changed_model import BertForRelatedSentence, BertForParagraphClassification, \
+    BertForRelatedSentenceWithCrossAttention
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
+
+# Prepare model
+models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
+               "BertForParagraphClassification": BertForParagraphClassification,
+               "BertForRelatedSentenceWithCrossAttention": BertForRelatedSentenceWithCrossAttention}
 
 # 日志设置
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -187,9 +193,7 @@ def run_predict(args):
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
 
-    # Prepare model
-    models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
-                   "BertForParagraphClassification": BertForParagraphClassification}
+
     # 从文件中加载模型
     model = models_dict[args.model_name].from_pretrained(args.checkpoint_path)
 
@@ -280,10 +284,16 @@ def run_predict(args):
                     batch = tuple(x.squeeze(0).to(device) for x in batch[:-1])
                 else:
                     batch = batch[:-1]
-                d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_weight = batch
+                inputs = {
+                    "input_ids": batch[0],
+                    "attention_mask": batch[1],
+                    "token_type_ids": batch[2],
+                    "cls_mask": batch[3],
+                    "pq_end_pos": batch[4],
+                    "cls_weight": batch[6]
+                }
                 # 获取预测结果
-                dev_logits = model(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-                                   cls_mask=d_all_cls_mask, cls_weight=d_all_cls_weight)
+                dev_logits = model(**inputs)
                 for i, example_index in enumerate(d_example_indices):
                     # start_position = start_positions[i].detach().cpu().tolist()
                     # end_position = end_positions[i].detach().cpu().tolist()
