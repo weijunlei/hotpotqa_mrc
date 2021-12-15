@@ -19,10 +19,15 @@ from second_hop_prediction_helper import write_predictions
 from second_selector_config import get_config
 
 sys.path.append("../pretrain_model")
-from changed_model import BertForParagraphClassification, BertForRelatedSentence
+from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
+    BertForRelatedSentenceWithCrossAttention
 from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 
+models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
+               "BertForParagraphClassification": BertForParagraphClassification,
+               "BertForRelatedSentenceWithCrossAttention": BertForRelatedSentenceWithCrossAttention
+               }
 # 日志设置
 logger = None
 
@@ -69,11 +74,16 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
             if n_gpu == 1:
                 d_batch = tuple(
                     t.squeeze(0).to(device) for t in d_batch)  # multi-gpu does scattering it-self
-            d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_label, d_all_cls_weight = d_batch[
-                                                                                                                      :-1]
-            dev_loss, dev_logits = model(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-                                         cls_mask=d_all_cls_mask, cls_label=d_all_cls_label,
-                                         cls_weight=d_all_cls_weight)
+            inputs = {
+                "input_ids": d_batch[0],
+                "attention_mask": d_batch[1],
+                "token_type_ids": d_batch[2],
+                "cls_mask": d_batch[3],
+                "pq_end_pos": d_batch[4],
+                "cls_label": d_batch[5],
+                "cls_weight": d_batch[6]
+            }
+            dev_loss, dev_logits = model(**inputs)
             dev_loss = torch.sum(dev_loss)
             dev_logits = torch.sigmoid(dev_logits)
             total_loss += dev_loss
@@ -90,12 +100,12 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
                 all_results.append(RawResult(unique_id=unique_id,
                                              logit=dev_logit))
     recall, precision, f1, em = write_predictions(args,
-                                           dev_examples,
-                                           dev_features,
-                                           all_results,
-                                           is_training='train',
-                                           has_sentence_result=has_sentence_result,
-                                           step=step)
+                                                  dev_examples,
+                                                  dev_features,
+                                                  all_results,
+                                                  is_training='train',
+                                                  has_sentence_result=has_sentence_result,
+                                                  step=step)
     # pickle.dump(all_results, open('all_results.pkl', 'wb'))
     model.train()
     del dev_examples, dev_features, dev_dataloader
@@ -139,11 +149,12 @@ def dev_feature_getter(args, tokenizer):
     d_all_input_mask = torch.tensor([f.input_mask for f in dev_features], dtype=torch.long)
     d_all_segment_ids = torch.tensor([f.segment_ids for f in dev_features], dtype=torch.long)
     d_all_cls_mask = torch.tensor([f.cls_mask for f in dev_features], dtype=torch.long)
+    d_all_pq_end_pos = torch.tensor([f.pq_end_pos for f in dev_features], dtype=torch.long)
     d_all_cls_label = torch.tensor([f.cls_label for f in dev_features], dtype=torch.long)
     d_all_cls_weight = torch.tensor([f.cls_weight for f in dev_features], dtype=torch.float)
     d_all_example_index = torch.arange(d_all_input_ids.size(0), dtype=torch.long)
     dev_data = TensorDataset(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-                             d_all_cls_mask, d_all_cls_label, d_all_cls_weight, d_all_example_index)
+                             d_all_cls_mask, d_all_pq_end_pos, d_all_cls_label, d_all_cls_weight, d_all_example_index)
     if args.local_rank == -1:
         dev_sampler = RandomSampler(dev_data)
     else:
@@ -210,10 +221,11 @@ def train_iterator(args,
             all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
             all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
             all_cls_mask = torch.tensor([f.cls_mask for f in train_features], dtype=torch.long)
+            all_pq_end_pos = torch.tensor([f.pq_end_pos for f in train_features], dtype=torch.long)
             all_cls_label = torch.tensor([f.cls_label for f in train_features], dtype=torch.long)
             all_cls_weight = torch.tensor([f.cls_weight for f in train_features], dtype=torch.float)
             train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
-                                       all_cls_mask, all_cls_label, all_cls_weight)
+                                       all_cls_mask, all_pq_end_pos, all_cls_label, all_cls_weight)
             if args.local_rank == -1:
                 train_sampler = RandomSampler(train_data)
             else:
@@ -228,10 +240,17 @@ def train_iterator(args,
                     continue
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
-                input_ids, input_mask, segment_ids, cls_mask, cls_label, cls_weight = batch
-
-                loss, _ = model(input_ids, input_mask, segment_ids, cls_mask=cls_mask, cls_label=cls_label,
-                                cls_weight=cls_weight)
+                # input_ids, input_mask, segment_ids, cls_mask, cls_label, cls_weight = batch
+                inputs = {
+                    "input_ids": batch[0],
+                    "attention_mask": batch[1],
+                    "token_type_ids": batch[2],
+                    "cls_mask": batch[3],
+                    "pq_end_pos": batch[4],
+                    "cls_label": batch[5],
+                    "cls_weight": batch[6]
+                }
+                loss, _ = model(**inputs)
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
                 # logger.info("step = %d, train_loss=%f", global_steps, loss)
@@ -247,15 +266,16 @@ def train_iterator(args,
                 if (global_steps + 1) % args.save_model_step == 0 and (
                         step + 1) % args.gradient_accumulation_steps == 0:
                     recall, precision, f1, em, total_loss = dev_evaluate(args=args,
-                                                                  model=model,
-                                                                  tokenizer=tokenizer,
-                                                                  n_gpu=n_gpu,
-                                                                  device=device,
-                                                                  model_name=args.model_name,
-                                                                  step=global_steps)
+                                                                         model=model,
+                                                                         tokenizer=tokenizer,
+                                                                         n_gpu=n_gpu,
+                                                                         device=device,
+                                                                         model_name=args.model_name,
+                                                                         step=global_steps)
                     logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
                     logger.info(
-                        "recall: {} precision: {} f1: {} em: {} total loss: {}".format(recall, precision, f1, em, total_loss))
+                        "recall: {} precision: {} f1: {} em: {} total loss: {}".format(recall, precision, f1, em,
+                                                                                       total_loss))
 
                     if em > best_em:
                         best_em = em
@@ -293,12 +313,12 @@ def train_iterator(args,
             del train_features, all_input_ids, all_input_mask, all_segment_ids, all_cls_label, all_cls_mask, all_cls_weight, train_data, train_dataloader
             gc.collect()
     recall, precision, f1, em, total_loss = dev_evaluate(args=args,
-                                                  model=model,
-                                                  tokenizer=tokenizer,
-                                                  n_gpu=n_gpu,
-                                                  device=device,
-                                                  model_name=args.model_name,
-                                                  step=global_steps)
+                                                         model=model,
+                                                         tokenizer=tokenizer,
+                                                         n_gpu=n_gpu,
+                                                         device=device,
+                                                         model_name=args.model_name,
+                                                         step=global_steps)
     logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
     logger.info("recall: {} precision: {} f1: {} em: {} total loss: {}".format(recall, precision, f1, em, total_loss))
 
@@ -370,8 +390,7 @@ def run_train(rank=0, world_size=1):
         os.makedirs(args.output_dir)
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
-                   "BertForParagraphClassification": BertForParagraphClassification}
+
     model = models_dict[args.model_name].from_pretrained(args.bert_model)
     # 从断点开始重新训练
     steps_trained_in_current_epoch = 0

@@ -3,8 +3,62 @@ from tqdm import tqdm
 import multiprocessing
 from multiprocessing import Pool
 
-from first_hop_data_helper import HotpotQAExample
-from first_hop_data_helper import HotpotInputFeatures
+
+class HotpotQAExample(object):
+    """ HotpotQA 实例解析"""
+    def __init__(self,
+                 qas_id,
+                 question_tokens,
+                 context_tokens,
+                 sentences_label=None,
+                 paragraph_label=None):
+        self.qas_id = qas_id
+        self.question_tokens = question_tokens
+        self.context_tokens = context_tokens
+        self.sentences_label = sentences_label
+        self.paragraph_label = paragraph_label
+
+    def __repr__(self):
+        qa_info = "qas_id:{} question:{}".format(self.qas_id, self.question_tokens)
+        if self.sentences_label:
+            qa_info += " sentence label:{}".format(''.join([str(x) for x in self.sentences_label]))
+        if self.paragraph_label:
+            qa_info += " paragraph label: {}".format(self.paragraph_label)
+        return qa_info
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class HotpotInputFeatures(object):
+    """ HotpotQA input features to model """
+    def __init__(self,
+                 unique_id,
+                 example_index,
+                 doc_span_index,
+                 tokens,
+                 input_ids,
+                 input_mask,
+                 segment_ids,
+                 cls_mask,
+                 pq_end_pos,
+                 cls_label=None,
+                 cls_weight=None,
+                 is_related=None,
+                 roll_back=None):
+        self.unique_id = unique_id
+        self.example_index = example_index
+        self.doc_span_index = doc_span_index
+        self.tokens = tokens
+        self.input_ids = input_ids
+        self.input_mask = input_mask
+        self.segment_ids = segment_ids
+        self.cls_mask = cls_mask
+        self.pq_end_pos = pq_end_pos
+        self.cls_label = cls_label
+        self.cls_weight = cls_weight
+        self.is_related = is_related
+        self.roll_back = roll_back
 
 
 def read_second_hotpotqa_examples(args,
@@ -103,6 +157,7 @@ def second_example_process(data):
     query_length = len(query_tokens) + 2
     unique_id = 0
     all_tokens = ['[CLS]'] + query_tokens + ['[SEP]']
+    query_end_idx = len(all_tokens) - 1
     cls_mask = [1] + [0] * (len(all_tokens) - 1)
     if global_is_training == 'train' or global_is_training == 'dev':
         cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
@@ -126,6 +181,8 @@ def second_example_process(data):
         roll_back = 0
         if cur_context_length + len(sentence_tokens) + 1 > max_context_length:
             """ 超出长度往后延两句 """
+            context_end_idx = len(all_tokens)
+            pq_end_pos = [query_end_idx, context_end_idx]
             all_tokens += ['[SEP]']
             tmp_len = len(all_tokens)
             input_ids = global_tokenizer.convert_tokens_to_ids(all_tokens) + [0] * (global_max_seq_length - tmp_len)
@@ -160,6 +217,7 @@ def second_example_process(data):
                                           input_mask=input_mask,
                                           segment_ids=query_ids,
                                           cls_mask=cls_mask,
+                                          pq_end_pos=pq_end_pos,
                                           cls_label=cls_label,
                                           cls_weight=cls_weight,
                                           is_related=real_related,
@@ -170,6 +228,7 @@ def second_example_process(data):
             # 还原到未添加context前
             cur_context_length = 0
             all_tokens = ['[CLS]'] + query_tokens + ['[SEP]']
+            query_end_idx = len(all_tokens) - 1
             cls_mask = [1] + [0] * (len(all_tokens) - 1)
             cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
             cls_weight = [1] + [0] * (len(all_tokens) - 1)
@@ -182,6 +241,8 @@ def second_example_process(data):
             sent_idx += 1
         pre_sent2_length = pre_sent1_length
         pre_sent1_length = len(sentence_tokens) + 1
+    context_end_idx = len(all_tokens)
+    pq_end_pos = [query_end_idx, context_end_idx]
     all_tokens += ['[SEP]']
     cls_mask += [1]
     cls_label += [0]
@@ -211,6 +272,7 @@ def second_example_process(data):
                                   input_mask=input_mask,
                                   segment_ids=query_ids,
                                   cls_mask=cls_mask,
+                                  pq_end_pos=pq_end_pos,
                                   cls_label=cls_label,
                                   cls_weight=cls_weight,
                                   is_related=real_related,
