@@ -10,7 +10,7 @@ import pickle
 import collections
 from tqdm import trange, tqdm
 from torch.multiprocessing import Process
-from transformers import BertTokenizer
+from transformers import BertTokenizer, RobertaTokenizer, ElectraTokenizer, AlbertTokenizer
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler, TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 
@@ -21,7 +21,6 @@ from second_selector_config import get_config
 sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
     BertForRelatedSentenceWithCrossAttention
-from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 
 models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
@@ -58,8 +57,25 @@ def logger_config(log_path, log_prefix='lwj', write2console=True):
     return logger
 
 
-def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelatedSentence', step=0):
-    dev_examples, dev_features, dev_dataloader = dev_feature_getter(args, tokenizer=tokenizer)
+def dev_evaluate(args,
+                 model,
+                 tokenizer,
+                 n_gpu,
+                 device,
+                 model_name='BertForRelatedSentence',
+                 step=0,
+                 cls_token=None,
+                 sep_token=None,
+                 unk_token=None,
+                 pad_token=None
+                 ):
+    dev_examples, dev_features, dev_dataloader = dev_feature_getter(args,
+                                                                    tokenizer=tokenizer,
+                                                                    cls_token=cls_token,
+                                                                    sep_token=sep_token,
+                                                                    unk_token=unk_token,
+                                                                    pad_token=pad_token
+                                                                    )
     model.eval()
     all_results = []
     total_loss = 0
@@ -113,7 +129,13 @@ def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelat
     return recall, precision, f1, em, total_loss
 
 
-def dev_feature_getter(args, tokenizer):
+def dev_feature_getter(args,
+                       tokenizer,
+                       cls_token=None,
+                       sep_token=None,
+                       unk_token=None,
+                       pad_token=None
+                       ):
     dev_examples = read_second_hotpotqa_examples(args=args,
                                                  input_file=args.dev_file,
                                                  best_paragraph_file="{}/{}".format(args.first_predict_result_path,
@@ -138,7 +160,11 @@ def dev_feature_getter(args, tokenizer):
             examples=dev_examples,
             tokenizer=tokenizer,
             max_seq_length=args.max_seq_length,
-            is_training='dev'
+            is_training='dev',
+            cls_token=cls_token,
+            sep_token=sep_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
         )
         if args.local_rank == -1 or torch.distributed.get_rank() == 0:
             logger.info("  Saving dev features into cached file %s", dev_feature_file)
@@ -168,7 +194,12 @@ def convert_example2file(args,
                          start_idxs,
                          end_idxs,
                          cached_train_features_file,
-                         tokenizer):
+                         tokenizer,
+                         cls_token=None,
+                         sep_token=None,
+                         unk_token=None,
+                         pad_token=None
+                         ):
     """ 将example转化为feature并存储在文件中 """
     total_feature_num = 0
     for idx in range(len(start_idxs)):
@@ -184,7 +215,12 @@ def convert_example2file(args,
                 examples=truly_train_examples,
                 tokenizer=tokenizer,
                 max_seq_length=args.max_seq_length,
-                is_training='train')
+                is_training='train',
+                cls_token=cls_token,
+                sep_token=sep_token,
+                unk_token=unk_token,
+                pad_token=pad_token
+            )
             logger.info("features gotten!")
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
                 logger.info("  Saving train features into cached file {}".format(new_train_cache_file))
@@ -206,7 +242,12 @@ def train_iterator(args,
                    device,
                    optimizer,
                    num_train_optimization_steps,
-                   steps_trained_in_current_epoch=0):
+                   steps_trained_in_current_epoch=0,
+                   cls_token=None,
+                   sep_token=None,
+                   unk_token=None,
+                   pad_token=None
+                   ):
     """ 训练 """
     best_em = 0
     train_loss = 0
@@ -271,7 +312,12 @@ def train_iterator(args,
                                                                          n_gpu=n_gpu,
                                                                          device=device,
                                                                          model_name=args.model_name,
-                                                                         step=global_steps)
+                                                                         step=global_steps,
+                                                                         cls_token=cls_token,
+                                                                         sep_token=sep_token,
+                                                                         unk_token=unk_token,
+                                                                         pad_token=pad_token
+                                                                         )
                     logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
                     logger.info(
                         "recall: {} precision: {} f1: {} em: {} total loss: {}".format(recall, precision, f1, em,
@@ -318,7 +364,12 @@ def train_iterator(args,
                                                          n_gpu=n_gpu,
                                                          device=device,
                                                          model_name=args.model_name,
-                                                         step=global_steps)
+                                                         step=global_steps,
+                                                         cls_token=cls_token,
+                                                         sep_token=sep_token,
+                                                         unk_token=unk_token,
+                                                         pad_token=pad_token
+                                                         )
     logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
     logger.info("recall: {} precision: {} f1: {} em: {} total loss: {}".format(recall, precision, f1, em, total_loss))
 
@@ -388,8 +439,28 @@ def run_train(rank=0, world_size=1):
         raise ValueError("Output directory {} already exists and is not empty." + args.output_dir)
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    # 设置分词器和模型
+    cls_token = '[CLS]'
+    sep_token = '[SEP]'
+    unk_token = '[UNK]'
+    pad_token = '[PAD]'
+    if 'electra' in args.bert_model.lower():
+        tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
+                                                     do_lower_case=args.do_lower_case)
+    elif 'albert' in args.bert_model.lower():
+        cls_token = '[CLS]'
+        sep_token = '[SEP]'
+        pad_token = '<pad>'
+        unk_token = '<unk>'
+        tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    elif 'roberta' in args.bert_model.lower():
+        cls_token = '<s>'
+        sep_token = '</s>'
+        unk_token = '<unk>'
+        pad_token = '<pad>'
+        tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    elif 'bert' in args.bert_model.lower():
+        tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
     model = models_dict[args.model_name].from_pretrained(args.bert_model)
     # 从断点开始重新训练
@@ -468,14 +539,19 @@ def run_train(rank=0, world_size=1):
     start_idxs = list(range(0, example_num, max_train_data_size))
     end_idxs = [x + max_train_data_size for x in start_idxs]
     end_idxs[-1] = example_num
-    logger.info('{} examples and {} example file(s)'.format(example_num, start_idxs));
+    logger.info('{} examples and {} example file(s)'.format(example_num, start_idxs))
     random.shuffle(train_examples)
     total_feature_num = convert_example2file(args=args,
                                              examples=train_examples,
                                              start_idxs=start_idxs,
                                              end_idxs=end_idxs,
                                              cached_train_features_file=cached_train_features_file,
-                                             tokenizer=tokenizer)
+                                             tokenizer=tokenizer,
+                                             cls_token=cls_token,
+                                             sep_token=sep_token,
+                                             unk_token=unk_token,
+                                             pad_token=pad_token
+                                             )
     logger.info("total feature num: {}".format(total_feature_num))
     num_train_optimization_steps = int(
         total_feature_num / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
@@ -511,7 +587,11 @@ def run_train(rank=0, world_size=1):
                    device=device,
                    optimizer=optimizer,
                    num_train_optimization_steps=num_train_optimization_steps,
-                   steps_trained_in_current_epoch=steps_trained_in_current_epoch
+                   steps_trained_in_current_epoch=steps_trained_in_current_epoch,
+                   cls_token=cls_token,
+                   sep_token=sep_token,
+                   unk_token=unk_token,
+                   pad_token=pad_token
                    )
 
 
