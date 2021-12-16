@@ -3,11 +3,11 @@ export CUDA_VISIBLE_DEVICES="2"
 # BertForRelatedSentence
 # BertForParagraphClassification
 MODEL_NAME=BertForParagraphClassification
-OUTPUT_NAME=20211214_second_just_paragraph_hop_selector_truly
-CACHE_NAME=20211214_second_just_paragraph_hop_selector_truly
-LOG_PREFIX=20211214_second_just_paragraph_hop_selector_truly
+OUTPUT_NAME=20211214_second_just_paragraph_hop_selector_atmosphere
+CACHE_NAME=20211214_second_just_paragraph_hop_selector_atmosphere
+LOG_PREFIX=20211214_second_just_paragraph_hop_selector_atmosphere
 FIRST_PREDICT_PATH=20211214_first_hop_just_paragraph_result
-SECOND_PREDICT_PATH=20211214_second_just_paragraph_hop_selector_truly
+SECOND_PREDICT_PATH=20211214_second_hop_just_paragraph_result
 
 echo "start train second hop selector..."
 cd ../../src/selector
@@ -61,7 +61,7 @@ echo "----------------------------------------------------"
 python -u second_hop_selector_predictor.py \
     --bert_model bert-base-uncased \
     --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \
-    --model_name BertForRelatedSentence \
+    --model_name $MODEL_NAME \
     --dev_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
     --first_predict_result_path ../../data/selector/$FIRST_PREDICT_PATH/ \
     --second_predict_result_path ../../data/selector/$SECOND_PREDICT_PATH/ \

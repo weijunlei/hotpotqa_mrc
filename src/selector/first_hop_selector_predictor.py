@@ -260,7 +260,7 @@ def run_predict(args):
                     "attention_mask": batch[1],
                     "token_type_ids": batch[2],
                     "cls_mask": batch[3],
-                    "cls_weight": batch[5]
+                    "cls_weight": batch[4]
                 }
                 d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_weight = batch
                 # 获取预测结果

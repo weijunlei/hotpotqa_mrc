@@ -58,6 +58,12 @@ class BertForParagraphClassification(BertPreTrainedModel):
             input_ids = input_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
+            cls_mask = cls_mask.unsqueeze(0)
+            if pq_end_pos is not None:
+                pq_end_pos = cls_mask.unsqueeze(0)
+            if cls_label is not None:
+                cls_label = cls_label.unsqueeze(0)
+                cls_weight = cls_weight.unsqueeze(0)
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
@@ -103,6 +109,12 @@ class BertForRelatedSentence(BertPreTrainedModel):
             input_ids = input_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
             token_type_ids = token_type_ids.unsqueeze(0)
+            if pq_end_pos is not None:
+                pq_end_pos = cls_mask.unsqueeze(0)
+            if cls_label is not None:
+                cls_label = cls_label.unsqueeze(0)
+                cls_mask = cls_mask.unsqueeze(0)
+                cls_weight = cls_weight.unsqueeze(0)
         sequence_output, _ = self.bert(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
