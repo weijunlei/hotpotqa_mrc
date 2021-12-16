@@ -1,5 +1,5 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="2"
+export CUDA_VISIBLE_DEVICES="3"
 echo "start train first hop selector..."
 cd ../../src/selector
 # BertForRelatedSentence
@@ -7,10 +7,10 @@ cd ../../src/selector
 python -u first_hop_selector.py \
     --bert_model bert-base-uncased \
     --over_write_result True \
-    --output_dir ../../data/checkpoints/selector/20211217_first_hop_just_paragraph_selector_24 \
+    --output_dir ../../data/checkpoints/selector/20211217_first_hop_just_paragraph_selector_24_value_setting \
     --log_path ../../log \
-    --log_prefix 20211217_first_hop_just_paragraph_selector_24 \
-    --feature_cache_path ../../data/cache/selector/20211217_first_hop_just_paragraph_selector_24 \
+    --log_prefix 20211217_first_hop_just_paragraph_selector_24_value_setting \
+    --feature_cache_path ../../data/cache/selector/20211217_first_hop_just_paragraph_selector_24_value_setting \
     --model_name BertForParagraphClassification \
     --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \

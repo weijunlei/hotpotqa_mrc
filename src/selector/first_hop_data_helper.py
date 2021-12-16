@@ -117,6 +117,10 @@ def read_hotpotqa_examples(input_file,
 global_tokenizer = None
 global_max_seq_length = None
 global_is_training = None
+global_cls_token = None
+global_sep_token = None
+global_unk_token = None
+global_pad_token = None
 
 
 def single_example_process(data):
@@ -126,6 +130,10 @@ def single_example_process(data):
     global global_tokenizer
     global global_max_seq_length
     global global_is_training
+    global global_cls_token
+    global global_sep_token
+    global global_unk_token
+    global global_pad_token
     query_tokens = global_tokenizer.tokenize(example.question_tokens)
     related_sent_num = not_related_sent_num = 0
     # special tokens ['CLS'] ['SEP'] ['SEP']
@@ -133,7 +141,7 @@ def single_example_process(data):
     cur_context_length = 0
     query_length = len(query_tokens) + 2
     unique_id = 0
-    all_tokens = ['[CLS]'] + query_tokens + ['[SEP]']
+    all_tokens = [global_cls_token] + query_tokens + [global_sep_token]
     cls_mask = [1] + [0] * (len(all_tokens) - 1)
     if global_is_training == 'train' or global_is_training == 'dev':
         cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
@@ -157,9 +165,13 @@ def single_example_process(data):
         roll_back = 0
         if cur_context_length + len(sentence_tokens) + 1 > max_context_length:
             """ 超出长度往后延两句 """
-            all_tokens += ['[SEP]']
+            all_tokens += [global_sep_token]
             tmp_len = len(all_tokens)
-            input_ids = global_tokenizer.convert_tokens_to_ids(all_tokens) + [0] * (global_max_seq_length - tmp_len)
+            while len(all_tokens) < global_max_seq_length:
+                all_tokens.append(global_pad_token)
+            # 换成变量替代
+            input_ids = global_tokenizer.convert_tokens_to_ids(all_tokens)
+            # input_ids = global_tokenizer.convert_tokens_to_ids(all_tokens) + [0] * (global_max_seq_length - tmp_len)
             query_ids = [0] * query_length + [1] * (tmp_len - query_length) + [0] * (global_max_seq_length - tmp_len)
             input_mask = [1] * tmp_len + [0] * (global_max_seq_length - tmp_len)
             cls_mask += [1] + [0] * (global_max_seq_length - tmp_len)
@@ -200,12 +212,12 @@ def single_example_process(data):
             unique_id += 1
             # 还原到未添加context前
             cur_context_length = 0
-            all_tokens = ['[CLS]'] + query_tokens + ['[SEP]']
+            all_tokens = [global_cls_token] + query_tokens + [global_sep_token]
             cls_mask = [1] + [0] * (len(all_tokens) - 1)
             cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
             cls_weight = [1] + [0] * (len(all_tokens) - 1)
         else:
-            all_tokens += ['[UNK]'] + sentence_tokens  # unk
+            all_tokens += [global_unk_token] + sentence_tokens  # unk
             cls_mask += [1] + [0] * len(sentence_tokens)
             cls_label += [sent_label] + [0] * len(sentence_tokens)
             cls_weight += [1 if sent_label else 0.2] + [0] * len(sentence_tokens)
@@ -213,12 +225,15 @@ def single_example_process(data):
             sent_idx += 1
         pre_sent2_length = pre_sent1_length
         pre_sent1_length = len(sentence_tokens) + 1
-    all_tokens += ['[SEP]']
+    all_tokens += [global_sep_token]
     cls_mask += [1]
     cls_label += [0]
     cls_weight += [0]
     tmp_len = len(all_tokens)
-    input_ids = global_tokenizer.convert_tokens_to_ids(all_tokens) + [0] * (global_max_seq_length - tmp_len)
+    # 设置变量命名input_ids
+    while len(all_tokens) < global_max_seq_length:
+        all_tokens.append(global_pad_token)
+    input_ids = global_tokenizer.convert_tokens_to_ids(all_tokens)
     query_ids = [0] * query_length + [1] * (tmp_len - query_length) + [0] * (global_max_seq_length - tmp_len)
     input_mask = [1] * tmp_len + [0] * (global_max_seq_length - tmp_len)
     cls_mask += [0] * (global_max_seq_length - tmp_len)
@@ -254,14 +269,30 @@ def single_example_process(data):
     return result
 
 
-def convert_examples_to_features(examples, tokenizer, max_seq_length, is_training):
+def convert_examples_to_features(examples,
+                                 tokenizer,
+                                 max_seq_length,
+                                 is_training,
+                                 cls_token=None,
+                                 sep_token=None,
+                                 unk_token=None,
+                                 pad_token=None
+                                 ):
     """ 将实例转化为特征 """
     global global_tokenizer
     global global_max_seq_length
     global global_is_training
+    global global_cls_token
+    global global_sep_token
+    global global_unk_token
+    global global_pad_token
     global_tokenizer = tokenizer
     global_max_seq_length = max_seq_length
     global_is_training = is_training
+    global_cls_token = cls_token
+    global_sep_token = sep_token
+    global_unk_token = unk_token
+    global_pad_token = pad_token
     features = []
     related_sent_num = 0
     not_related_sent_num = 0

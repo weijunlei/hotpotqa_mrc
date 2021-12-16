@@ -19,7 +19,7 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Samp
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from transformers import BertTokenizer
+from transformers import BertTokenizer, RobertaTokenizer, ElectraTokenizer, AlbertTokenizer
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
@@ -36,8 +36,10 @@ from first_hop_data_helper import (HotpotQAExample,
 from first_hop_selector import dev_feature_getter, write_predictions
 sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence
-from modeling_bert import *
 from optimization import BertAdam, warmup_linear
+
+models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
+                "BertForParagraphClassification": BertForParagraphClassification}
 
 # 日志设置
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -174,12 +176,32 @@ def run_predict(args):
     logger.info("device: {} n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
         device, n_gpu, bool(args.local_rank != -1), args.fp16))
 
-    # preprocess_data
+    # 设置tokenizer
+    cls_token = '[CLS]'
+    sep_token = '[SEP]'
+    unk_token = '[UNK]'
+    pad_token = '[PAD]'
+    if 'electra' in args.bert_model.lower():
+        tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
+                                                     do_lower_case=args.do_lower_case)
+    elif 'albert' in args.bert_model.lower():
+        cls_token = '[CLS]'
+        sep_token = '[SEP]'
+        pad_token = '<pad>'
+        unk_token = '<unk>'
+        tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    elif 'roberta' in args.bert_model.lower():
+        cls_token = '<s>'
+        sep_token = '</s>'
+        unk_token = '<unk>'
+        pad_token = '<pad>'
+        tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    elif 'bert' in args.bert_model.lower():
+        tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    else:
+        raise ValueError("Not implement!")
 
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
-
-    models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
-                   "BertForParagraphClassification": BertForParagraphClassification}
+    # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
     # 从文件中加载模型
     model = models_dict[args.model_name].from_pretrained(args.checkpoint_path)
 
@@ -224,7 +246,11 @@ def run_predict(args):
             examples=truly_examples,
             tokenizer=tokenizer,
             max_seq_length=args.max_seq_length,
-            is_training='test'
+            is_training='test',
+            cls_token=cls_token,
+            sep_token=sep_token,
+            unk_token=unk_token,
+            pad_token=pad_token
         )
         logger.info("all truly gotten features: {}".format(len(truly_features)))
         d_all_input_ids = torch.tensor([f.input_ids for f in truly_features], dtype=torch.long)
@@ -262,7 +288,6 @@ def run_predict(args):
                     "cls_mask": batch[3],
                     "cls_weight": batch[4]
                 }
-                d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_weight = batch
                 # 获取预测结果
                 dev_logits = model(**inputs)
                 for i, example_index in enumerate(d_example_indices):

@@ -9,7 +9,7 @@ import logging
 import pickle
 import collections
 from tqdm import trange, tqdm
-from transformers import BertTokenizer
+from transformers import BertTokenizer, RobertaTokenizer, ElectraTokenizer, AlbertTokenizer
 from torch.multiprocessing import Process
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Sampler, TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
@@ -17,11 +17,13 @@ from torch.utils.data.distributed import DistributedSampler
 from first_selector_config import get_config
 from first_hop_data_helper import convert_examples_to_features, read_hotpotqa_examples
 from first_hop_prediction_helper import prediction_evaluate, write_predictions
+
 sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence
-from modeling_bert import *
 from optimization import BertAdam, warmup_linear
 
+models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
+               "BertForParagraphClassification": BertForParagraphClassification}
 
 # 日志设置
 logger = None
@@ -53,15 +55,21 @@ def logger_config(log_path, log_prefix='lwj', write2console=True):
     return logger
 
 
-def dev_feature_getter(args, tokenizer):
+def dev_feature_getter(args,
+                       tokenizer,
+                       cls_token=None,
+                       sep_token=None,
+                       unk_token=None,
+                       pad_token=None
+                       ):
     """ 获取验证集特征 """
     dev_examples = read_hotpotqa_examples(args.dev_file, is_training='dev')
     if not os.path.exists(args.feature_cache_path):
         os.makedirs(args.feature_cache_path)
     dev_feature_file = '{}/selector_1_dev_{}_{}_{}'.format(args.feature_cache_path,
-                                                              list(filter(None, args.bert_model.split('/'))).pop(),
-                                                              str(args.max_seq_length),
-                                                              str(args.sent_overlap))
+                                                           list(filter(None, args.bert_model.split('/'))).pop(),
+                                                           str(args.max_seq_length),
+                                                           str(args.sent_overlap))
     if os.path.exists(dev_feature_file) and args.use_file_cache:
         with open(dev_feature_file, "rb") as dev_f:
             dev_features = pickle.load(dev_f)
@@ -70,7 +78,11 @@ def dev_feature_getter(args, tokenizer):
             examples=dev_examples,
             tokenizer=tokenizer,
             max_seq_length=args.max_seq_length,
-            is_training='dev'
+            is_training='dev',
+            cls_token=cls_token,
+            sep_token=sep_token,
+            unk_token=unk_token,
+            pad_token=pad_token
         )
         if args.local_rank == -1 or torch.distributed.get_rank() == 0:
             logger.info("  Saving dev features into cached file {}".format(dev_feature_file))
@@ -99,7 +111,12 @@ def convert_examples2file(args,
                           start_idxs,
                           end_idxs,
                           cached_train_features_file,
-                          tokenizer):
+                          tokenizer,
+                          cls_token=None,
+                          sep_token=None,
+                          unk_token=None,
+                          pad_token=None
+                          ):
     """ 将example转化为feature并存储在文件中 """
     total_feature_num = 0
     for idx in range(len(start_idxs)):
@@ -115,7 +132,12 @@ def convert_examples2file(args,
                 examples=truly_train_examples,
                 tokenizer=tokenizer,
                 max_seq_length=args.max_seq_length,
-                is_training='train')
+                is_training='train',
+                cls_token=cls_token,
+                sep_token=sep_token,
+                unk_token=unk_token,
+                pad_token=pad_token
+            )
             logger.info("features gotten!")
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
                 new_tmp_train_cache_file = cached_train_features_file + '_' + str(idx)
@@ -129,9 +151,26 @@ def convert_examples2file(args,
     return total_feature_num
 
 
-def dev_evaluate(args, model, tokenizer, n_gpu, device, model_name='BertForRelatedSentence', step=0):
+def dev_evaluate(args,
+                 model,
+                 tokenizer,
+                 n_gpu,
+                 device,
+                 model_name='BertForRelatedSentence',
+                 step=0,
+                 cls_token=None,
+                 sep_token=None,
+                 unk_token=None,
+                 pad_token=None
+                 ):
     """ 评估验证集效果 """
-    dev_examples, dev_features, dev_dataloader = dev_feature_getter(args, tokenizer=tokenizer)
+    dev_examples, dev_features, dev_dataloader = dev_feature_getter(args,
+                                                                    tokenizer=tokenizer,
+                                                                    cls_token=cls_token,
+                                                                    sep_token=sep_token,
+                                                                    unk_token=unk_token,
+                                                                    pad_token=pad_token
+                                                                    )
     model.eval()
     all_results = []
     total_loss = 0
@@ -197,7 +236,12 @@ def train_iterator(args,
                    device,
                    optimizer,
                    num_train_optimization_steps,
-                   steps_trained_in_current_epoch=0):
+                   steps_trained_in_current_epoch=0,
+                   cls_token=None,
+                   sep_token=None,
+                   unk_token=None,
+                   pad_token=None
+                   ):
     """ 依据设定参数进行模型训练 """
     global logger
     best_predict_acc = 0
@@ -224,7 +268,7 @@ def train_iterator(args,
             train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
             # 对每个Iteration进行模型训练
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration epoch:{}/{} data:{}/{}".format(
-                epoch_idx, int(args.num_train_epochs), start_idx, len(start_idxs)
+                    epoch_idx, int(args.num_train_epochs), start_idx, len(start_idxs)
             ))):
                 if global_steps < steps_trained_in_current_epoch:
                     if (step + 1) % args.gradient_accumulation_steps == 0:
@@ -261,9 +305,15 @@ def train_iterator(args,
                                                                   n_gpu=n_gpu,
                                                                   device=device,
                                                                   model_name=args.model_name,
-                                                                  step=global_steps)
+                                                                  step=global_steps,
+                                                                  cls_token=cls_token,
+                                                                  sep_token=sep_token,
+                                                                  unk_token=unk_token,
+                                                                  pad_token=pad_token
+                                                                  )
                     logger.info("epoch: {} data idx: {} step: {}".format(epoch_idx, start_idx, global_steps))
-                    logger.info("acc: {} precision: {} em: {} recall: {} total loss: {}".format(acc, prec, em, rec, total_loss))
+                    logger.info(
+                        "acc: {} precision: {} em: {} recall: {} total loss: {}".format(acc, prec, em, rec, total_loss))
 
                     if acc > best_predict_acc:
                         best_predict_acc = acc
@@ -334,7 +384,7 @@ def train_iterator(args,
 
 
 def run_train(rank=0, world_size=1):
-    #TODO rank world size setting
+    # TODO rank world size setting
     """ 模型训练 """
     parser = get_config()
     args = parser.parse_args()
@@ -342,11 +392,13 @@ def run_train(rank=0, world_size=1):
     if rank == 0 and not os.path.exists(args.log_path):
         os.makedirs(args.log_path)
     log_path = os.path.join(args.log_path, 'log_first_selector_{}_{}_{}_{}_{}_{}.log'.format(args.log_prefix,
-                                                                              args.bert_model.split('/')[-1],
-                                                                              args.output_dir.split('/')[-1],
-                                                                              args.train_batch_size,
-                                                                              args.max_seq_length,
-                                                                              args.doc_stride))
+                                                                                             args.bert_model.split('/')[
+                                                                                                 -1],
+                                                                                             args.output_dir.split('/')[
+                                                                                                 -1],
+                                                                                             args.train_batch_size,
+                                                                                             args.max_seq_length,
+                                                                                             args.doc_stride))
     logger = logger_config(log_path=log_path, log_prefix='')
     logger.info('-' * 15 + '所有配置' + '-' * 15)
     logger.info("所有参数配置如下：")
@@ -382,11 +434,31 @@ def run_train(rank=0, world_size=1):
         raise ValueError('output_dir {} already exists!'.format(args.output_dir))
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-
     # 模型和分词器配置
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
-                   "BertForParagraphClassification": BertForParagraphClassification}
+    cls_token = '[CLS]'
+    sep_token = '[SEP]'
+    unk_token = '[UNK]'
+    pad_token = '[PAD]'
+    if 'electra' in args.bert_model.lower():
+        tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
+                                                     do_lower_case=args.do_lower_case)
+    elif 'albert' in args.bert_model.lower():
+        cls_token = '[CLS]'
+        sep_token = '[SEP]'
+        pad_token = '<pad>'
+        unk_token = '<unk>'
+        tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    elif 'roberta' in args.bert_model.lower():
+        cls_token = '<s>'
+        sep_token = '</s>'
+        unk_token = '<unk>'
+        pad_token = '<pad>'
+        tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    elif 'bert' in args.bert_model.lower():
+        tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    else:
+        raise ValueError("Not implement!")
+
     model = models_dict[args.model_name].from_pretrained(args.bert_model)
     steps_trained_in_current_epoch = 0
     has_step = False
@@ -437,9 +509,10 @@ def run_train(rank=0, world_size=1):
     if not os.path.exists(args.feature_cache_path):
         os.makedirs(args.feature_cache_path)
     cached_train_features_file = "{}/selector_first_train_{}_{}_{}".format(args.feature_cache_path,
-                                                                 list(filter(None, args.bert_model.split('/'))).pop(),
-                                                                 str(args.max_seq_length),
-                                                                 str(args.sent_overlap))
+                                                                           list(filter(None, args.bert_model.split(
+                                                                               '/'))).pop(),
+                                                                           str(args.max_seq_length),
+                                                                           str(args.sent_overlap))
     train_features = None
     model.train()
     train_examples = read_hotpotqa_examples(
@@ -460,7 +533,12 @@ def run_train(rank=0, world_size=1):
                                               start_idxs=start_idxs,
                                               end_idxs=end_idxs,
                                               cached_train_features_file=cached_train_features_file,
-                                              tokenizer=tokenizer)
+                                              tokenizer=tokenizer,
+                                              cls_token=cls_token,
+                                              sep_token=sep_token,
+                                              unk_token=unk_token,
+                                              pad_token=pad_token
+                                              )
     # 设置训练步长和优化器
     num_train_optimization_steps = int(
         total_feature_num / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
@@ -496,7 +574,12 @@ def run_train(rank=0, world_size=1):
                    device=device,
                    optimizer=optimizer,
                    num_train_optimization_steps=num_train_optimization_steps,
-                   steps_trained_in_current_epoch=steps_trained_in_current_epoch)
+                   steps_trained_in_current_epoch=steps_trained_in_current_epoch,
+                   cls_token=cls_token,
+                   sep_token=sep_token,
+                   unk_token=unk_token,
+                   pad_token=pad_token
+                   )
 
 
 if __name__ == '__main__':
@@ -512,5 +595,3 @@ if __name__ == '__main__':
             processes.append(p)
         for p in processes:
             p.join()
-
-
