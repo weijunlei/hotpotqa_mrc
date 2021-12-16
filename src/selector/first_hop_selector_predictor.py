@@ -257,10 +257,11 @@ def run_predict(args):
         d_all_input_mask = torch.tensor([f.input_mask for f in truly_features], dtype=torch.long)
         d_all_segment_ids = torch.tensor([f.segment_ids for f in truly_features], dtype=torch.long)
         d_all_cls_mask = torch.tensor([f.cls_mask for f in truly_features], dtype=torch.long)
+        d_all_pq_end_pos = torch.tensor([f.pq_end_pos for f in truly_features], dtype=torch.long)
         d_all_cls_weight = torch.tensor([f.cls_weight for f in truly_features], dtype=torch.float)
         d_all_example_index = torch.arange(d_all_input_ids.size(0), dtype=torch.long)
         dev_data = TensorDataset(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-                                 d_all_cls_mask, d_all_cls_weight, d_all_example_index)
+                                 d_all_cls_mask, d_all_cls_weight, d_all_pq_end_pos, d_all_example_index)
         if args.local_rank == -1:
             dev_sampler = SequentialSampler(dev_data)
         else:
@@ -286,7 +287,8 @@ def run_predict(args):
                     "attention_mask": batch[1],
                     "token_type_ids": batch[2],
                     "cls_mask": batch[3],
-                    "cls_weight": batch[4]
+                    "pq_end_pos": batch[4],
+                    "cls_weight": batch[5]
                 }
                 # 获取预测结果
                 dev_logits = model(**inputs)

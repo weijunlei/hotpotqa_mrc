@@ -42,6 +42,7 @@ class HotpotInputFeatures(object):
                  input_mask,
                  segment_ids,
                  cls_mask,
+                 pq_end_pos=None,
                  cls_label=None,
                  cls_weight=None,
                  is_related=None,
@@ -54,6 +55,7 @@ class HotpotInputFeatures(object):
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.cls_mask = cls_mask
+        self.pq_end_pos = pq_end_pos
         self.cls_label = cls_label
         self.cls_weight = cls_weight
         self.is_related = is_related
@@ -142,6 +144,7 @@ def single_example_process(data):
     query_length = len(query_tokens) + 2
     unique_id = 0
     all_tokens = [global_cls_token] + query_tokens + [global_sep_token]
+    query_end_idx = len(all_tokens) - 1
     cls_mask = [1] + [0] * (len(all_tokens) - 1)
     if global_is_training == 'train' or global_is_training == 'dev':
         cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
@@ -165,6 +168,8 @@ def single_example_process(data):
         roll_back = 0
         if cur_context_length + len(sentence_tokens) + 1 > max_context_length:
             """ 超出长度往后延两句 """
+            context_end_idx = len(all_tokens)
+            pq_end_pos = [query_end_idx, context_end_idx]
             all_tokens += [global_sep_token]
             tmp_len = len(all_tokens)
             while len(all_tokens) < global_max_seq_length:
@@ -203,6 +208,7 @@ def single_example_process(data):
                                           input_mask=input_mask,
                                           segment_ids=query_ids,
                                           cls_mask=cls_mask,
+                                          pq_end_pos=pq_end_pos,
                                           cls_label=cls_label,
                                           cls_weight=cls_weight,
                                           is_related=real_related,
@@ -213,6 +219,7 @@ def single_example_process(data):
             # 还原到未添加context前
             cur_context_length = 0
             all_tokens = [global_cls_token] + query_tokens + [global_sep_token]
+            query_end_idx = len(all_tokens) - 1
             cls_mask = [1] + [0] * (len(all_tokens) - 1)
             cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
             cls_weight = [1] + [0] * (len(all_tokens) - 1)
@@ -225,6 +232,8 @@ def single_example_process(data):
             sent_idx += 1
         pre_sent2_length = pre_sent1_length
         pre_sent1_length = len(sentence_tokens) + 1
+    context_end_idx = len(all_tokens)
+    pq_end_pos = [query_end_idx, context_end_idx]
     all_tokens += [global_sep_token]
     cls_mask += [1]
     cls_label += [0]
@@ -256,6 +265,7 @@ def single_example_process(data):
                                   input_mask=input_mask,
                                   segment_ids=query_ids,
                                   cls_mask=cls_mask,
+                                  pq_end_pos=pq_end_pos,
                                   cls_label=cls_label,
                                   cls_weight=cls_weight,
                                   is_related=real_related,

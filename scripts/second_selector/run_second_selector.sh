@@ -1,14 +1,14 @@
 echo "----------------------------------------------------"
 MODEL_NAME=
-export CUDA_VISIBLE_DEVICES="1"
+export CUDA_VISIBLE_DEVICES="0"
 echo "start train first hop selector..."
 cd ../../src/selector
 python -u second_hop_selector.py \
     --bert_model bert-base-uncased \
     --over_write_result True \
-    --output_dir ../../data/checkpoints/selector/20211217_second_related_paragraph_hop_selector_truly \
-    --feature_cache_path ../../data/cache/selector/20211217_second_related_paragraph_hop_selector_truly \
-    --log_prefix 20211217_second_related_paragraph_hop_selector_truly \
+    --output_dir ../../data/checkpoints/selector/20211217_second_related_paragraph_hop_selector_truly_value_setting \
+    --feature_cache_path ../../data/cache/selector/20211217_second_related_paragraph_hop_selector_truly_value_setting \
+    --log_prefix 20211217_second_related_paragraph_hop_selector_truly_value_setting \
     --model_name BertForRelatedSentence \
     --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
