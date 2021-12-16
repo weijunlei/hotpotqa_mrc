@@ -35,11 +35,18 @@ from first_hop_data_helper import (HotpotQAExample,
                                        convert_examples_to_features)
 from first_hop_selector import dev_feature_getter, write_predictions
 sys.path.append("../pretrain_model")
-from changed_model import BertForParagraphClassification, BertForRelatedSentence
+from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
+    ElectraForParagraphClassification, ElectraForRelatedSentence, \
+    RobertaForParagraphClassification, RobertaForRelatedSentence
 from optimization import BertAdam, warmup_linear
 
 models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
-                "BertForParagraphClassification": BertForParagraphClassification}
+               "BertForParagraphClassification": BertForParagraphClassification,
+               "ElectraForParagraphClassification": ElectraForParagraphClassification,
+               "ElectraForRelatedSentence": ElectraForRelatedSentence,
+               "RobertaForParagraphClassification": RobertaForParagraphClassification,
+               "RobertaForRelatedSentence": RobertaForRelatedSentence,
+               }
 
 # 日志设置
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
