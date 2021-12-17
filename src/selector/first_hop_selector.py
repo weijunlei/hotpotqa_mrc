@@ -21,11 +21,14 @@ from first_hop_prediction_helper import prediction_evaluate, write_predictions
 sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
     ElectraForParagraphClassification, ElectraForRelatedSentence, \
-    RobertaForParagraphClassification, RobertaForRelatedSentence
+    RobertaForParagraphClassification, RobertaForRelatedSentence, \
+    BertForParagraphClassificationMean, BertForParagraphClassificationMax
 from optimization import BertAdam, warmup_linear
 
 models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
                "BertForParagraphClassification": BertForParagraphClassification,
+               "BertForParagraphClassificationMean": BertForParagraphClassificationMean,
+               "BertForParagraphClassificationMax": BertForParagraphClassificationMax,
                "ElectraForParagraphClassification": ElectraForParagraphClassification,
                "ElectraForRelatedSentence": ElectraForRelatedSentence,
                "RobertaForParagraphClassification": RobertaForParagraphClassification,
@@ -184,6 +187,9 @@ def dev_evaluate(args,
     total_loss = 0
     RawResult = collections.namedtuple("RawResult",
                                        ["unique_id", "logit"])
+    has_sentence_result = True
+    if model_name == 'BertForParagraphClassification' or 'BertForParagraphClassification' in model_name:
+        has_sentence_result = False
 
     with torch.no_grad():
         for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Iteration")):
@@ -205,7 +211,7 @@ def dev_evaluate(args,
             dev_logits = torch.sigmoid(dev_logits)
             total_loss += dev_loss
             for i, example_index in enumerate(d_example_indices):
-                if model_name == 'BertForParagraphClassification':
+                if not has_sentence_result:
                     dev_logit = dev_logits[i].detach().cpu().tolist()
                     dev_logit.reverse()
                 else:
@@ -214,22 +220,13 @@ def dev_evaluate(args,
                 unique_id = dev_feature.unique_id
                 all_results.append(RawResult(unique_id=unique_id,
                                              logit=dev_logit))
-    if model_name == 'BertForParagraphClassification':
-        acc, prec, em, rec = write_predictions(args=args,
-                                               all_examples=dev_examples,
-                                               all_features=dev_features,
-                                               all_results=all_results,
-                                               is_training='train',
-                                               has_sentence_result=False,
-                                               step=step)
-    else:
-        acc, prec, em, rec = write_predictions(args=args,
-                                               all_examples=dev_examples,
-                                               all_features=dev_features,
-                                               all_results=all_results,
-                                               is_training='train',
-                                               has_sentence_result=True,
-                                               step=step)
+    acc, prec, em, rec = write_predictions(args=args,
+                                           all_examples=dev_examples,
+                                           all_features=dev_features,
+                                           all_results=all_results,
+                                           is_training='train',
+                                           has_sentence_result=has_sentence_result,
+                                           step=step)
     model.train()
     del dev_examples, dev_features, dev_dataloader
     gc.collect()

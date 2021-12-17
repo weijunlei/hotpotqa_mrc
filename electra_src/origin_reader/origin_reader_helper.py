@@ -128,9 +128,9 @@ def find_nearest(a, target, test_func=lambda x: True):
         return a[-1], abs(a[-1] - target)
     else:
         d1 = abs(a[idx] - target) if test_func(a[idx]) else 1e200
-        d2 = abs(a[idx-1] - target) if test_func(a[idx-1]) else 1e200
+        d2 = abs(a[idx - 1] - target) if test_func(a[idx - 1]) else 1e200
         if d1 > d2:
-            return a[idx-1], d2
+            return a[idx - 1], d2
         else:
             return a[idx], d1
 
@@ -141,8 +141,8 @@ def fix_span(para, offsets, span):
 
     assert span in parastr, '{}\t{}'.format(span, parastr)
     # print([y for x in offsets for y in x])
-    begins=[]
-    ends=[]
+    begins = []
+    ends = []
     for o in offsets:
         begins.append(o[0])
         ends.append(o[1])
@@ -458,7 +458,7 @@ def write_predictions(tokenizer, all_examples, all_features, all_results, n_best
                 pointer += 1
         sp_preds[example.qas_id] = sp_pred
         _NbestPrediction = collections.namedtuple(  # pylint: disable=invalid-name
-            "NbestPrediction", ["start", "end", "text", "start_logit",'end_logit'])
+            "NbestPrediction", ["start", "end", "text", "start_logit", 'end_logit'])
 
         seen_predictions = {}
         nbest = []
@@ -470,7 +470,7 @@ def write_predictions(tokenizer, all_examples, all_features, all_results, n_best
                 orig_doc_start = example.sub_to_orig_index[feature.token_to_orig_map[pred.start_index]]
                 orig_doc_end = example.sub_to_orig_index[feature.token_to_orig_map[pred.end_index]]
                 orig_tokens = example.orig_tokens[orig_doc_start:(orig_doc_end + 1)]
-                orig_tokens=[ot for ot in orig_tokens if ot!='<unk>']
+                orig_tokens = [ot for ot in orig_tokens if ot != '<unk>']
 
                 tok_text = " ".join(tok_tokens)
                 tok_text = tok_text.replace("##", "")
@@ -516,15 +516,17 @@ def write_predictions(tokenizer, all_examples, all_features, all_results, n_best
         #     nbest.append(
         #         _NbestPrediction(start=0, end=0, text="", logit=-1e6))
         # nbest.append(_NbestPrediction(start=0, end=0, text="", logit=result.start_logit[0]+result.end_logit[0]))
-        nbest.append(_NbestPrediction(start=1, end=1, text="yes", start_logit=result.start_logit[1],end_logit= result.end_logit[1]))
-        nbest.append(_NbestPrediction(start=2, end=2, text="no", start_logit=result.start_logit[2],end_logit=result.end_logit[2]))
-        nbest = sorted(nbest, key=lambda x: (x.start_logit+x.end_logit),reverse=True)
+        nbest.append(_NbestPrediction(start=1, end=1, text="yes", start_logit=result.start_logit[1],
+                                      end_logit=result.end_logit[1]))
+        nbest.append(_NbestPrediction(start=2, end=2, text="no", start_logit=result.start_logit[2],
+                                      end_logit=result.end_logit[2]))
+        nbest = sorted(nbest, key=lambda x: (x.start_logit + x.end_logit), reverse=True)
 
         # assert len(nbest) >= 1
         total_scores = []
         best_non_null_entry = None
         for entry in nbest:
-            total_scores.append(entry.start_logit+entry.end_logit)
+            total_scores.append(entry.start_logit + entry.end_logit)
             if not best_non_null_entry:
                 if entry.text:
                     best_non_null_entry = entry
@@ -601,7 +603,7 @@ def update_answer(metrics, prediction, gold):
 
 def update_sp(prediction, gold):
     tp, fp, fn = 0, 0, 0
-    for p,g in zip(prediction,gold):
+    for p, g in zip(prediction, gold):
         # if p==0.0:
         #     if g==1:
         #         fn+=1
@@ -612,17 +614,17 @@ def update_sp(prediction, gold):
         #         fp+=1
         #     if p[0]>p[1] and g==1:
         #         fn+=1
-        if p>0.5 and g==1:
-            tp+=1
-        if p>0.5 and g==0:
-            fp+=1
-        if p<=0.5 and g==1:
-            fn+=1
+        if p > 0.5 and g == 1:
+            tp += 1
+        if p > 0.5 and g == 0:
+            fp += 1
+        if p <= 0.5 and g == 1:
+            fn += 1
     prec = 1.0 * tp / (tp + fp) if tp + fp > 0 else 0.0
     recall = 1.0 * tp / (tp + fn) if tp + fn > 0 else 0.0
     f1 = 2 * prec * recall / (prec + recall) if prec + recall > 0 else 0.0
     em = 1.0 if fp + fn == 0 else 0.0
-    return f1,em, prec, recall
+    return f1, em, prec, recall
 
 
 def eval(prediction_file, gold_file):
@@ -632,8 +634,8 @@ def eval(prediction_file, gold_file):
         gold = json.load(f)
 
     metrics = {'em': 0, 'f1': 0, 'prec': 0, 'recall': 0,
-        'sp_em': 0, 'sp_f1': 0, 'sp_prec': 0, 'sp_recall': 0,
-        'joint_em': 0, 'joint_f1': 0, 'joint_prec': 0, 'joint_recall': 0}
+               'sp_em': 0, 'sp_f1': 0, 'sp_prec': 0, 'sp_recall': 0,
+               'joint_em': 0, 'joint_f1': 0, 'joint_prec': 0, 'joint_recall': 0}
     for dp in gold:
         cur_id = dp['_id']
         can_eval_joint = True
@@ -670,23 +672,23 @@ def eval(prediction_file, gold_file):
     print(metrics)
 
 
-def evaluate(eval_examples, answer_dict,sp_preds):
+def evaluate(eval_examples, answer_dict, sp_preds):
     """ 评估结果 """
-    ans_f1 = ans_em = sp_f1=sp_em=joint_f1=joint_em=total = 0
+    ans_f1 = ans_em = sp_f1 = sp_em = joint_f1 = joint_em = total = 0
     for ee in eval_examples:
-        pred=answer_dict[ee.qas_id]['text']
-        ans=ee.orig_answer_text
-        total+=1
+        pred = answer_dict[ee.qas_id]['text']
+        ans = ee.orig_answer_text
+        total += 1
         # print(pred)
         # print(ans)
         # print()
-        a_f1,a_prec,a_recall=f1_score(pred,ans)
-        ans_f1+=a_f1
-        a_em=exact_match_score(pred,ans)
-        ans_em+=a_em
-        s_f1,s_em,s_prec,s_recall=update_sp(sp_preds[ee.qas_id],ee.full_sents_lbs)
-        sp_f1+=s_f1
-        sp_em+=s_em
+        a_f1, a_prec, a_recall = f1_score(pred, ans)
+        ans_f1 += a_f1
+        a_em = exact_match_score(pred, ans)
+        ans_em += a_em
+        s_f1, s_em, s_prec, s_recall = update_sp(sp_preds[ee.qas_id], ee.full_sents_lbs)
+        sp_f1 += s_f1
+        sp_em += s_em
         j_prec = a_prec * s_prec
         j_recall = a_recall * s_recall
         if j_prec + j_recall > 0:
@@ -694,6 +696,6 @@ def evaluate(eval_examples, answer_dict,sp_preds):
         else:
             j_f1 = 0.
         j_em = a_em * s_em
-        joint_f1+=j_f1
-        joint_em+=j_em
-    return ans_f1/total,ans_em/total,sp_f1/total,sp_em/total,joint_f1/total,joint_em/total
+        joint_f1 += j_f1
+        joint_em += j_em
+    return ans_f1 / total, ans_em / total, sp_f1 / total, sp_em / total, joint_f1 / total, joint_em / total

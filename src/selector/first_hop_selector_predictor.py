@@ -37,11 +37,14 @@ from first_hop_selector import dev_feature_getter, write_predictions
 sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
     ElectraForParagraphClassification, ElectraForRelatedSentence, \
-    RobertaForParagraphClassification, RobertaForRelatedSentence
+    RobertaForParagraphClassification, RobertaForRelatedSentence, \
+    BertForParagraphClassificationMean, BertForParagraphClassificationMax
 from optimization import BertAdam, warmup_linear
 
 models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
                "BertForParagraphClassification": BertForParagraphClassification,
+               "BertForParagraphClassificationMean": BertForParagraphClassificationMean,
+               "BertForParagraphClassificationMax": BertForParagraphClassificationMax,
                "ElectraForParagraphClassification": ElectraForParagraphClassification,
                "ElectraForRelatedSentence": ElectraForRelatedSentence,
                "RobertaForParagraphClassification": RobertaForParagraphClassification,
@@ -243,7 +246,7 @@ def run_predict(args):
 
     has_sentence_result = True
 
-    if args.model_name == 'BertForParagraphClassification':
+    if args.model_name == 'BertForParagraphClassification' or 'BertForParagraphClassification' in args.model_name:
         has_sentence_result = False
 
     for idx in range(len(start_idxs)):
