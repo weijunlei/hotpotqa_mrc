@@ -1,5 +1,4 @@
 echo "----------------------------------------------------"
-MODEL_NAME=
 export CUDA_VISIBLE_DEVICES="0"
 echo "start train first hop selector..."
 cd ../../src/selector

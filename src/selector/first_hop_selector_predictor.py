@@ -133,9 +133,11 @@ def write_predict_result(examples, features, results, has_sentence_result=True):
     # 将每个段落的结果写入到context中
     for k, v in paragraph_results.items():
         context_id, paragraph_id = k.split('_')
+        # if context_id == '5a7b93905542997c3ec9722e':
+        #     import pdb; pdb.set_trace()
         paragraph_id = int(paragraph_id)
         if context_id not in context_dict:
-            context_dict[context_id] = [[0]*10, [0]*10]
+            context_dict[context_id] = [[-10000]*10, [-10000]*10]
         context_dict[context_id][0][paragraph_id] = v
     # 将context最大结果导出
     for k, v in context_dict.items():
@@ -246,7 +248,7 @@ def run_predict(args):
 
     has_sentence_result = True
 
-    if args.model_name == 'BertForParagraphClassification' or 'BertForParagraphClassification' in args.model_name:
+    if args.model_name == 'BertForParagraphClassification' or 'ParagraphClassification' in args.model_name:
         has_sentence_result = False
 
     for idx in range(len(start_idxs)):
@@ -302,10 +304,11 @@ def run_predict(args):
                 }
                 # 获取预测结果
                 dev_logits = model(**inputs)
+                dev_logits = torch.sigmoid(dev_logits)
                 for i, example_index in enumerate(d_example_indices):
                     # start_position = start_positions[i].detach().cpu().tolist()
                     # end_position = end_positions[i].detach().cpu().tolist()
-                    if args.model_name == 'BertForParagraphClassification':
+                    if not has_sentence_result:
                         dev_logit = dev_logits[i].detach().cpu().tolist()
                         dev_logit.reverse()
                     else:
@@ -323,7 +326,12 @@ def run_predict(args):
             best_paragraph.update(tmp_best_paragraph)
             related_sentence.update(tmp_related_sentence)
             related_paragraph.update(tmp_related_paragraph)
-        del truly_examples, truly_features, dev_data
+            del tmp_best_paragraph, tmp_related_sentence, tmp_related_paragraph
+            del d_example_indices, inputs
+            del cur_result
+            gc.collect()
+        del d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_weight, d_all_pq_end_pos, d_all_example_index
+        del truly_examples, truly_features, dev_data, dev_logits
         gc.collect()
     # 获取新的文档
     logger.info("start saving data...")

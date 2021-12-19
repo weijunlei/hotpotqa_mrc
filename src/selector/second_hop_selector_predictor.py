@@ -33,14 +33,21 @@ from second_hop_data_helper import (HotpotQAExample,
                                        read_second_hotpotqa_examples,
                                        convert_examples_to_second_features)
 sys.path.append("../pretrain_model")
-from changed_model import BertForRelatedSentence, BertForParagraphClassification, \
-    BertForRelatedSentenceWithCrossAttention
+from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
+    ElectraForParagraphClassification, ElectraForRelatedSentence, \
+    RobertaForParagraphClassification, RobertaForRelatedSentence, \
+    BertForParagraphClassificationMean, BertForParagraphClassificationMax
 from optimization import BertAdam, warmup_linear
 
-# Prepare model
 models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
                "BertForParagraphClassification": BertForParagraphClassification,
-               "BertForRelatedSentenceWithCrossAttention": BertForRelatedSentenceWithCrossAttention}
+               "BertForParagraphClassificationMean": BertForParagraphClassificationMean,
+               "BertForParagraphClassificationMax": BertForParagraphClassificationMax,
+               "ElectraForParagraphClassification": ElectraForParagraphClassification,
+               "ElectraForRelatedSentence": ElectraForRelatedSentence,
+               "RobertaForParagraphClassification": RobertaForParagraphClassification,
+               "RobertaForRelatedSentence": RobertaForRelatedSentence,
+               }
 
 # 日志设置
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -131,7 +138,7 @@ def write_second_predict_result(examples, features, results, has_sentence_result
         context_id, paragraph_id = k.split('_')
         paragraph_id = int(paragraph_id)
         if context_id not in context_dict:
-            context_dict[context_id] = [[0]*10,[0]*10]
+            context_dict[context_id] = [[-10000]*10, [-10000]*10]
         context_dict[context_id][0][paragraph_id] = v
         # 在预测时只做标记位，为1标记可以被选中，为0不能被选中
         context_dict[context_id][1][paragraph_id] = 1
@@ -298,7 +305,7 @@ def run_predict(args):
 
         model.eval()
         has_sentence_result = True
-        if args.model_name == 'BertForParagraphClassification':
+        if args.model_name == 'BertForParagraphClassification' or 'ParagraphClassification' in args.model_name:
             has_sentence_result = False
         with torch.no_grad():
             cur_result = []
@@ -321,10 +328,11 @@ def run_predict(args):
                 }
                 # 获取预测结果
                 dev_logits = model(**inputs)
+                dev_logits = torch.sigmoid(dev_logits)
                 for i, example_index in enumerate(d_example_indices):
                     # start_position = start_positions[i].detach().cpu().tolist()
                     # end_position = end_positions[i].detach().cpu().tolist()
-                    if args.model_name == 'BertForParagraphClassification':
+                    if not has_sentence_result:
                         dev_logit = dev_logits[i].detach().cpu().tolist()
                         dev_logit.reverse()
                     else:
@@ -343,6 +351,10 @@ def run_predict(args):
             best_paragraph.update(tmp_best_paragraph)
             related_sentence.update(tmp_related_sentence)
             related_paragraph.update(tmp_related_paragraph)
+            del tmp_best_paragraph, tmp_related_sentence, tmp_related_paragraph
+            del d_example_indices, inputs
+            gc.collect()
+        del d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_weight, d_all_pq_end_pos, d_all_example_index
         del truly_examples, truly_features, dev_data
         gc.collect()
     logger.info("writing result to file...")

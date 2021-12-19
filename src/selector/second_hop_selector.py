@@ -20,12 +20,19 @@ from second_selector_config import get_config
 
 sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
-    BertForRelatedSentenceWithCrossAttention
+    ElectraForParagraphClassification, ElectraForRelatedSentence, \
+    RobertaForParagraphClassification, RobertaForRelatedSentence, \
+    BertForParagraphClassificationMean, BertForParagraphClassificationMax
 from optimization import BertAdam, warmup_linear
 
 models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
                "BertForParagraphClassification": BertForParagraphClassification,
-               "BertForRelatedSentenceWithCrossAttention": BertForRelatedSentenceWithCrossAttention
+               "BertForParagraphClassificationMean": BertForParagraphClassificationMean,
+               "BertForParagraphClassificationMax": BertForParagraphClassificationMax,
+               "ElectraForParagraphClassification": ElectraForParagraphClassification,
+               "ElectraForRelatedSentence": ElectraForRelatedSentence,
+               "RobertaForParagraphClassification": RobertaForParagraphClassification,
+               "RobertaForRelatedSentence": RobertaForRelatedSentence,
                }
 # 日志设置
 logger = None
@@ -82,7 +89,7 @@ def dev_evaluate(args,
     RawResult = collections.namedtuple("RawResult",
                                        ["unique_id", "logit"])
     has_sentence_result = True
-    if model_name == 'BertForParagraphClassification':
+    if model_name == 'BertForParagraphClassification' or 'ParagraphClassification' in model_name:
         has_sentence_result = False
     with torch.no_grad():
         for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Iteration")):

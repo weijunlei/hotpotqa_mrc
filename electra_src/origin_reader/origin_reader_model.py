@@ -55,7 +55,8 @@ from config import get_config
 sys.path.append("../pretrain_model")
 from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, ElectraForQuestionAnsweringForwardBest, \
     ElectraForQuestionAnsweringMatchAttention, ElectraForQuestionAnsweringCrossAttention, \
-    ElectraForQuestionAnsweringCrossAttentionOnReader, ElectraForQuestionAnsweringThreeCrossAttention, \
+    ElectraForQuestionAnsweringBiAttention, ElectraForQuestionAnsweringCrossAttentionOnReader,\
+    ElectraForQuestionAnsweringThreeCrossAttention, \
     ElectraForQuestionAnsweringCrossAttentionOnSent, ElectraForQuestionAnsweringForwardBestWithNoise, \
     ElectraForQuestionAnsweringCrossAttentionWithDP, AlbertForQuestionAnsweringCrossAttention, \
     AlbertForQuestionAnsweringForwardBest
@@ -66,6 +67,7 @@ model_dict = {
     'ElectraForQuestionAnsweringForwardWithEntity': ElectraForQuestionAnsweringForwardWithEntity,
     'ElectraForQuestionAnsweringMatchAttention': ElectraForQuestionAnsweringMatchAttention,
     'ElectraForQuestionAnsweringCrossAttention': ElectraForQuestionAnsweringCrossAttention,
+    'ElectraForQuestionAnsweringBiAttention': ElectraForQuestionAnsweringBiAttention,
     'ElectraForQuestionAnsweringCrossAttentionOnReader': ElectraForQuestionAnsweringCrossAttentionOnReader,
     'ElectraForQuestionAnsweringThreeCrossAttention': ElectraForQuestionAnsweringThreeCrossAttention,
     'ElectraForQuestionAnsweringCrossAttentionOnSent': ElectraForQuestionAnsweringCrossAttentionOnSent,

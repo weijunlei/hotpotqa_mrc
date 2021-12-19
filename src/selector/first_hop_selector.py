@@ -188,7 +188,7 @@ def dev_evaluate(args,
     RawResult = collections.namedtuple("RawResult",
                                        ["unique_id", "logit"])
     has_sentence_result = True
-    if model_name == 'BertForParagraphClassification' or 'BertForParagraphClassification' in model_name:
+    if model_name == 'BertForParagraphClassification' or 'ParagraphClassification' in model_name:
         has_sentence_result = False
 
     with torch.no_grad():

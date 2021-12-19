@@ -16,7 +16,7 @@ python -u first_hop_selector.py \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
     --use_file_cache True \
     --max_seq_length 512 \
-    --train_batch_size 4 \
+    --train_batch_size 12 \
     --val_batch_size 64 \
     --save_model_step 10000 \
     --num_train_epochs 3.0

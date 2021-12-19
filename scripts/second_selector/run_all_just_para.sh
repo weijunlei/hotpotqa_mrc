@@ -2,17 +2,18 @@ echo "----------------------------------------------------"
 export CUDA_VISIBLE_DEVICES="2"
 # BertForRelatedSentence
 # BertForParagraphClassification
-MODEL_NAME=BertForParagraphClassification
-OUTPUT_NAME=20211214_second_just_paragraph_hop_selector_atmosphere
-CACHE_NAME=20211214_second_just_paragraph_hop_selector_atmosphere
-LOG_PREFIX=20211214_second_just_paragraph_hop_selector_atmosphere
-FIRST_PREDICT_PATH=20211214_first_hop_just_paragraph_result
-SECOND_PREDICT_PATH=20211214_second_hop_just_paragraph_result
+BERT_MODEL=google/electra-base-discriminator
+MODEL_NAME=ElectraForParagraphClassification
+OUTPUT_NAME=20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting
+CACHE_NAME=20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting
+LOG_PREFIX=20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting
+FIRST_PREDICT_PATH=20211217_first_hop_electra_base_just_paragraph_selector_12_value_setting_result
+SECOND_PREDICT_PATH=20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting_result
 
 echo "start train second hop selector..."
 cd ../../src/selector
 python -u second_hop_selector.py \
-    --bert_model bert-base-uncased \
+    --bert_model $BERT_MODEL \
     --over_write_result True \
     --output_dir ../../data/checkpoints/selector/$OUTPUT_NAME \
     --feature_cache_path ../../data/cache/selector/$CACHE_NAME \
@@ -44,7 +45,7 @@ echo "start predict second hop result..."
 cd ../../src/selector
 echo "start predict dev second hop result !"
 python -u second_hop_selector_predictor.py \
-    --bert_model bert-base-uncased \
+    --bert_model $BERT_MODEL \
     --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \
     --model_name $MODEL_NAME \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
@@ -59,7 +60,7 @@ python -u second_hop_selector_predictor.py \
 echo "predict dev second hop result done!"
 echo "----------------------------------------------------"
 python -u second_hop_selector_predictor.py \
-    --bert_model bert-base-uncased \
+    --bert_model $BERT_MODEL \
     --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \
     --model_name $MODEL_NAME \
     --dev_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \

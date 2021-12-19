@@ -439,4 +439,5 @@ def convert_examples_to_features(examples,
     print('get feature num:{} related sentences num: {} not related senteces num:{}'.format(len(features),
                                                                                             related_sent_num,
                                                                                             not_related_sent_num))
+
     return features
