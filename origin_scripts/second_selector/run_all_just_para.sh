@@ -1,5 +1,5 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="1"
+export CUDA_VISIBLE_DEVICES="0"
 # BertForRelatedSentence
 # BertForParagraphClassification
 BERT_MODEL=bert-base-uncased
@@ -30,7 +30,7 @@ python -u second_hop_selector.py \
     --dev_new_context_file dev_new_context.json \
     --use_file_cache True \
     --max_seq_length 512 \
-    --train_batch_size 12 \
+    --train_batch_size 8 \
     --val_batch_size 128 \
     --save_model_step 10000 \
     --num_train_epochs 3.0

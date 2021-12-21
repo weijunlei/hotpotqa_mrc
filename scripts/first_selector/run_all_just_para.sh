@@ -1,16 +1,19 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="2"
+export CUDA_VISIBLE_DEVICES="0"
 echo "start train first hop selector..."
 cd ../../src/selector
-# BertForRelatedSentence
+# ElectraForRelatedSentence
 # BertForParagraphClassification
-OUTPUT_NAME=20211214_first_hop_just_paragraph_selector_12
-LOG_PREFIX=20211214_first_hop_just_paragraph_selector_12
-CACHE_NAME=20211214_first_hop_just_paragraph_selector_12
-MODEL_NAME=BertForParagraphClassification
-PREDICT_NAME=20211214_first_hop_just_paragraph_result
+# bert-base-uncased
+# google/electra-base-discriminator
+BERT_MODEL=google/electra-base-discriminator
+OUTPUT_NAME=20211219_first_hop_electra_1e_paragraph_selector_12
+LOG_PREFIX=20211219_first_hop_electra_1e_paragraph_selector_12
+CACHE_NAME=20211219_first_hop_electra_1e_paragraph_selector_12
+MODEL_NAME=ElectraForParagraphClassification
+PREDICT_NAME=20211219_first_hop_electra_1e_paragraph_selector_12
 python -u first_hop_selector.py \
-    --bert_model bert-base-uncased \
+    --bert_model $BERT_MODEL \
     --over_write_result True \
     --output_dir ../../data/checkpoints/selector/$OUTPUT_NAME \
     --log_path ../../log \
@@ -21,8 +24,9 @@ python -u first_hop_selector.py \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
     --use_file_cache True \
     --max_seq_length 512 \
+    --learning_rate 1e-5 \
     --train_batch_size 12 \
-    --val_batch_size 64 \
+    --val_batch_size 32 \
     --save_model_step 10000 \
     --num_train_epochs 3.0
 echo "train first hop selector done!"
@@ -37,7 +41,7 @@ cd ../../src/selector
 echo "start predict dev first hop result !"
 cd ../../src/selector
 python -u first_hop_selector_predictor.py \
-    --bert_model bert-base-uncased \
+    --bert_model $BERT_MODEL \
     --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \
     --model_name $MODEL_NAME \
     --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
@@ -55,7 +59,7 @@ echo "----------------------------------------------------"
 echo "start predict train first hop result !"
 cd ../../src/selector
 python -u first_hop_selector_predictor.py \
-    --bert_model bert-base-uncased \
+    --bert_model $BERT_MODEL \
     --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \
     --model_name $MODEL_NAME \
     --dev_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \

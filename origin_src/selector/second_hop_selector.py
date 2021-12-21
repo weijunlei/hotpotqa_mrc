@@ -106,6 +106,8 @@ def dev_evaluate(args,
                 # end_position = end_positions[i].detach().cpu().tolist()
                 if not has_sentence_result:
                     dev_logit = dev_logits[i].detach().cpu().tolist()
+                    if len(dev_logit) == 1:
+                        dev_logit = dev_logit[0]
                     dev_logit.reverse()
                 else:
                     dev_logit = dev_logits[i].detach().cpu().tolist()
@@ -347,7 +349,7 @@ def train_iterator(args,
                     optimizer.step()
                     optimizer.zero_grad()
                     global_steps += 1
-            del train_features, all_input_ids, all_input_mask, all_segment_ids, all_cls_label, all_cls_mask, all_cls_weight, train_data, train_dataloader
+            del train_features, all_input_ids, all_input_mask, all_segment_ids, train_data, train_dataloader
             gc.collect()
     recall, precision, f1, em, total_loss = dev_evaluate(args=args,
                                                          model=model,

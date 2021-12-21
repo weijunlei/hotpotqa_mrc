@@ -1,13 +1,13 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="2"
+export CUDA_VISIBLE_DEVICES="1"
 # BertForRelatedSentence
 # BertForParagraphClassification
 MODEL_NAME=BertForRelatedSentence
-OUTPUT_NAME=20211217_second_electra_base_related_paragraph_hop_selector_12
-CACHE_NAME=20211217_second_electra_base_related_paragraph_hop_selector_12
-LOG_PREFIX=20211217_second_electra_base_related_paragraph_hop_selector_12
-FIRST_PREDICT_PATH=20211217_first_hop_electra_base_just_paragraph_selector_12_value_setting
-SECOND_PREDICT_PATH=20211217_second_hop_electra_base_related_paragraph_selector_12_value_setting_result
+OUTPUT_NAME=20211219_second_bert_base_related_paragraph_hop_selector_8
+CACHE_NAME=20211219_second_bert_base_related_paragraph_hop_selector_8
+LOG_PREFIX=20211219_second_bert_base_related_paragraph_hop_selector_8
+FIRST_PREDICT_PATH=20211219_first_hop_related_paragraph_selector_8_result
+SECOND_PREDICT_PATH=20211219_second_hop_related_paragraph_selector_8_result
 
 echo "start train second hop selector..."
 cd ../../src/selector
@@ -29,8 +29,8 @@ python -u second_hop_selector.py \
     --dev_new_context_file dev_new_context.json \
     --use_file_cache True \
     --max_seq_length 512 \
-    --train_batch_size 12 \
-    --val_batch_size 128 \
+    --train_batch_size 8 \
+    --val_batch_size 32 \
     --save_model_step 10000 \
     --num_train_epochs 3.0
 echo "----------------------------------------------------"

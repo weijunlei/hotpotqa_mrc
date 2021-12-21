@@ -6,12 +6,12 @@ cd ../../src/selector
 # BertForParagraphClassification
 # bert-base-uncased
 # google/electra-base-discriminator
-BERT_MODEL=google/electra-base-discriminator
-OUTPUT_NAME=20211219_first_hop_electra_1e_paragraph_selector
-LOG_PREFIX=20211219_first_hop_electra_1e_paragraph_selector_8
-CACHE_NAME=20211219_first_hop_electra_1e_paragraph_selector_8
+BERT_MODEL=google/electra-large-discriminator
+OUTPUT_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12
+LOG_PREFIX=20211219_first_hop_electra_large_1e_paragraph_selector_12
+CACHE_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12
 MODEL_NAME=ElectraForParagraphClassification
-PREDICT_NAME=20211219_first_hop_electra_1e_paragraph_selector_8_result
+PREDICT_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12_result
 python -u first_hop_selector.py \
     --bert_model $BERT_MODEL \
     --over_write_result True \
@@ -25,8 +25,8 @@ python -u first_hop_selector.py \
     --use_file_cache True \
     --max_seq_length 512 \
     --learning_rate 1e-5 \
-    --train_batch_size 8 \
-    --val_batch_size 16 \
+    --train_batch_size 12 \
+    --val_batch_size 32 \
     --save_model_step 10000 \
     --num_train_epochs 3.0
 echo "train first hop selector done!"
@@ -79,11 +79,11 @@ echo "----------------------------------------------------"
 # BertForRelatedSentence
 # BertForParagraphClassification
 # google/electra-base-discriminator
-OUTPUT_NAME=20211219_second_hop_electra_1e_paragraph_selector_8
-CACHE_NAME=20211219_second_hop_electra_1e_paragraph_selector_8
-LOG_PREFIX=20211219_second_hop_electra_1e_paragraph_selector_8
-FIRST_PREDICT_PATH=20211219_first_hop_electra_1e_paragraph_selector_8_result
-SECOND_PREDICT_PATH=20211219_second_hop_electra_1e_paragraph_selector_8_result
+OUTPUT_NAME=20211219_second_hop_electra_large_1e_paragraph_selector_12
+CACHE_NAME=20211219_second_hop_electra_large_1e_paragraph_selector_12
+LOG_PREFIX=20211219_second_hop_electra_large_1e_paragraph_selector_12
+FIRST_PREDICT_PATH=20211219_first_hop_electra_large_1e_paragraph_selector_12_result
+SECOND_PREDICT_PATH=20211219_second_hop_electra_large_1e_paragraph_selector_12_result
 
 echo "start train second hop selector..."
 cd ../../src/selector
@@ -104,9 +104,10 @@ python -u second_hop_selector.py \
     --dev_related_paragraph_file dev_related_paragraph.json \
     --dev_new_context_file dev_new_context.json \
     --use_file_cache True \
+    --learning_rate 1e-5 \
     --max_seq_length 512 \
-    --train_batch_size 8 \
-    --val_batch_size 16 \
+    --train_batch_size 12 \
+    --val_batch_size 128 \
     --save_model_step 10000 \
     --num_train_epochs 3.0
 echo "----------------------------------------------------"

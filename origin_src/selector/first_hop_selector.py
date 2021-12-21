@@ -209,6 +209,8 @@ def dev_evaluate(args,
             for i, example_index in enumerate(d_example_indices):
                 if not has_sentence_result:
                     dev_logit = dev_logits[i].detach().cpu().tolist()
+                    if len(dev_logit) == 1:
+                        dev_logit = dev_logit[0]
                     dev_logit.reverse()
                 else:
                     dev_logit = dev_logits[i].detach().cpu().tolist()
@@ -280,8 +282,8 @@ def train_iterator(args,
                     "input_ids": batch[0],
                     "attention_mask": batch[1],
                     "token_type_ids": batch[2],
-                    "pq_end_pos": batch[4],
-                    "is_related": batch[5],
+                    "pq_end_pos": batch[3],
+                    "is_related": batch[4],
                 }
                 loss, _ = model(**inputs)
                 if n_gpu > 1:
@@ -349,7 +351,7 @@ def train_iterator(args,
                     optimizer.step()
                     optimizer.zero_grad()
                     global_steps += 1
-            del train_features, all_input_ids, all_input_mask, all_segment_ids, all_cls_label, all_cls_mask, all_cls_weight, train_data, train_dataloader
+            del train_features, all_input_ids, all_input_mask, all_segment_ids, train_data, train_dataloader
             gc.collect()
         # 保存最后训练的结果
         acc, prec, em, rec, total_loss = dev_evaluate(args=args,

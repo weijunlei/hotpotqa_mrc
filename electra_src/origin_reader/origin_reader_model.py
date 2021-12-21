@@ -59,7 +59,7 @@ from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, 
     ElectraForQuestionAnsweringThreeCrossAttention, \
     ElectraForQuestionAnsweringCrossAttentionOnSent, ElectraForQuestionAnsweringForwardBestWithNoise, \
     ElectraForQuestionAnsweringCrossAttentionWithDP, AlbertForQuestionAnsweringCrossAttention, \
-    AlbertForQuestionAnsweringForwardBest
+    AlbertForQuestionAnsweringForwardBest, ElectraForQuestionAnsweringQANet, BertForQuestionAnsweringQANet
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
@@ -75,6 +75,8 @@ model_dict = {
     'ElectraForQuestionAnsweringCrossAttentionWithDP': ElectraForQuestionAnsweringCrossAttentionWithDP,
     'AlbertForQuestionAnsweringCrossAttention': AlbertForQuestionAnsweringCrossAttention,
     'AlbertForQuestionAnsweringForwardBest': AlbertForQuestionAnsweringForwardBest,
+    'ElectraForQuestionAnsweringQANet': ElectraForQuestionAnsweringQANet,
+    'BertForQuestionAnsweringQANet': BertForQuestionAnsweringQANet,
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
@@ -262,13 +264,15 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                 segment_ids = segment_ids.unsqueeze(0)
                 input_mask = input_mask.unsqueeze(0)
                 entity_ids = entity_ids.unsqueeze(0)
+                if isinstance(d_example_indices, torch.Tensor)and len(d_example_indices.shape) == 0:
+                    d_example_indices = d_example_indices.unsqueeze(0)
                 pq_end_pos = pq_end_pos.unsqueeze(0)
-                if start_positions is not None and len(start_positions.shape) < 2:
-                    start_positions = start_positions.unsqueeze(0)
-                    end_positions = end_positions.unsqueeze(0)
+                if sent_mask is not None and len(sent_mask.shape) < 2:
+                    # start_positions = start_positions.unsqueeze(0)
+                    # end_positions = end_positions.unsqueeze(0)
                     sent_mask = sent_mask.unsqueeze(0)
-                    sent_lbs = sent_lbs.unsqueeze(0)
-                    sent_weight = sent_weight.unsqueeze(0)
+                    # sent_lbs = sent_lbs.unsqueeze(0)
+                    # sent_weight = sent_weight.unsqueeze(0)
             dev_start_logits, dev_end_logits, dev_sent_logits = model(input_ids,
                                                                       input_mask,
                                                                       segment_ids,
@@ -276,15 +280,18 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                                                                       entity_ids=entity_ids,
                                                                       pq_end_pos=pq_end_pos,
                                                                       sent_mask=sent_mask)
-            for idx, example_index in enumerate(d_example_indices):
-                dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
-                dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
-                dev_sent_logit = dev_sent_logits[idx].detach().cpu().tolist()
-                dev_feature = dev_features[example_index.item()]
-                unique_id = dev_feature.unique_id
-                all_results.append(
-                    RawResult(unique_id=unique_id, start_logit=dev_start_logit, end_logit=dev_end_logit,
-                              sent_logit=dev_sent_logit))
+            try:
+                for idx, example_index in enumerate(d_example_indices):
+                    dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
+                    dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
+                    dev_sent_logit = dev_sent_logits[idx].detach().cpu().tolist()
+                    dev_feature = dev_features[example_index.item()]
+                    unique_id = dev_feature.unique_id
+                    all_results.append(
+                        RawResult(unique_id=unique_id, start_logit=dev_start_logit, end_logit=dev_end_logit,
+                                  sent_logit=dev_sent_logit))
+            except Exception as e:
+                import pdb; pdb.set_trace()
 
     _, preds, sp_pred = write_predictions(tokenizer, dev_examples, dev_features, all_results)
     ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = evaluate(dev_examples, preds, sp_pred)
@@ -565,9 +572,30 @@ def run_train(rank=0, world_size=1):
     # 保存最后的模型
     logger.info("t_total: {} global steps: {}".format(num_train_optimization_steps, global_step))
     if rank == 0:
+        dev_examples, dev_dataloader, dev_features = get_dev_data(args,
+                                                                  tokenizer=tokenizer,
+                                                                  logger=logger,
+                                                                  cls_token=cls_token,
+                                                                  sep_token=sep_token,
+                                                                  unk_token=unk_token,
+                                                                  pad_token=pad_token
+                                                                  )
+        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
+                                                                        dev_dataloader,
+                                                                        n_gpu,
+                                                                        device,
+                                                                        dev_features,
+                                                                        tokenizer,
+                                                                        dev_examples)
+        logger.info("final step: {}".format(global_step))
+        logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
+            ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
+        ))
+        del dev_examples, dev_dataloader, dev_features
+        gc.collect()
         model_to_save = model.module if hasattr(model,
                                                 'module') else model  # Only save the model it-self
-        output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
+        output_model_file = os.path.join(args.output_dir, 'pytorch_model_last.bin')
         torch.save(model_to_save.state_dict(), output_model_file)
         output_config_file = os.path.join(args.output_dir, 'config.json')
         with open(output_config_file, 'w') as f:

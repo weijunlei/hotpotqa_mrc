@@ -80,15 +80,6 @@ def write_second_predict_result(examples, features, results, has_sentence_result
             # 第一个'[CLS]'为paragraph为支撑句标识
             paragraph_results[id] = raw_result[0]
             labels_result = raw_result
-            cls_masks = get_feature.cls_mask
-            if has_sentence_result:
-                for get_idx, (label_result, cls_mask) in enumerate(zip(labels_result, cls_masks)):
-                    if get_idx == 0:
-                        continue
-                    if cls_mask != 0:
-                        sentence_result.append(label_result)
-                sentence_results[id] = sentence_result
-                assert len(sentence_result) == sum(features[0].cls_mask) - 1
         else:
             # 对单实例的多结果处理
             paragraph_result = 0
@@ -99,27 +90,6 @@ def write_second_predict_result(examples, features, results, has_sentence_result
                 feature_result = unique_id2result[feature.unique_id].logit
                 if feature_result[0] > paragraph_result:
                     paragraph_result = feature_result[0]
-                if has_sentence_result:
-                    tmp_sent_result = []
-                    tmp_label_result = []
-                    mask1 += sum(feature.cls_mask[1:])
-                    label_results = feature_result[1:]
-                    cls_masks = feature.cls_mask[1:]
-                    for get_idx, (label_result, cls_mask) in enumerate(zip(label_results, cls_masks)):
-                        if cls_mask != 0:
-                            tmp_sent_result.append(label_result)
-                    if roll_back is None:
-                        roll_back = 0
-                    elif roll_back == 1:
-                        sentence_result[-1] = max(sentence_result[-1], tmp_sent_result[0])
-                        tmp_sent_result = tmp_sent_result[1:]
-                    elif roll_back == 2:
-                        sentence_result[-2] = max(sentence_result[-2], tmp_sent_result[0])
-                        sentence_result[-1] = max(sentence_result[-1], tmp_sent_result[1])
-                        tmp_sent_result = tmp_sent_result[2:]
-                    sentence_result += tmp_sent_result
-                    overlap += roll_back
-                    roll_back = feature.roll_back
             paragraph_results[id] = paragraph_result
             sentence_results[id] = sentence_result
             if has_sentence_result:
@@ -156,20 +126,6 @@ def write_second_predict_result(examples, features, results, has_sentence_result
                 get_related_paras.append(para_idx)
         tmp_best_paragraph[k] = max_para
         tmp_related_paragraph[k] = get_related_paras
-    # 获取相关段落和句子
-    if has_sentence_result:
-        sentence_dict = {}
-        for k, v in sentence_results.items():
-            context_id, paragraph_id = k.split('_')
-            paragraph_id = int(paragraph_id)
-            if context_id not in sentence_dict:
-                sentence_dict[context_id] = [[[]] * 10, [[]] * 10, [[]]*10]
-            sentence_dict[context_id][0][paragraph_id] = v
-        for k, v in sentence_dict.items():
-            get_paragraph_idx = tmp_best_paragraph[k]
-            pred_sent_result = v[0][get_paragraph_idx]
-            real_sent_result = v[1][get_paragraph_idx]
-            tmp_related_sentence[k] = [pred_sent_result, real_sent_result]
     return tmp_best_paragraph, tmp_related_sentence, tmp_related_paragraph
 
 
@@ -320,6 +276,8 @@ def run_predict(args):
                     # end_position = end_positions[i].detach().cpu().tolist()
                     if not has_sentence_result:
                         dev_logit = dev_logits[i].detach().cpu().tolist()
+                        if len(dev_logit) == 1:
+                            dev_logit = dev_logit[0]
                         dev_logit.reverse()
                     else:
                         dev_logit = dev_logits[i].detach().cpu().tolist()

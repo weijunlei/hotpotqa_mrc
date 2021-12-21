@@ -158,22 +158,6 @@ def write_predictions(args, all_examples, all_features, all_results, is_training
             raw_result = unique_id2result[get_feature_id].logit
             # 第一个'[CLS]'为paragraph为支撑句标识
             paragraph_results[get_id] = raw_result[0]
-            labels_result = raw_result
-            cls_masks = get_feature.cls_mask
-            cls_labels = get_feature.cls_label
-            if has_sentence_result:
-                for idx, (label_result, cls_mask, cls_label) in enumerate(zip(labels_result, cls_masks, cls_labels)):
-                    if idx == 0:
-                        sentence_all_labels.append(cls_label)
-                        continue
-                    if cls_mask != 0:
-                        sentence_all_labels.append(cls_label)
-                        sentence_result.append(label_result)
-                sentence_results[get_id] = sentence_result
-                assert len(sentence_result) == sum(features[0].cls_mask) - 1
-                assert len(sentence_all_labels) == sum(features[0].cls_mask)
-            else:
-                sentence_all_labels.append(cls_labels[0])
             labels[get_id] = sentence_all_labels
         else:
             # 对单实例的多结果处理
@@ -187,49 +171,8 @@ def write_predictions(args, all_examples, all_features, all_results, is_training
                     paragraph_result = feature_result[0]
                 tmp_sent_result = []
                 tmp_label_result = []
-                mask1 += sum(feature.cls_mask[1:])
-                label_results = feature_result[1:]
-                cls_masks = feature.cls_mask[1:]
-                cls_labels = feature.cls_label[1:]
-                if has_sentence_result:
-                    for idx, (label_result, cls_mask, cls_label) in enumerate(zip(label_results, cls_masks, cls_labels)):
-                        if cls_mask != 0:
-                            # TODO: check the order of append
-                            tmp_label_result.append(cls_label)
-                            tmp_sent_result.append(label_result)
-                    if roll_back is None:
-                        roll_back = 0
-                        sentence_all_labels.append(feature.cls_label[0])
-                        sentence_all_labels += tmp_label_result
-                    elif roll_back == 1:
-                        sentence_result[-1] = max(sentence_result[-1], tmp_sent_result[0])
-                        tmp_sent_result = tmp_sent_result[1:]
-                        if sentence_all_labels[0] == 0 and feature.cls_label[0] == 1:
-                            sentence_all_labels[0] = 1
-                        sentence_all_labels += tmp_label_result[1:]
-                    elif roll_back == 2:
-                        sentence_result[-2] = max(sentence_result[-2], tmp_sent_result[0])
-                        sentence_result[-1] = max(sentence_result[-1], tmp_sent_result[1])
-                        tmp_sent_result = tmp_sent_result[2:]
-                        if sentence_all_labels[0] == 0 and feature.cls_label[0] == 1:
-                            sentence_all_labels[0] = 1
-                        sentence_all_labels += tmp_label_result[2:]
-                    else:
-                        sentence_all_labels += tmp_label_result
-                    sentence_result += tmp_sent_result
-                    overlap += roll_back
-                    roll_back = feature.roll_back
-                else:
-                    if len(sentence_all_labels) == 0:
-                        sentence_all_labels.append(cls_labels[0])
-                    else:
-                        sentence_all_labels[0] = max(sentence_all_labels[0], cls_labels[0])
             paragraph_results[get_id] = paragraph_result
-            sentence_results[get_id] = sentence_result
             labels[get_id] = sentence_all_labels
-            if has_sentence_result:
-                assert len(sentence_result) + overlap == mask1
-                assert len(sentence_all_labels) + overlap == mask1 + 1
     # return paragraph_results, sentence_results, labels
     if is_training == 'test':
         return 0, 0, 0, 0

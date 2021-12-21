@@ -238,7 +238,6 @@ def run_predict(args):
     start_idxs = list(range(0, example_num, max_train_data_size))
     end_idxs = [x + max_train_data_size for x in start_idxs]
     end_idxs[-1] = example_num
-    all_results = []
     best_paragraph = {}
     related_sentence = {}
     related_paragraph = {}
@@ -322,7 +321,6 @@ def run_predict(args):
                                                                                                    features=truly_features,
                                                                                                    results=cur_result,
                                                                                                    has_sentence_result=has_sentence_result)
-            all_results += cur_result
             best_paragraph.update(tmp_best_paragraph)
             related_sentence.update(tmp_related_sentence)
             related_paragraph.update(tmp_related_paragraph)
@@ -335,51 +333,6 @@ def run_predict(args):
         gc.collect()
     # 获取新的文档
     logger.info("start saving data...")
-    # data = json.load(open(args.dev_file, 'r', encoding='utf-8'))
-    # data = data[:100]
-    # for info in data:
-    #     context = info['context']
-    #     qas_id = info['_id']
-    #     # (title, list(sent))
-    #     get_best_paragraphs = context[best_paragraph[qas_id]]
-    #     question = info['question']
-    #     all_input_text = question + ''.join(get_best_paragraphs[1])
-    #     # [10*predict, 10 * label]测试的时候无
-    #     if has_sentence_result:
-    #         get_sent_labels = related_sentence[qas_id]
-    #         del_thread = sorted(get_sent_labels[0][:-1])
-    #     del_idx = 0
-    #     all_tokens = tokenizer.tokenize(all_input_text)
-    #     cur_all_text = ''
-    #     if len(all_tokens) <= 256:
-    #         question += ''.join(get_best_paragraphs[1])
-    #         cur_all_text = question
-    #     else:
-    #         while len(all_tokens) > 256:
-    #             mask = []
-    #             cur_all_text = question
-    #             for idx, paragraph in enumerate(get_best_paragraphs[1]):
-    #                 try:
-    #                     if has_sentence_result:
-    #                         if get_sent_labels[0][idx] > del_thread[min(del_idx, len(del_thread) - 1)]:
-    #                             cur_all_text += paragraph
-    #                             mask.append(1)
-    #                         else:
-    #                             mask.append(0)
-    #                 except Exception as e:
-    #                     import pdb; pdb.set_trace()
-    #                 else:
-    #                     cur_all_text += paragraph
-    #                     mask.append(1)
-    #             all_tokens = tokenizer.tokenize(cur_all_text)
-    #             if not has_sentence_result and len(all_tokens) > 256:
-    #                 all_tokens = all_tokens[:256]
-    #             del_idx += 1
-    #     all_tokens_len = len(tokenizer.tokenize(cur_all_text))
-    #     total += all_tokens_len
-    #     if all_tokens_len > 256:
-    #         max_len += 1
-    #     new_context[qas_id] = cur_all_text
     logger.info("writing result to file...")
     if not os.path.exists(args.predict_result_path):
         logger.info("make new output dir:{}".format(args.predict_result_path))

@@ -4,7 +4,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 import math
 
 from modeling_bert import BertPreTrainedModel, BertModel, BertOutput, BertSelfOutput, BertIntermediate
-from transformers import RobertaModel, ElectraModel, AlbertModel
+from transformers import RobertaModel, ElectraModel, AlbertModel, ElectraPreTrainedModel
 from transformer import TransformerLayer
 
 
@@ -224,7 +224,7 @@ class BertForRelatedSentence(BertPreTrainedModel):
         return loss1, logits
 
 
-class ElectraForParagraphClassification(ElectraModel):
+class ElectraForParagraphClassification(ElectraPreTrainedModel):
     def __init__(self, config):
         super(ElectraForParagraphClassification, self).__init__(config)
 
@@ -242,7 +242,7 @@ class ElectraForParagraphClassification(ElectraModel):
                 inputs_embeds=None,
                 cls_mask=None,
                 pq_end_pos=None,
-                cls_label=None,
+                is_related=None,
                 cls_weight=None):
         if len(input_ids.shape) == 1:
             input_ids = input_ids.unsqueeze(0)
@@ -251,8 +251,8 @@ class ElectraForParagraphClassification(ElectraModel):
             cls_mask = cls_mask.unsqueeze(0)
             if pq_end_pos is not None:
                 pq_end_pos = cls_mask.unsqueeze(0)
-            if cls_label is not None:
-                cls_label = cls_label.unsqueeze(0)
+            if is_related is not None:
+                cls_label = is_related.unsqueeze(0)
                 cls_weight = cls_weight.unsqueeze(0)
         outputs = self.electra(input_ids,
                                attention_mask=attention_mask,
@@ -262,15 +262,13 @@ class ElectraForParagraphClassification(ElectraModel):
                                inputs_embeds=inputs_embeds)
         cls_output = outputs[0]
         cls_output = torch.index_select(cls_output, dim=1, index=torch.tensor([0, ]).cuda())
-        cls_output = cls_output.squeeze(1)
         cls_output = self.dropout(cls_output)
         logits = self.classifier(cls_output).squeeze(-1)
-        if cls_label is None:
+        if is_related is None:
             return logits
         # 选择第一个标记结果
-        cls_label = torch.index_select(cls_label, dim=1, index=torch.tensor([0, ]).cuda())
         loss_fct = CrossEntropyLoss()
-        loss = loss_fct(logits.view(-1, self.config.num_labels), cls_label.view(-1))
+        loss = loss_fct(logits.view(-1, self.config.num_labels), is_related.view(-1))
         return loss, logits  # (loss), scores, (hidden_states), (attentions)
 
 
@@ -312,6 +310,7 @@ class ElectraForRelatedSentence(ElectraModel):
                                        position_ids=position_ids,
                                        head_mask=head_mask,
                                        inputs_embeds=inputs_embeds)
+
         sequence_output = sequence_output[0]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output).squeeze(-1)

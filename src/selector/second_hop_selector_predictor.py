@@ -354,7 +354,7 @@ def run_predict(args):
             del tmp_best_paragraph, tmp_related_sentence, tmp_related_paragraph
             del d_example_indices, inputs
             gc.collect()
-        del d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_weight, d_all_pq_end_pos, d_all_example_index
+        del d_all_input_ids, d_all_input_mask, d_all_segment_ids, d_all_cls_mask, d_all_cls_weight, d_all_example_index, d_pq_end_pos
         del truly_examples, truly_features, dev_data
         gc.collect()
     logger.info("writing result to file...")
