@@ -36,7 +36,8 @@ sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
     ElectraForParagraphClassification, ElectraForRelatedSentence, \
     RobertaForParagraphClassification, RobertaForRelatedSentence, \
-    BertForParagraphClassificationMean, BertForParagraphClassificationMax
+    BertForParagraphClassificationMean, BertForParagraphClassificationMax, \
+    ElectraForParagraphCrossAttentionClassification
 from optimization import BertAdam, warmup_linear
 
 models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
@@ -47,6 +48,7 @@ models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
                "ElectraForRelatedSentence": ElectraForRelatedSentence,
                "RobertaForParagraphClassification": RobertaForParagraphClassification,
                "RobertaForRelatedSentence": RobertaForRelatedSentence,
+               "ElectraForParagraphCrossAttentionClassification": ElectraForParagraphCrossAttentionClassification
                }
 
 # 日志设置
@@ -143,6 +145,7 @@ def write_second_predict_result(examples, features, results, has_sentence_result
         # 在预测时只做标记位，为1标记可以被选中，为0不能被选中
         context_dict[context_id][1][paragraph_id] = 1
     # 将context最大结果导出
+    import pdb; pdb.set_trace()
     for k, v in context_dict.items():
         thread = 0.01
         max_v = max(v[0])

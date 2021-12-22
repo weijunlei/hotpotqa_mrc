@@ -1076,12 +1076,12 @@ class ElectraForQuestionAnsweringQANet(ElectraModel):
         # self.bi_attention = BiAttention(config.hidden_size, config.hidden_size, config.hidden_size)
         # self.bi_attn_linear = nn.Linear(config.hidden_size * 4, config.hidden_size)
         # self.bi_attn_dropout = nn.Dropout(0.2)
-        # self.w1 = torch.nn.Parameter(torch.FloatTensor(1), requires_grad=True)
-        # self.w2 = torch.nn.Parameter(torch.FloatTensor(1), requires_grad=True)
+        self.w1 = torch.nn.Parameter(torch.FloatTensor(1), requires_grad=True)
+        self.w2 = torch.nn.Parameter(torch.FloatTensor(1), requires_grad=True)
         # self.w3 = torch.nn.Parameter(torch.FloatTensor(1), requires_grad=True)
         # initialization
-        # self.w1.data.fill_(0.5)
-        # self.w2.data.fill_(0.5)
+        self.w1.data.fill_(0.5)
+        self.w2.data.fill_(0.5)
         # self.w3.data.fill_(0.3)
         self.start_logits = nn.Linear(config.hidden_size, 1)
         self.end_logits = nn.Linear(config.hidden_size, 1)
@@ -1142,7 +1142,7 @@ class ElectraForQuestionAnsweringQANet(ElectraModel):
         # zeros = torch.zeros((bs, 512 - context_len, hidden_dim)).cuda()
         # sequence_output = torch.cat([sequence_output, zeros], dim=1)
         # sequence_output = self.w1 * sequence_output + self.w2 * cross_output + outputs[0] + self.w3 * bi_attention_output
-        sequence_output = 0.5 * sequence_output + 0.5 * cross_output + outputs[0]
+        sequence_output = self.w1 * sequence_output + self.w2 * cross_output + outputs[0]
         # sequence_output = sequence_output + outputs[0]
         ones_mask = torch.ones_like(attention_mask).cuda()
         context_mask = (ones_mask - token_type_ids) * attention_mask

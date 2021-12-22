@@ -18,7 +18,7 @@ export CUDA_VISIBLE_DEVICES="2"
                # google/electra-large-discriminator
                # albert-xxlarge-v2
                # ElectraForQuestionAnsweringQANet
-cd ../../electra_src/origin_reader
+cd ../../stable_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model albert-xxlarge-v2 \
   --output_dir ../../data/checkpoints/20211219_sent_loss_20_2e_albert_large_qa_net_weighted_wo_bi_with_co_cross_with_electra_selector \

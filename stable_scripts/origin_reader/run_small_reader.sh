@@ -17,7 +17,7 @@ export CUDA_VISIBLE_DEVICES="0"
                # ElectraForQuestionAnsweringThreeCrossAttention
                # google/electra-large-discriminator
                # ElectraForQuestionAnsweringQANet
-cd ../../electra_src/origin_reader
+cd ../../stable_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model bert-base-uncased \
   --output_dir ../../data/checkpoints/20211220_sent_loss_20_2e_bert_qa_net_attention_add_gelu_act_with_weight_co_cross_cross_electra_selector \

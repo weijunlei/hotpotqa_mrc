@@ -22,7 +22,8 @@ sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
     ElectraForParagraphClassification, ElectraForRelatedSentence, \
     RobertaForParagraphClassification, RobertaForRelatedSentence, \
-    BertForParagraphClassificationMean, BertForParagraphClassificationMax
+    BertForParagraphClassificationMean, BertForParagraphClassificationMax, \
+    ElectraForParagraphCrossAttentionClassification
 from optimization import BertAdam, warmup_linear
 
 models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
@@ -33,6 +34,7 @@ models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
                "ElectraForRelatedSentence": ElectraForRelatedSentence,
                "RobertaForParagraphClassification": RobertaForParagraphClassification,
                "RobertaForRelatedSentence": RobertaForRelatedSentence,
+               "ElectraForParagraphCrossAttentionClassification": ElectraForParagraphCrossAttentionClassification
                }
 # 日志设置
 logger = None
