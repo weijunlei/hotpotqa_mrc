@@ -20,9 +20,9 @@ export CUDA_VISIBLE_DEVICES="0"
 cd ../../electra_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model google/electra-large-discriminator \
-  --output_dir ../../data/checkpoints/20211219_sent_loss_20_2e_electra_large_qa_net_weighted_wo_bi_with_co_cross_with_electra_selector \
+  --output_dir ../../data/checkpoints/20211222_electra_large_wo_dynamic_weight \
   --model_name ElectraForQuestionAnsweringQANet \
-  --log_prefix 20211219_sent_loss_20_1e_electra_large_qa_net_weighted_wo_bi_with_co_cross_with_electra_selector \
+  --log_prefix 20211222_electra_large_wo_dynamic_weight \
   --overwrite_result True \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
