@@ -1,14 +1,16 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="0"
+export CUDA_VISIBLE_DEVICES="2"
 # BertForRelatedSentence
 # BertForParagraphClassification
-BERT_MODEL=bert-base-uncased
-MODEL_NAME=BertForParagraphClassification
-OUTPUT_NAME=20211217_second_hop_bert_simple_paragraph_selector_8_value_setting
-CACHE_NAME=20211217_second_hop_bert_simple_paragraph_selector_8_value_setting
-LOG_PREFIX=20211217_second_hop_bert_simple_paragraph_selector_8_value_setting
-FIRST_PREDICT_PATH=20211217_first_hop_bert_simple_paragraph_selector_8_value_setting_result
-SECOND_PREDICT_PATH=20211217_second_hop_bert_simple_paragraph_selector_8_value_setting_result
+# bert-base-uncased
+# ElectraForParagraphClassification
+BERT_MODEL=google/electra-base-discriminator
+MODEL_NAME=ElectraForParagraphClassification
+OUTPUT_NAME=20211219_second_hop_selector_simple_electra_base
+CACHE_NAME=20211219_second_hop_selector_simple_electra_base
+LOG_PREFIX=20211219_second_hop_selector_simple_electra_base
+FIRST_PREDICT_PATH=20211219_first_hop_selector_simple_electra_base_result
+SECOND_PREDICT_PATH=20211219_second_hop_selector_simple_electra_base_result
 
 echo "start train second hop selector..."
 cd ../../src/selector

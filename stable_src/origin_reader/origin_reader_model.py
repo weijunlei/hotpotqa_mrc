@@ -261,12 +261,11 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                     t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
             else:
                 d_batch = d_batch[:-1]
-            input_ids, input_mask, segment_ids, sent_mask, content_len, entity_ids, pq_end_pos = d_batch
+            input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos = d_batch
             if len(input_ids.shape) < 2:
                 input_ids = input_ids.unsqueeze(0)
                 segment_ids = segment_ids.unsqueeze(0)
                 input_mask = input_mask.unsqueeze(0)
-                entity_ids = entity_ids.unsqueeze(0)
                 if isinstance(d_example_indices, torch.Tensor)and len(d_example_indices.shape) == 0:
                     d_example_indices = d_example_indices.unsqueeze(0)
                 pq_end_pos = pq_end_pos.unsqueeze(0)
@@ -279,8 +278,6 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
             dev_start_logits, dev_end_logits, dev_sent_logits = model(input_ids,
                                                                       input_mask,
                                                                       segment_ids,
-                                                                      # word_sim_matrix=d_word_sim_matrix,
-                                                                      entity_ids=entity_ids,
                                                                       pq_end_pos=pq_end_pos,
                                                                       sent_mask=sent_mask)
             try:
@@ -477,12 +474,11 @@ def run_train(rank=0, world_size=1):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, sent_mask, content_len, entity_ids, pq_end_pos, start_positions, end_positions, sent_lbs, sent_weight = batch
+                input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos, start_positions, end_positions, sent_lbs, sent_weight = batch
                 if len(input_ids.shape) < 2:
                     input_ids = input_ids.unsqueeze(0)
                     segment_ids = segment_ids.unsqueeze(0)
                     input_mask = input_mask.unsqueeze(0)
-                    entity_ids = entity_ids.unsqueeze(0)
                     pq_end_pos = pq_end_pos.unsqueeze(0)
                     if start_positions is not None and len(start_positions.shape) < 2:
                         start_positions = start_positions.unsqueeze(0)
@@ -494,7 +490,6 @@ def run_train(rank=0, world_size=1):
                                       input_mask,
                                       segment_ids,
                                       # word_sim_matrix=word_sim_matrix,
-                                      entity_ids=entity_ids,
                                       pq_end_pos=pq_end_pos,
                                       start_positions=start_positions,
                                       end_positions=end_positions,
