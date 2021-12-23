@@ -275,9 +275,9 @@ class ElectraForParagraphClassification(ElectraModel):
         return loss, logits  # (loss), scores, (hidden_states), (attentions)
 
 
-class ElectraForParagraphCrossAttentionClassification(ElectraModel):
+class ElectraForParagraphClassificationCrossAttention(ElectraModel):
     def __init__(self, config):
-        super(ElectraForParagraphCrossAttentionClassification, self).__init__(config)
+        super(ElectraForParagraphClassificationCrossAttention, self).__init__(config)
 
         self.electra = ElectraModel(config)
         self.cross_attention = CrossAttention(config=config)

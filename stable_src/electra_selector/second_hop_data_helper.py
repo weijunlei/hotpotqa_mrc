@@ -129,10 +129,7 @@ def convert_examples_to_second_features(examples, tokenizer, max_seq_length, is_
                 real_related = int(bool(sum(cls_label) - cls_label[0]))
                 if real_related != cls_label[0]:
                     cls_label[0] = real_related
-                try:
-                    assert len(cls_mask) == max_seq_length
-                except Exception as e:
-                    import pdb; pdb.set_trace()
+                assert len(cls_mask) == max_seq_length
                 assert len(cls_label) == max_seq_length
                 assert len(cls_weight) == max_seq_length
                 assert len(input_ids) == max_seq_length

@@ -7,11 +7,11 @@ cd ../../src/selector
 # bert-base-uncased
 # google/electra-base-discriminator
 BERT_MODEL=google/electra-base-discriminator
-OUTPUT_NAME=20211222_first_hop_electra_1e_paragraph_selector_12
-LOG_PREFIX=20211222_first_hop_electra_1e_paragraph_selector_12
+OUTPUT_NAME=20211222_first_hop_electra_cross_attention_1e_paragraph_selector_12
+LOG_PREFIX=20211222_first_hop_electra_cross_attention_1e_paragraph_selector_12
 CACHE_NAME=20211222_first_hop_electra_1e_paragraph_selector_12
-MODEL_NAME=ElectraForParagraphClassification
-PREDICT_NAME=20211222_first_hop_electra_1e_paragraph_selector_12_result
+MODEL_NAME=ElectraForParagraphClassificationCrossAttention
+PREDICT_NAME=20211222_first_hop_electra_cross_attention_1e_paragraph_selector_12
 python -u first_hop_selector.py \
     --bert_model $BERT_MODEL \
     --over_write_result True \

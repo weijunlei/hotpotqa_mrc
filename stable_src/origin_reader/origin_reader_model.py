@@ -255,19 +255,19 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
 
     with torch.no_grad():
         for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Dev Iteration")):
-            d_example_indices = d_batch[-1].squeeze()
+            d_example_indices = d_batch[-1]
             if n_gpu == 1:
                 d_batch = tuple(
                     t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
             else:
                 d_batch = d_batch[:-1]
             input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos = d_batch
+            if isinstance(d_example_indices, torch.Tensor) and len(d_example_indices.shape) == 0:
+                d_example_indices = d_example_indices.unsqueeze(0)
             if len(input_ids.shape) < 2:
                 input_ids = input_ids.unsqueeze(0)
                 segment_ids = segment_ids.unsqueeze(0)
                 input_mask = input_mask.unsqueeze(0)
-                if isinstance(d_example_indices, torch.Tensor)and len(d_example_indices.shape) == 0:
-                    d_example_indices = d_example_indices.unsqueeze(0)
                 pq_end_pos = pq_end_pos.unsqueeze(0)
                 if sent_mask is not None and len(sent_mask.shape) < 2:
                     # start_positions = start_positions.unsqueeze(0)
@@ -280,18 +280,15 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                                                                       segment_ids,
                                                                       pq_end_pos=pq_end_pos,
                                                                       sent_mask=sent_mask)
-            try:
-                for idx, example_index in enumerate(d_example_indices):
-                    dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
-                    dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
-                    dev_sent_logit = dev_sent_logits[idx].detach().cpu().tolist()
-                    dev_feature = dev_features[example_index.item()]
-                    unique_id = dev_feature.unique_id
-                    all_results.append(
-                        RawResult(unique_id=unique_id, start_logit=dev_start_logit, end_logit=dev_end_logit,
-                                  sent_logit=dev_sent_logit))
-            except Exception as e:
-                import pdb; pdb.set_trace()
+            for idx, example_index in enumerate(d_example_indices):
+                dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
+                dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
+                dev_sent_logit = dev_sent_logits[idx].detach().cpu().tolist()
+                dev_feature = dev_features[example_index.item()]
+                unique_id = dev_feature.unique_id
+                all_results.append(
+                    RawResult(unique_id=unique_id, start_logit=dev_start_logit, end_logit=dev_end_logit,
+                              sent_logit=dev_sent_logit))
 
     _, preds, sp_pred = write_predictions(tokenizer, dev_examples, dev_features, all_results)
     ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = evaluate(dev_examples, preds, sp_pred)
@@ -606,6 +603,7 @@ if __name__ == "__main__":
     if not use_ddp:
         run_train()
     else:
+        torch.multiprocessing.set_start_method('spawn')
         world_size = 2
         processes = []
         for rank in range(world_size):

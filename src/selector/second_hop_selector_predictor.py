@@ -20,6 +20,7 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, Samp
 from torch.utils.data.distributed import DistributedSampler
 from transformers import BertTokenizer, RobertaTokenizer, ElectraTokenizer, AlbertTokenizer
 from tqdm import tqdm, trange
+
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
@@ -29,15 +30,16 @@ import string
 import gc
 
 from second_hop_data_helper import (HotpotQAExample,
-                                       HotpotInputFeatures,
-                                       read_second_hotpotqa_examples,
-                                       convert_examples_to_second_features)
+                                    HotpotInputFeatures,
+                                    read_second_hotpotqa_examples,
+                                    convert_examples_to_second_features)
+
 sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
     ElectraForParagraphClassification, ElectraForRelatedSentence, \
     RobertaForParagraphClassification, RobertaForRelatedSentence, \
     BertForParagraphClassificationMean, BertForParagraphClassificationMax, \
-    ElectraForParagraphCrossAttentionClassification
+    ElectraForParagraphClassificationCrossAttention
 from optimization import BertAdam, warmup_linear
 
 models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
@@ -48,7 +50,7 @@ models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
                "ElectraForRelatedSentence": ElectraForRelatedSentence,
                "RobertaForParagraphClassification": RobertaForParagraphClassification,
                "RobertaForRelatedSentence": RobertaForRelatedSentence,
-               "ElectraForParagraphCrossAttentionClassification": ElectraForParagraphCrossAttentionClassification
+               "ElectraForParagraphClassificationCrossAttention": ElectraForParagraphClassificationCrossAttention
                }
 
 # 日志设置
@@ -140,33 +142,16 @@ def write_second_predict_result(examples, features, results, has_sentence_result
         context_id, paragraph_id = k.split('_')
         paragraph_id = int(paragraph_id)
         if context_id not in context_dict:
-            context_dict[context_id] = [[-10000]*10, [-10000]*10]
-        context_dict[context_id][0][paragraph_id] = v
+            context_dict[context_id] = [-10000] * 10
+        context_dict[context_id][paragraph_id] = v
         # 在预测时只做标记位，为1标记可以被选中，为0不能被选中
-        context_dict[context_id][1][paragraph_id] = 1
     # 将context最大结果导出
-    import pdb; pdb.set_trace()
     for k, v in context_dict.items():
-        thread = 0.01
-        max_v = max(v[0])
-        min_v = min(v[0])
-        max_logit = -1000
-        max_result = False
-        get_related_paras = []
-        max_para = -1
-        for para_idx, para_pro in enumerate(v[0]):
-            # 后面的筛选条件保证两个段落不会相同
-            if para_pro > max_logit and v[1][para_idx] != 0:
-                max_logit = para_pro
-                max_para = para_idx
-            if max_v - min_v == 0:
-                para_pro = 0
-            else:
-                para_pro = (para_pro - min_v) / (max_v - min_v)
-            if para_pro > thread and v[1][para_idx] != 0:
-                get_related_paras.append(para_idx)
-        tmp_best_paragraph[k] = max_para
-        tmp_related_paragraph[k] = get_related_paras
+        max_value = max(v)
+        for idx, num in enumerate(v):
+            if num == max_value:
+                tmp_best_paragraph[k] = idx
+                break
     # 获取相关段落和句子
     if has_sentence_result:
         sentence_dict = {}
@@ -174,14 +159,14 @@ def write_second_predict_result(examples, features, results, has_sentence_result
             context_id, paragraph_id = k.split('_')
             paragraph_id = int(paragraph_id)
             if context_id not in sentence_dict:
-                sentence_dict[context_id] = [[[]] * 10, [[]] * 10, [[]]*10]
+                sentence_dict[context_id] = [[[]] * 10, [[]] * 10, [[]] * 10]
             sentence_dict[context_id][0][paragraph_id] = v
         for k, v in sentence_dict.items():
             get_paragraph_idx = tmp_best_paragraph[k]
             pred_sent_result = v[0][get_paragraph_idx]
             real_sent_result = v[1][get_paragraph_idx]
             tmp_related_sentence[k] = [pred_sent_result, real_sent_result]
-    return tmp_best_paragraph, tmp_related_sentence, tmp_related_paragraph
+    return tmp_best_paragraph, tmp_related_sentence, context_dict
 
 
 def run_predict(args):
@@ -224,7 +209,6 @@ def run_predict(args):
     else:
         raise ValueError("Not implement!")
     # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
-
 
     # 从文件中加载模型
     model = models_dict[args.model_name].from_pretrained(args.checkpoint_path)
@@ -312,7 +296,8 @@ def run_predict(args):
             has_sentence_result = False
         with torch.no_grad():
             cur_result = []
-            for batch_idx, batch in enumerate(tqdm(dev_dataloader, desc="predict interation: {}".format(args.dev_file))):
+            for batch_idx, batch in enumerate(
+                    tqdm(dev_dataloader, desc="predict interation: {}".format(args.dev_file))):
                 # example index getter
                 d_example_indices = batch[-1]
                 # 多gpu训练的scatter
@@ -343,7 +328,7 @@ def run_predict(args):
                     dev_feature = truly_features[example_index.item()]
                     unique_id = dev_feature.unique_id
                     cur_result.append(RawResult(unique_id=unique_id,
-                                             logit=dev_logit))
+                                                logit=dev_logit))
             tmp_best_paragraph, tmp_related_sentence, tmp_related_paragraph = write_second_predict_result(
                 examples=truly_examples,
                 features=truly_features,
@@ -365,67 +350,12 @@ def run_predict(args):
         logger.info("make new output dir:{}".format(args.second_predict_result_path))
         os.makedirs(args.second_predict_result_path)
     final_related_paragraph_file = "{}/{}".format(args.second_predict_result_path, args.final_related_result)
-    final_second_related_paragraph_file = ""
     final_related_paragraph_dict = {}
     for k, v in best_paragraph.items():
         final_related_paragraph_dict[k] = [first_best_paragraph[k], best_paragraph[k]]
     logger.info(len(final_related_paragraph_dict))
     json.dump(final_related_paragraph_dict, open(final_related_paragraph_file, 'w', encoding='utf-8'))
     logger.info("write result done!")
-
-    # write third context
-    # new_context = {}
-    # data = json.load(open(args.dev_file, 'r', encoding='utf-8'))
-    # # data = data[:100]
-    # over_half_num = 0
-    # for info in data:
-    #     context = info['context']
-    #     qas_id = info['_id']
-    #     # (title, list(sent))
-    #     get_best_paragraphs = context[final_related_paragraph_dict[qas_id][1]]
-    #     get_second_paragraphs = context[final_related_paragraph_dict[qas_id][0]]
-    #     question = info['question']
-    #     # 1 指示句子s
-    #     all_input_text = question + ''.join(get_best_paragraphs[1])
-    #     all_input_text += ''.join(get_second_paragraphs[1])
-    #     # [10*predict, 10 * label]测试的时候无
-    #     if has_sentence_result:
-    #         get_sent_labels = related_sentence[qas_id]
-    #         del_thread = sorted(get_sent_labels[0][:-1])
-    #         del_idx = 0
-    #     all_tokens = tokenizer.tokenize(all_input_text)
-    #     cur_all_text = ''
-    #     if len(all_tokens) <= 256:
-    #         question += ''.join(get_best_paragraphs[1])
-    #         cur_all_text = question
-    #     else:
-    #         over_half_num += 1
-    #         while len(all_tokens) > 256:
-    #             mask = []
-    #             cur_all_text = question
-    #             for idx, paragraph in enumerate(get_best_paragraphs[1]):
-    #                 if has_sentence_result:
-    #                     if get_sent_labels[0][idx] > del_thread[min(del_idx, len(del_thread) - 1)]:
-    #                         cur_all_text += paragraph
-    #                         mask.append(1)
-    #                     else:
-    #                         mask.append(0)
-    #                 else:
-    #                     cur_all_text += paragraph
-    #                     mask.append(1)
-    #             all_tokens = tokenizer.tokenize(cur_all_text)
-    #             if not has_sentence_result and len(all_tokens) > 256:
-    #                 all_tokens = all_tokens[:256]
-    #             if has_sentence_result:
-    #                 del_idx += 1
-    #     all_tokens_len = len(tokenizer.tokenize(cur_all_text))
-    #     total += all_tokens_len
-    #     if all_tokens_len > 256:
-    #         max_len += 1
-    #     new_context[qas_id] = cur_all_text
-    # logger.info("over half length number: {}".format(over_half_num))
-    # json.dump(new_context, open("{}/{}".format(args.second_predict_result_path, args.new_context_file),
-    #                             "w", encoding="utf-8"))
     json.dump(related_paragraph, open("{}/{}".format(args.second_predict_result_path, args.related_paragraph_file),
                                       "w", encoding='utf-8'))
     logger.info("write result done!")
@@ -451,6 +381,7 @@ if __name__ == '__main__':
     #                     help="The output directory where the model checkpoints and predictions will be written.")
     parser.add_argument("--first_predict_result_path", default="../data/selector/first_hop_result/", type=str,
                         help="The output directory of all result")
+    parser.add_argument("--all_predict_file", default="all_result.json", type=str)
     parser.add_argument("--second_predict_result_path", default="../data/selector/second_hop_result/", type=str,
                         help="The output directory of all result")
     parser.add_argument("--final_related_result", default="train_related.json", type=str,
