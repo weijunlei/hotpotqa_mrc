@@ -20,6 +20,7 @@ def get_config():
                              "bert-base-multilingual-cased, bert-base-chinese.")
     parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20211022_with_entity_wo_question_entity_dim_10_wi_context_mask', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
+    parser.add_argument("--checkpoint_path", default=None, type=str)
     parser.add_argument("--model_name", type=str, default='RobertaForQuestionAnsweringForwardBest',
                         help="must be BertForQuestionAnsweringCoAttention"
                              "\BertForQuestionAnsweringThreeCoAttention"

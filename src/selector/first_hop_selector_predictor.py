@@ -274,7 +274,7 @@ def run_predict(args):
         d_all_cls_weight = torch.tensor([f.cls_weight for f in truly_features], dtype=torch.float)
         d_all_example_index = torch.arange(d_all_input_ids.size(0), dtype=torch.long)
         dev_data = TensorDataset(d_all_input_ids, d_all_input_mask, d_all_segment_ids,
-                                 d_all_cls_mask, d_all_cls_weight, d_all_pq_end_pos, d_all_example_index)
+                                 d_all_cls_mask, d_all_pq_end_pos, d_all_cls_weight, d_all_example_index)
         if args.local_rank == -1:
             dev_sampler = SequentialSampler(dev_data)
         else:

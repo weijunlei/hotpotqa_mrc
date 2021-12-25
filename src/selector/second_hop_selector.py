@@ -23,7 +23,7 @@ from changed_model import BertForParagraphClassification, BertForRelatedSentence
     ElectraForParagraphClassification, ElectraForRelatedSentence, \
     RobertaForParagraphClassification, RobertaForRelatedSentence, \
     BertForParagraphClassificationMean, BertForParagraphClassificationMax, \
-    ElectraForParagraphClassificationCrossAttention
+    ElectraForParagraphClassificationCrossAttention, ElectraSecondForParagraphClassificationCrossAttention
 from optimization import BertAdam, warmup_linear
 
 models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
@@ -34,7 +34,8 @@ models_dict = {"BertForRelatedSentence": BertForRelatedSentence,
                "ElectraForRelatedSentence": ElectraForRelatedSentence,
                "RobertaForParagraphClassification": RobertaForParagraphClassification,
                "RobertaForRelatedSentence": RobertaForRelatedSentence,
-               "ElectraForParagraphClassificationCrossAttention": ElectraForParagraphClassificationCrossAttention
+               "ElectraForParagraphClassificationCrossAttention": ElectraForParagraphClassificationCrossAttention,
+               "ElectraSecondForParagraphClassificationCrossAttention": ElectraSecondForParagraphClassificationCrossAttention
                }
 # 日志设置
 logger = None

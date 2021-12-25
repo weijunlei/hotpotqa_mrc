@@ -1,16 +1,16 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="2"
+export CUDA_VISIBLE_DEVICES="0"
 # bert-base-uncased
 # BertForRelatedSentence
 # BertForParagraphClassification
 # google/electra-base-discriminator
-BERT_MODEL=bert-base-uncased
-MODEL_NAME=BertForParagraphClassificationMax
-OUTPUT_NAME=20211219_second_hop_bert_base_paragraph_max_selector_8_value_setting
-CACHE_NAME=20211219_second_hop_bert_base_paragraph_max_selector_8_value_setting
-LOG_PREFIX=20211219_second_hop_bert_base_paragraph_max_selector_8_value_setting
-FIRST_PREDICT_PATH=20211219_first_hop_just_paragraph_max_selector_12_result
-SECOND_PREDICT_PATH=20211219_second_hop_just_paragraph_max_selector_8_result
+BERT_MODEL=google/electra-base-discriminator
+MODEL_NAME=ElectraSecondForParagraphClassificationCrossAttention
+OUTPUT_NAME=20211222_second_hop_electra_cross_attention_1e_paragraph_selector_12_with_just_para_1e
+CACHE_NAME=20211222_second_hop_electra_cross_attention_1e_paragraph_selector_12_with_just_para_1e
+LOG_PREFIX=20211222_second_hop_electra_cross_attention_1e_paragraph_selector_12_with_just_para_1e
+SECOND_PREDICT_PATH=20211222_second_hop_electra_cross_attention_1e_paragraph_selector_12_with_just_para_1e_result
+FIRST_PREDICT_PATH=20211217_first_hop_electra_base_just_paragraph_selector_12_value_setting_result
 
 echo "start train second hop selector..."
 cd ../../src/selector
@@ -30,9 +30,10 @@ python -u second_hop_selector.py \
     --dev_best_paragraph_file dev_best_paragraph.json \
     --dev_related_paragraph_file dev_related_paragraph.json \
     --dev_new_context_file dev_new_context.json \
+    --learning_rate 1e-5 \
     --use_file_cache True \
     --max_seq_length 512 \
-    --train_batch_size 8 \
+    --train_batch_size 12 \
     --val_batch_size 128 \
     --save_model_step 10000 \
     --num_train_epochs 3.0

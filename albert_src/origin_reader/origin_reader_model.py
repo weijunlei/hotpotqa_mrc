@@ -212,7 +212,7 @@ def get_train_data(args,
     example_num = len(train_examples)
     random.shuffle(train_examples)
     logger.info("train example num: {}".format(example_num))
-    max_train_num = 10000
+    max_train_num = 100000
     start_idxs = list(range(0, example_num, max_train_num))
     end_idxs = [x + max_train_num for x in start_idxs]
     end_idxs[-1] = example_num
@@ -383,7 +383,7 @@ def run_train(rank=0, world_size=1):
     config = config_class.from_pretrained(args.config_name if args.config_name else args.bert_model,
                                           cache_dir=args.cache_dir if args.cache_dir else None)
     model = model_class.from_pretrained(args.bert_model,
-                                        from_tf=bool('.ckpt' in args.model_name_or_path),
+                                        from_tf=bool('.ckpt' in args.model_name),
                                         config=config,
                                         cache_dir=args.cache_dir if args.cache_dir else None)
     # model = model_dict[args.model_name].from_pretrained(args.bert_model)
@@ -532,7 +532,9 @@ def run_train(rank=0, world_size=1):
                         for param_group in optimizer.param_groups:
                             param_group['lr'] = lr_this_step
                     optimizer.step()
-                    optimizer.zero_grad()
+                    scheduler.step()
+                    model.zero_grad()
+                    # optimizer.zero_grad()
                     global_step += 1
                 # 保存以及验证模型结果
                 if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:

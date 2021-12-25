@@ -940,8 +940,8 @@ class BertForQuestionAnsweringQANetAttentionWeight(BertModel):
         self.cross_avg_pool = nn.AvgPool1d(512)
         self.coattention_linear = nn.Linear(config.hidden_size, 1)
         self.cross_attention_linear = nn.Linear(config.hidden_size, 1)
-        self.co_act = gelu
-        self.cross_act = gelu
+        # self.co_act = gelu
+        # self.cross_act = gelu
         # self.w1 = torch.nn.Parameter(torch.FloatTensor(1), requires_grad=True)
         # self.w2 = torch.nn.Parameter(torch.FloatTensor(1), requires_grad=True)
         # # initialization
@@ -990,7 +990,7 @@ class BertForQuestionAnsweringQANetAttentionWeight(BertModel):
         cross_output = self.cross_attention(ques_sequence_output, sequence_output, ques_attention_mask)
         cross_cls_output = self.cross_avg_pool(cross_output.permute(0, 2, 1)).permute(0, 2, 1).squeeze(1)
         cross_cls_attention = self.cross_attention_linear(cross_cls_output).unsqueeze(1)
-        cross_cls_attention = self.cross_act(cross_cls_attention)
+        # cross_cls_attention = self.cross_act(cross_cls_attention)
 
 
         # sequence_output = self.qa_net(C=context_sequence_output,
@@ -1004,7 +1004,7 @@ class BertForQuestionAnsweringQANetAttentionWeight(BertModel):
         sequence_output = self.coattention(sequence_output, sequence_output, coattention_mask)
         sequence_cls_output = self.coattention_avg_pool(sequence_output.permute(0, 2, 1)).permute(0, 2, 1).squeeze(1)
         coattention_cls_attention = self.coattention_linear(sequence_cls_output).unsqueeze(1)
-        coattention_cls_attention = self.co_act(coattention_cls_attention)
+        # coattention_cls_attention = self.co_act(coattention_cls_attention)
 
         # biattention
         # bi_attention_output, memory = self.bi_attention(context_sequence_output, ques_sequence_output,

@@ -302,7 +302,7 @@ class ElectraForParagraphClassificationCrossAttention(ElectraModel):
             token_type_ids = token_type_ids.unsqueeze(0)
             cls_mask = cls_mask.unsqueeze(0)
             if pq_end_pos is not None:
-                pq_end_pos = cls_mask.unsqueeze(0)
+                pq_end_pos = pq_end_pos.unsqueeze(0)
             if cls_label is not None:
                 cls_label = cls_label.unsqueeze(0)
                 cls_weight = cls_weight.unsqueeze(0)
@@ -318,6 +318,65 @@ class ElectraForParagraphClassificationCrossAttention(ElectraModel):
         cls_output = cls_output.squeeze(1)
         query_sequence_output, context_sequence_output, query_attention_mask, context_attention_mask = \
             split_ques_context(sequence_output, pq_end_pos)
+        sequence_output = self.cross_attention(query_sequence_output, sequence_output, query_attention_mask)
+        sequence_output = sequence_output + outputs[0]
+        cross_cls_output = torch.index_select(sequence_output, dim=1, index=torch.tensor([0, ]).cuda())
+        cross_cls_output = cross_cls_output.squeeze(1)
+        cls_output = cls_output + cross_cls_output
+        cls_output = self.dropout(cls_output)
+        logits = self.classifier(cls_output).squeeze(-1)
+        if cls_label is None:
+            return logits
+        # 选择第一个标记结果
+        cls_label = torch.index_select(cls_label, dim=1, index=torch.tensor([0, ]).cuda())
+        loss_fct = CrossEntropyLoss()
+        loss = loss_fct(logits.view(-1, self.config.num_labels), cls_label.view(-1))
+        return loss, logits  # (loss), scores, (hidden_states), (attentions)
+
+
+class ElectraSecondForParagraphClassificationCrossAttention(ElectraModel):
+    def __init__(self, config):
+        super(ElectraSecondForParagraphClassificationCrossAttention, self).__init__(config)
+
+        self.electra = ElectraModel(config)
+        self.cross_attention = CrossAttention(config=config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
+        self.init_weights()
+
+    def forward(self,
+                input_ids=None,
+                attention_mask=None,
+                token_type_ids=None,
+                position_ids=None,
+                head_mask=None,
+                inputs_embeds=None,
+                cls_mask=None,
+                pq_end_pos=None,
+                cls_label=None,
+                cls_weight=None):
+        if len(input_ids.shape) == 1:
+            input_ids = input_ids.unsqueeze(0)
+            attention_mask = attention_mask.unsqueeze(0)
+            token_type_ids = token_type_ids.unsqueeze(0)
+            cls_mask = cls_mask.unsqueeze(0)
+            if pq_end_pos is not None:
+                pq_end_pos = pq_end_pos.unsqueeze(0)
+            if cls_label is not None:
+                cls_label = cls_label.unsqueeze(0)
+                cls_weight = cls_weight.unsqueeze(0)
+        outputs = self.electra(input_ids,
+                               attention_mask=attention_mask,
+                               token_type_ids=token_type_ids,
+                               position_ids=position_ids,
+                               head_mask=head_mask,
+                               inputs_embeds=inputs_embeds)
+
+        sequence_output = outputs[0]
+        cls_output = torch.index_select(sequence_output, dim=1, index=torch.tensor([0, ]).cuda())
+        cls_output = cls_output.squeeze(1)
+        query_sequence_output, context_sequence_output, query_attention_mask, context_attention_mask = \
+            split_ques_context2(sequence_output, pq_end_pos)
         sequence_output = self.cross_attention(query_sequence_output, sequence_output, query_attention_mask)
         sequence_output = sequence_output + outputs[0]
         cross_cls_output = torch.index_select(sequence_output, dim=1, index=torch.tensor([0, ]).cuda())
@@ -577,6 +636,32 @@ class CrossAttention(nn.Module):
 def split_ques_context(sequence_output, pq_end_pos):
     ques_max_len = 64
     context_max_len = 512 - 64
+    sep_tok_len = 1
+    ques_sequence_output = sequence_output.new(
+        torch.Size((sequence_output.size(0), ques_max_len, sequence_output.size(2)))).zero_()
+    context_sequence_output = sequence_output.new_zeros(
+        (sequence_output.size(0), context_max_len, sequence_output.size(2)))
+    context_attention_mask = sequence_output.new_zeros((sequence_output.size(0), context_max_len))
+    ques_attention_mask = sequence_output.new_zeros((sequence_output.size(0), ques_max_len))
+    for i in range(0, sequence_output.size(0)):
+        q_end = pq_end_pos[i][0]
+        p_end = pq_end_pos[i][1]
+        ques_sequence_output[i, :min(ques_max_len, q_end)] = sequence_output[i,
+                                                             1: 1 + min(ques_max_len, q_end)]
+        context_sequence_output[i, :min(context_max_len, p_end - q_end - sep_tok_len)] = sequence_output[i,
+                                                                                         q_end + sep_tok_len + 1: q_end + sep_tok_len + 1 + min(
+                                                                                             p_end - q_end - sep_tok_len,
+                                                                                             context_max_len)]
+        context_attention_mask[i, :min(context_max_len, p_end - q_end - sep_tok_len)] = sequence_output.new_ones(
+            (1, context_max_len))[0, :min(context_max_len, p_end - q_end - sep_tok_len)]
+        ques_attention_mask[i, : min(ques_max_len, q_end)] = sequence_output.new_ones((1, ques_max_len))[0,
+                                                             : min(ques_max_len, q_end)]
+    return ques_sequence_output, context_sequence_output, ques_attention_mask, context_attention_mask
+
+
+def split_ques_context2(sequence_output, pq_end_pos):
+    ques_max_len = 256
+    context_max_len = 512 - ques_max_len
     sep_tok_len = 1
     ques_sequence_output = sequence_output.new(
         torch.Size((sequence_output.size(0), ques_max_len, sequence_output.size(2)))).zero_()

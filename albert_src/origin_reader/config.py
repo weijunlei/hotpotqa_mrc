@@ -53,6 +53,10 @@ def get_config():
     parser.add_argument("--train_batch_size", default=12, type=int, help="Total batch size for training.")
     parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
     parser.add_argument("--warmup_steps", default=1000, type=int)
+    parser.add_argument("--config_name", default=None, type=str)
+    parser.add_argument("--cache_dir", default=None, type=str)
+    parser.add_argument("--adam_epsilon", default=1e-8, type=float,
+                        help="Epsilon for Adam optimizer.")
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--num_train_epochs", default=5.0, type=float,
                         help="Total number of training epochs to perform.")

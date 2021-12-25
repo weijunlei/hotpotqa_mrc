@@ -208,7 +208,7 @@ def get_train_data(args,
     example_num = len(train_examples)
     random.shuffle(train_examples)
     logger.info("train example num: {}".format(example_num))
-    max_train_num = 10000
+    max_train_num = 100000
     start_idxs = list(range(0, example_num, max_train_num))
     end_idxs = [x + max_train_num for x in start_idxs]
     end_idxs[-1] = example_num
@@ -375,7 +375,10 @@ def run_train(rank=0, world_size=1):
         tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     train_examples = None
     num_train_optimization_steps = None
-    model = model_dict[args.model_name].from_pretrained(args.bert_model)
+    if args.checkpoint_path is None:
+        model = model_dict[args.model_name].from_pretrained(args.bert_model)
+    else:
+        model = model_dict[args.model_name].from_pretrained(args.checkpoint_path)
     # 半精度和并行化使用设置
     if args.fp16:
         model.half()
