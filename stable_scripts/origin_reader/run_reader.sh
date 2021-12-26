@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="0"
+export CUDA_VISIBLE_DEVICES="2"
 
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
@@ -23,6 +23,7 @@ python -u origin_reader_model.py \
   --model_name ElectraForQuestionAnsweringQANet \
   --log_prefix 20211226_cross_attention_selector_electra_large_dynamic_weight_bs12 \
   --overwrite_result True \
+  --warmup_steps 2268 \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
   --train_supporting_para_file ../../data/hotpot_data/train_golden.json \
