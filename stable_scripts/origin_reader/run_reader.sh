@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="0,2"
+export CUDA_VISIBLE_DEVICES="0"
 
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
@@ -19,20 +19,20 @@ export CUDA_VISIBLE_DEVICES="0,2"
 cd ../../stable_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model google/electra-large-discriminator \
-  --output_dir ../../data/checkpoints/20211222_electra_large_sum_dynamic_weight_bs24_5e_5e \
+  --output_dir ../../data/checkpoints/20211226_cross_attention_selector_electra_large_dynamic_weight_bs12 \
   --model_name ElectraForQuestionAnsweringQANet \
-  --log_prefix 20211222_electra_large_sum_dynamic_weight_bs24_5e_5e \
+  --log_prefix 20211226_cross_attention_selector_electra_large_dynamic_weight_bs12 \
   --overwrite_result True \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
   --train_supporting_para_file ../../data/hotpot_data/train_golden.json \
   --dev_supporting_para_file ../../data/selector/20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting_result/dev_related.json \
-  --feature_cache_path ../../data/cache/20211222_electra_large_sum_dynamic_weight_bs24_5e_5e \
-  --train_batch_size 24 \
+  --feature_cache_path ../../data/cache/20211226_cross_attention_selector_electra_large_dynamic_weight_bs12 \
+  --train_batch_size 12 \
   --gradient_accumulation_steps 1 \
   --local_rank -1 \
-  --learning_rate 5e-5 \
+  --learning_rate 2e-5 \
   --val_batch_size 128 \
   --save_model_step 500 \
-  --num_train_epochs 8.0
+  --num_train_epochs 3.0
 echo "----------------------------------------------------"

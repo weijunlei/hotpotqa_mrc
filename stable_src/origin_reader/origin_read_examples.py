@@ -128,7 +128,7 @@ def process_single_data(data):
     sent_cls_n = []
     newchar_to_matrix = [0] * len(context)
     for ind_ctm, ctm in enumerate(char_to_matrix):
-        if is_training_global and char_to_newchar[ind_ctm] >= len(context):
+        if char_to_newchar[ind_ctm] >= len(context):
             continue
         newchar_to_matrix[char_to_newchar[ind_ctm]] = ctm
     for sc in sent_cls:
@@ -254,7 +254,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
     is_training_global = is_training
     tokenizer_global = tokenizer
     sp_dict_global = sp_dict
-
+    # 多进程处理
     # for data_idx, data in enumerate(tqdm(datas)):
     pool_size = max(1, multiprocessing.cpu_count() // 4)
     pool = Pool(pool_size)
@@ -263,6 +263,9 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
                                               desc="process examples..."):
 
        examples.extend(result)
+    # 单进程处理
+    # for data in tqdm(datas):
+    #     examples.extend(process_single_data(data=data))
     pool.close()
     pool.join()
     return examples

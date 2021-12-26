@@ -208,7 +208,7 @@ def get_train_data(args,
     example_num = len(train_examples)
     random.shuffle(train_examples)
     logger.info("train example num: {}".format(example_num))
-    max_train_num = 100000
+    max_train_num = 10000
     start_idxs = list(range(0, example_num, max_train_num))
     end_idxs = [x + max_train_num for x in start_idxs]
     end_idxs[-1] = example_num
@@ -376,8 +376,10 @@ def run_train(rank=0, world_size=1):
     train_examples = None
     num_train_optimization_steps = None
     if args.checkpoint_path is None:
+        logger.info("start model from pretrained model!")
         model = model_dict[args.model_name].from_pretrained(args.bert_model)
     else:
+        logger.info("start model from trained model")
         model = model_dict[args.model_name].from_pretrained(args.checkpoint_path)
     # 半精度和并行化使用设置
     if args.fp16:
@@ -556,6 +558,8 @@ def run_train(rank=0, world_size=1):
                                                                 'module') else model  # Only save the model it-self
                         output_model_file = os.path.join(args.output_dir, 'pytorch_model_best.bin')
                         # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
+                        torch.save(model_to_save.state_dict(), output_model_file)
+                        output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
                         torch.save(model_to_save.state_dict(), output_model_file)
                         output_config_file = os.path.join(args.output_dir, 'config.json')
                         with open(output_config_file, 'w') as f:

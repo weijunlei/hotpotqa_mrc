@@ -581,7 +581,7 @@ class CrossAttention(nn.Module):
     # attention mask 对应 input_ids
     def forward(self, input_ids, input_ids_1, attention_mask=None, head_mask=None):
         extended_attention_mask = attention_mask[:, None, None, :]
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=torch.float32)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         attention_mask = extended_attention_mask
 

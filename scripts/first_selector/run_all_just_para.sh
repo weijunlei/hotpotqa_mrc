@@ -1,5 +1,5 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="2"
+export CUDA_VISIBLE_DEVICES="2,0"
 echo "start train first hop selector..."
 cd ../../src/selector
 # ElectraForRelatedSentence
@@ -7,33 +7,33 @@ cd ../../src/selector
 # bert-base-uncased
 # google/electra-base-discriminator
 BERT_MODEL=google/electra-base-discriminator
-OUTPUT_NAME=20211222_first_hop_electra_cross_attention_1e_paragraph_selector_12
-LOG_PREFIX=20211222_first_hop_electra_cross_attention_1e_paragraph_selector_12
-CACHE_NAME=20211222_first_hop_electra_1e_paragraph_selector_12
+OUTPUT_NAME=20211225_first_hop_electra_cross_attention_2e_paragraph_selector_24
+LOG_PREFIX=20211225_first_hop_electra_cross_attention_2e_paragraph_selector_24
+CACHE_NAME=20211225_first_hop_electra_cross_attention_2e_paragraph_selector_24
 MODEL_NAME=ElectraForParagraphClassificationCrossAttention
-PREDICT_NAME=20211222_first_hop_electra_cross_attention_1e_paragraph_selector_12
-#python -u first_hop_selector.py \
-#    --bert_model $BERT_MODEL \
-#    --over_write_result True \
-#    --output_dir ../../data/checkpoints/selector/$OUTPUT_NAME \
-#    --log_path ../../log \
-#    --log_prefix $LOG_PREFIX \
-#    --feature_cache_path ../../data/cache/selector/$CACHE_NAME \
-#    --model_name $MODEL_NAME \
-#    --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
-#    --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
-#    --use_file_cache True \
-#    --max_seq_length 512 \
-#    --learning_rate 1e-5 \
-#    --train_batch_size 12 \
-#    --val_batch_size 32 \
-#    --save_model_step 5000 \
-#    --num_train_epochs 3.0
-#echo "train first hop selector done!"
-#echo "----------------------------------------------------"
-#echo "start send email"
-#cd ../../src/preprocess
-#python send_email.py $OUTPUT_NAME train完成
+PREDICT_NAME=20211225_first_hop_electra_cross_attention_2e_paragraph_selector_24_result
+python -u first_hop_selector.py \
+    --bert_model $BERT_MODEL \
+    --over_write_result True \
+    --output_dir ../../data/checkpoints/selector/$OUTPUT_NAME \
+    --log_path ../../log \
+    --log_prefix $LOG_PREFIX \
+    --feature_cache_path ../../data/cache/selector/$CACHE_NAME \
+    --model_name $MODEL_NAME \
+    --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
+    --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
+    --use_file_cache True \
+    --max_seq_length 512 \
+    --learning_rate 2e-5 \
+    --train_batch_size 24 \
+    --val_batch_size 32 \
+    --save_model_step 5000 \
+    --num_train_epochs 3.0
+echo "train first hop selector done!"
+echo "----------------------------------------------------"
+echo "start send email"
+cd ../../src/preprocess
+python send_email.py $OUTPUT_NAME train完成
 
 echo "----------------------------------------------------"
 echo "start predict first hop result..."
