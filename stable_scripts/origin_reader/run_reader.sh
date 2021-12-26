@@ -26,7 +26,7 @@ python -u origin_reader_model.py \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
   --train_supporting_para_file ../../data/hotpot_data/train_golden.json \
-  --dev_supporting_para_file ../../data/selector/20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting_result/dev_related.json \
+  --dev_supporting_para_file ../../data/selector/20211222_second_hop_electra_cross_attention_1e_paragraph_selector_12_result/dev_related.json \
   --feature_cache_path ../../data/cache/20211226_cross_attention_selector_electra_large_dynamic_weight_bs12 \
   --train_batch_size 12 \
   --gradient_accumulation_steps 1 \
