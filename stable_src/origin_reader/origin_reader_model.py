@@ -61,7 +61,8 @@ from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, 
     ElectraForQuestionAnsweringCrossAttentionOnSent, ElectraForQuestionAnsweringForwardBestWithNoise, \
     ElectraForQuestionAnsweringCrossAttentionWithDP, AlbertForQuestionAnsweringCrossAttention, \
     AlbertForQuestionAnsweringForwardBest, ElectraForQuestionAnsweringQANet, BertForQuestionAnsweringQANet, \
-    BertForQuestionAnsweringQANetAttentionWeight, AlbertForQuestionAnsweringQANet
+    BertForQuestionAnsweringQANetAttentionWeight, AlbertForQuestionAnsweringQANet, \
+    ElectraForQuestionAnsweringQANetAttentionWeight
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
@@ -80,7 +81,8 @@ model_dict = {
     'ElectraForQuestionAnsweringQANet': ElectraForQuestionAnsweringQANet,
     'BertForQuestionAnsweringQANet': BertForQuestionAnsweringQANet,
     'BertForQuestionAnsweringQANetAttentionWeight': BertForQuestionAnsweringQANetAttentionWeight,
-    'AlbertForQuestionAnsweringQANet': AlbertForQuestionAnsweringQANet
+    'AlbertForQuestionAnsweringQANet': AlbertForQuestionAnsweringQANet,
+    'ElectraForQuestionAnsweringQANetAttentionWeight': ElectraForQuestionAnsweringQANetAttentionWeight
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
@@ -445,16 +447,16 @@ def run_train(rank=0, world_size=1):
         else:
             optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
     else:
-        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-        if args.warmup_steps == -1:
-            args.warmup_steps = num_train_optimization_steps * args.warmup_proportion
-        scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                    num_warmup_steps=args.warmup_steps,
-                                                    num_training_steps=num_train_optimization_steps)
-        # optimizer = BertAdam(optimizer_grouped_parameters,
-        #                      lr=args.learning_rate,
-        #                      warmup=args.warmup_proportion,
-        #                      t_total=num_train_optimization_steps)
+        # optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+        # if args.warmup_steps == -1:
+        #     args.warmup_steps = num_train_optimization_steps * args.warmup_proportion
+        # scheduler = get_linear_schedule_with_warmup(optimizer,
+        #                                             num_warmup_steps=args.warmup_steps,
+        #                                             num_training_steps=num_train_optimization_steps)
+        optimizer = BertAdam(optimizer_grouped_parameters,
+                             lr=args.learning_rate,
+                             warmup=args.warmup_proportion,
+                             t_total=num_train_optimization_steps)
         logger.info("t_total: {}".format(num_train_optimization_steps))
 
     max_f1 = 0
@@ -516,7 +518,7 @@ def run_train(rank=0, world_size=1):
                     logger.info(
                         "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, ind, global_step,
                                                                                        print_loss))
-                    logger.info("learning rate: {}".format(scheduler.get_lr()[0]))
+                    # logger.info("learning rate: {}".format(scheduler.get_lr()[0]))
                     print_loss = 0
                 if args.fp16:
                     optimizer.backward(loss)
@@ -530,11 +532,11 @@ def run_train(rank=0, world_size=1):
                                                                           args.warmup_proportion)
                         for param_group in optimizer.param_groups:
                             param_group['lr'] = lr_this_step
-                    # optimizer.step()
-                    # optimizer.zero_grad()
                     optimizer.step()
-                    scheduler.step()
-                    model.zero_grad()
+                    optimizer.zero_grad()
+                    # optimizer.step()
+                    # scheduler.step()
+                    # model.zero_grad()
                     global_step += 1
                 # 保存以及验证模型结果
                 if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:

@@ -19,16 +19,15 @@ export CUDA_VISIBLE_DEVICES="2"
 cd ../../stable_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model google/electra-large-discriminator \
-  --output_dir ../../data/checkpoints/20211226_cross_attention_selector_electra_large_dynamic_weight_bs12 \
-  --model_name ElectraForQuestionAnsweringQANet \
-  --log_prefix 20211226_cross_attention_selector_electra_large_dynamic_weight_bs12 \
+  --output_dir ../../data/checkpoints/20211226_cross_attention_selector_electra_large_attention_weight \
+  --model_name ElectraForQuestionAnsweringQANetAttentionWeight \
+  --log_prefix 20211226_cross_attention_selector_electra_large_attention_weight \
   --overwrite_result True \
-  --warmup_steps 2268 \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
   --train_supporting_para_file ../../data/hotpot_data/train_golden.json \
   --dev_supporting_para_file ../../data/selector/20211222_second_hop_electra_cross_attention_1e_paragraph_selector_12_result/dev_related.json \
-  --feature_cache_path ../../data/cache/20211226_cross_attention_selector_electra_large_dynamic_weight_bs12 \
+  --feature_cache_path ../../data/cache/20211226_cross_attention_selector_electra_large_attention_weight \
   --train_batch_size 12 \
   --gradient_accumulation_steps 1 \
   --local_rank -1 \
