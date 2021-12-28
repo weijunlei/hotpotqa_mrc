@@ -33,7 +33,7 @@ from second_hop_data_helper import (HotpotQAExample,
                                     HotpotInputFeatures,
                                     read_second_hotpotqa_examples,
                                     convert_examples_to_second_features)
-
+from second_selector_predictor_config import get_config
 sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
     ElectraForParagraphClassification, ElectraForRelatedSentence, \
@@ -191,25 +191,38 @@ def run_predict(args):
     unk_token = '[UNK]'
     pad_token = '[PAD]'
     if 'electra' in args.bert_model.lower():
-        tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
-                                                     do_lower_case=args.do_lower_case)
+        if not args.no_network:
+            tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
+                                                         do_lower_case=args.do_lower_case)
+        else:
+            tokenizer = ElectraTokenizer.from_pretrained(args.checkpoint_path,
+                                                         do_lower_case=args.do_lower_case)
     elif 'albert' in args.bert_model.lower():
         cls_token = '[CLS]'
         sep_token = '[SEP]'
         pad_token = '<pad>'
         unk_token = '<unk>'
-        tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        if not args.no_network:
+            tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        else:
+            tokenizer = AlbertTokenizer.from_pretrained(args.checkpoint_path, do_lower_case=args.do_lower_case)
+
     elif 'roberta' in args.bert_model.lower():
         cls_token = '<s>'
         sep_token = '</s>'
         unk_token = '<unk>'
         pad_token = '<pad>'
-        tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        if not args.no_network:
+            tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        else:
+            tokenizer = RobertaTokenizer.from_pretrained(args.checkpoint_path, do_lower_case=args.do_lower_case)
     elif 'bert' in args.bert_model.lower():
-        tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        if not args.no_network:
+            tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        else:
+            tokenizer = BertTokenizer.from_pretrained(args.checkpoint_path, do_lower_case=args.do_lower_case)
     else:
         raise ValueError("Not implement!")
-    # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=args.do_lower_case)
 
     # 从文件中加载模型
     model = models_dict[args.model_name].from_pretrained(args.checkpoint_path)
@@ -363,63 +376,6 @@ def run_predict(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-
-    ## Required parameters
-    parser.add_argument("--bert_model", default='bert-base-uncased', type=str,
-                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                             "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
-                             "bert-base-multilingual-cased, bert-base-chinese.")
-    parser.add_argument("--checkpoint_path", default='../checkpoints/selector/second_hop_selector', type=str,
-                        help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--model_name", type=str, default='BertForRelated',
-                        help="The output directory where the model checkpoints and predictions will be written.")
-
-    ## Other parameters
-    parser.add_argument("--dev_file", default='../data/hotpot_data/hotpot_train_labeled_data_v2.json', type=str,
-                        help="dev file")
-    # parser.add_argument("--pred_output", type=str, default='round1_base/train_preds.json',
-    #                     help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--first_predict_result_path", default="../data/selector/first_hop_result/", type=str,
-                        help="The output directory of all result")
-    parser.add_argument("--all_predict_file", default="all_result.json", type=str)
-    parser.add_argument("--second_predict_result_path", default="../data/selector/second_hop_result/", type=str,
-                        help="The output directory of all result")
-    parser.add_argument("--final_related_result", default="train_related.json", type=str,
-                        help="The output directory of all result")
-    parser.add_argument("--best_paragraph_file", default='train_best_paragraph.json', type=str,
-                        help="best_paragraph_file")
-    parser.add_argument("--related_paragraph_file", default='train_related_paragraph.json', type=str,
-                        help="related_paragraph_file")
-    parser.add_argument("--new_context_file", default='train_new_context.json', type=str,
-                        help="new_context_file")
-    parser.add_argument("--max_seq_length", default=512, type=int,
-                        help="The maximum total input sequence length after WordPiece tokenization. Sequences "
-                             "longer than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--sent_overlap", default=2, type=int,
-                        help="When splitting up a long document into chunks, how much stride to take between chunks.")
-    parser.add_argument("--val_batch_size", default=128, type=int, help="Total batch size for validation.")
-    parser.add_argument("--verbose_logging", action='store_true',
-                        help="If true, all of the warnings related to data processing will be printed. "
-                             "A number of warnings are expected for a normal SQuAD evaluation.")
-    parser.add_argument("--output_log", type=str, default='military_output_log.txt', )
-    parser.add_argument("--no_cuda",
-                        action='store_true',
-                        help="Whether not to use CUDA when available")
-    parser.add_argument("--do_lower_case",
-                        action='store_true', default=True,
-                        help="Whether to lower case the input text. True for uncased models, False for cased models.")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
-    parser.add_argument('--fp16',
-                        action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--loss_scale',
-                        type=float, default=0,
-                        help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
-                             "0 (default value): dynamic loss scaling.\n"
-                             "Positive power of 2: static loss scaling value.\n")
+    parser = get_config()
     args = parser.parse_args()
     run_predict(args=args)

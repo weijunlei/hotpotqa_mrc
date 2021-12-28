@@ -310,22 +310,36 @@ def run_predict(rank=0, world_size=1):
     unk_token = '[UNK]'
     pad_token = '[PAD]'
     if 'electra' in args.bert_model.lower():
-        tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
-                                                     do_lower_case=args.do_lower_case)
+        if not args.no_network:
+            tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
+                                                         do_lower_case=args.do_lower_case)
+        else:
+            tokenizer = ElectraTokenizer.from_pretrained(args.checkpoint_dir,
+                                                         do_lower_case=args.do_lower_case)
     elif 'albert' in args.bert_model.lower():
         cls_token = '[CLS]'
         sep_token = '[SEP]'
         pad_token = '<pad>'
         unk_token = '<unk>'
-        tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        if not args.no_network:
+            tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        else:
+            tokenizer = AlbertTokenizer.from_pretrained(args.checkpoint_dir, do_lower_case=args.do_lower_case)
+
     elif 'roberta' in args.bert_model.lower():
         cls_token = '<s>'
         sep_token = '</s>'
         unk_token = '<unk>'
         pad_token = '<pad>'
-        tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        if not args.no_network:
+            tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        else:
+            tokenizer = RobertaTokenizer.from_pretrained(args.checkpoint_dir, do_lower_case=args.do_lower_case)
     elif 'bert' in args.bert_model.lower():
-        tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        if not args.no_network:
+            tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        else:
+            tokenizer = BertTokenizer.from_pretrained(args.checkpoint_dir, do_lower_case=args.do_lower_case)
     train_examples = None
     num_train_optimization_steps = None
     model = model_dict[args.model_name].from_pretrained(args.checkpoint_dir)

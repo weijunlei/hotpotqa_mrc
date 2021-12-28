@@ -33,6 +33,7 @@ def get_config():
     # parser.add_argument("--overwrite_result", dest='overwrite_result', action='store_true')
     # parser.add_argument("--no-over_write_result", dest='overwrite_result', action='store_false')
     parser.add_argument("--overwrite_result", type=str2bool, default=True)
+    parser.add_argument("--no_network", type=str2bool, default=False)
     parser.add_argument("--log_prefix", default="qa_base_20211022_with_entity_test", type=str)
     parser.add_argument("--log_path", default="../../log", type=str)
     parser.add_argument("--test_file", default='../../data/hotpot_data/hotpot_dev_labeled_data_v3_with_entity_label.json', type=str,
