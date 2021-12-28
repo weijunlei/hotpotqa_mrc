@@ -206,10 +206,10 @@ class CQAttention(nn.Module):
         S = torch.cat([Ct, Qt, CQ], dim=3)
         S = torch.matmul(S, self.w)
         S1 = F.softmax(mask_logits(S, qmask), dim=2)
-        S2 = F.softmax(mask_logits(S, cmask), dim=1)
+        # S2 = F.softmax(mask_logits(S, cmask), dim=1)
         A = torch.bmm(S1, Q)
-        B = torch.bmm(torch.bmm(S1, S2.transpose(1, 2)), C)
-        out = torch.cat([C, A, torch.mul(C, A), torch.mul(C, B)], dim=2)
+        # B = torch.bmm(torch.bmm(S1, S2.transpose(1, 2)), C)
+        out = torch.cat([A, torch.mul(C, A)], dim=2)
         out = F.dropout(out, p=self.dropout, training=self.training)
         return out
 
@@ -218,12 +218,14 @@ class MyQANet(nn.Module):
     def __init__(self, d_model, dropout_rate=0.1):
         super().__init__()
         self.cq_attention = CQAttention(d_model=d_model, dropout_rate=dropout_rate)
-        self.cq_resizer = DepthwiseSeparableConv(d_model * 4, d_model, 5)
+        self.cq_resizer = nn.Linear(d_model * 2, d_model)
+        # self.cq_resizer = DepthwiseSeparableConv(d_model * 2, d_model, 5)
 
     def forward(self, C, Q, cmask, qmask):
         out = self.cq_attention(C, Q, cmask, qmask)
-        out = self.cq_resizer(out.transpose(1, 2))
-        return out.transpose(1, 2)
+        # out = self.cq_resizer(out.transpose(1, 2))
+        out = self.cq_resizer(out)
+        return out
 
 
 

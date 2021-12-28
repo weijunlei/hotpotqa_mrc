@@ -45,7 +45,7 @@ from tqdm import tqdm, trange
 import pickle
 import gc
 from transformers import ElectraTokenizer, BertTokenizer, RobertaTokenizer, AlbertTokenizer
-from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import AdamW, get_linear_schedule_with_warmup, AlbertConfig
 
 from origin_read_examples import read_examples
 from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
@@ -62,7 +62,8 @@ from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, 
     ElectraForQuestionAnsweringCrossAttentionWithDP, AlbertForQuestionAnsweringCrossAttention, \
     AlbertForQuestionAnsweringForwardBest, ElectraForQuestionAnsweringQANet, BertForQuestionAnsweringQANet, \
     BertForQuestionAnsweringQANetAttentionWeight, AlbertForQuestionAnsweringQANet, \
-    ElectraForQuestionAnsweringQANetAttentionWeight
+    ElectraForQuestionAnsweringQANetAttentionWeight, BertForQuestionAnsweringQANetTrueCoAttention, \
+    BertForQuestionAnsweringQANetTwoCrossAttention, ElectraForQuestionAnsweringQANetTrueCoAttention
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
@@ -82,7 +83,10 @@ model_dict = {
     'BertForQuestionAnsweringQANet': BertForQuestionAnsweringQANet,
     'BertForQuestionAnsweringQANetAttentionWeight': BertForQuestionAnsweringQANetAttentionWeight,
     'AlbertForQuestionAnsweringQANet': AlbertForQuestionAnsweringQANet,
-    'ElectraForQuestionAnsweringQANetAttentionWeight': ElectraForQuestionAnsweringQANetAttentionWeight
+    'ElectraForQuestionAnsweringQANetAttentionWeight': ElectraForQuestionAnsweringQANetAttentionWeight,
+    'BertForQuestionAnsweringQANetTrueCoAttention': BertForQuestionAnsweringQANetTrueCoAttention,
+    'BertForQuestionAnsweringQANetTwoCrossAttention': BertForQuestionAnsweringQANetTwoCrossAttention,
+    'ElectraForQuestionAnsweringQANetTrueCoAttention': ElectraForQuestionAnsweringQANetTrueCoAttention
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
@@ -359,6 +363,7 @@ def run_train(rank=0, world_size=1):
     sep_token = '[SEP]'
     unk_token = '[UNK]'
     pad_token = '[PAD]'
+    config = None
     if 'electra' in args.bert_model.lower():
         tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
                                                      do_lower_case=args.do_lower_case)
@@ -367,6 +372,9 @@ def run_train(rank=0, world_size=1):
         sep_token = '[SEP]'
         pad_token = '<pad>'
         unk_token = '<unk>'
+        config_class = AlbertConfig()
+        config = config_class.from_pretrained(args.bert_model)
+
         tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     elif 'roberta' in args.bert_model.lower():
         cls_token = '<s>'
@@ -380,10 +388,16 @@ def run_train(rank=0, world_size=1):
     num_train_optimization_steps = None
     if args.checkpoint_path is None:
         logger.info("start model from pretrained model!")
-        model = model_dict[args.model_name].from_pretrained(args.bert_model)
+        if config is None:
+            model = model_dict[args.model_name].from_pretrained(args.bert_model)
+        else:
+            model = model_dict[args.model_name].from_pretrained(args.bert_model, config=config)
     else:
         logger.info("start model from trained model")
-        model = model_dict[args.model_name].from_pretrained(args.checkpoint_path)
+        if config is None:
+            model = model_dict[args.model_name].from_pretrained(args.checkpoint_path)
+        else:
+            model = model_dict[args.model_name].from_pretrained(args.checkpoint_path, config=config)
     # 半精度和并行化使用设置
     if args.fp16:
         model.half()
@@ -624,7 +638,7 @@ if __name__ == "__main__":
         run_train()
     else:
         torch.multiprocessing.set_start_method('spawn')
-        world_size = 2
+        world_size = 8
         processes = []
         for rank in range(world_size):
             p = Process(target=run_train, args=(rank, world_size))
