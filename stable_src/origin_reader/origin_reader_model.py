@@ -271,25 +271,21 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                     t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
             else:
                 d_batch = d_batch[:-1]
-            input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos = d_batch
+            # input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos = d_batch
+            inputs = {
+                "input_ids": d_batch[0],
+                "attention_mask": d_batch[1],
+                "token_type_ids": d_batch[2],
+                "sent_mask": d_batch[3],
+                "pq_end_pos": d_batch[5],
+            }
             if isinstance(d_example_indices, torch.Tensor) and len(d_example_indices.shape) == 0:
                 d_example_indices = d_example_indices.unsqueeze(0)
-            if len(input_ids.shape) < 2:
-                input_ids = input_ids.unsqueeze(0)
-                segment_ids = segment_ids.unsqueeze(0)
-                input_mask = input_mask.unsqueeze(0)
-                pq_end_pos = pq_end_pos.unsqueeze(0)
-                if sent_mask is not None and len(sent_mask.shape) < 2:
-                    # start_positions = start_positions.unsqueeze(0)
-                    # end_positions = end_positions.unsqueeze(0)
-                    sent_mask = sent_mask.unsqueeze(0)
-                    # sent_lbs = sent_lbs.unsqueeze(0)
-                    # sent_weight = sent_weight.unsqueeze(0)
-            dev_start_logits, dev_end_logits, dev_sent_logits = model(input_ids,
-                                                                      input_mask,
-                                                                      segment_ids,
-                                                                      pq_end_pos=pq_end_pos,
-                                                                      sent_mask=sent_mask)
+            if len(inputs["input_ids"].shape < 2):
+                for k, v in inputs.items():
+                    if len(v.shape) < 2:
+                        inputs[k] = v.unsqueeze(0)
+            dev_start_logits, dev_end_logits, dev_sent_logits = model(**inputs)
             for idx, example_index in enumerate(d_example_indices):
                 dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
                 dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
@@ -502,7 +498,7 @@ def run_train(rank=0, world_size=1):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos, start_positions, end_positions, sent_lbs, sent_weight = batch
+                # input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos, start_positions, end_positions, sent_lbs, sent_weight = batch
                 inputs = {
                     "input_ids": batch[0],
                     "attention_mask": batch[1],
@@ -514,27 +510,21 @@ def run_train(rank=0, world_size=1):
                     "sent_lbs": batch[8],
                     "sent_weight": batch[9]
                 }
-                if len(input_ids.shape) < 2:
-                    input_ids = input_ids.unsqueeze(0)
-                    segment_ids = segment_ids.unsqueeze(0)
-                    input_mask = input_mask.unsqueeze(0)
-                    pq_end_pos = pq_end_pos.unsqueeze(0)
-                    if start_positions is not None and len(start_positions.shape) < 2:
-                        start_positions = start_positions.unsqueeze(0)
-                        end_positions = end_positions.unsqueeze(0)
-                        sent_mask = sent_mask.unsqueeze(0)
-                        sent_lbs = sent_lbs.unsqueeze(0)
-                        sent_weight = sent_weight.unsqueeze(0)
-                loss, _, _, _ = model(input_ids,
-                                      input_mask,
-                                      segment_ids,
-                                      # word_sim_matrix=word_sim_matrix,
-                                      pq_end_pos=pq_end_pos,
-                                      start_positions=start_positions,
-                                      end_positions=end_positions,
-                                      sent_mask=sent_mask,
-                                      sent_lbs=sent_lbs,
-                                      sent_weight=sent_weight)
+                if len(inputs["input_ids"].shape) < 2:
+                    for k, v in inputs.items():
+                        if len(inputs[k].shape) < 2:
+                            inputs[k] = inputs[k].unsqueeze(0)
+                loss, _, _, _ = model(**inputs)
+                # loss, _, _, _ = model(input_ids,
+                #                       input_mask,
+                #                       segment_ids,
+                #                       # word_sim_matrix=word_sim_matrix,
+                #                       pq_end_pos=pq_end_pos,
+                #                       start_positions=start_positions,
+                #                       end_positions=end_positions,
+                #                       sent_mask=sent_mask,
+                #                       sent_lbs=sent_lbs,
+                #                       sent_weight=sent_weight)
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
                 # logger.debug("step = %d, train_loss=%f", global_step, loss)

@@ -80,7 +80,7 @@ def get_config():
                         default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--do_lower_case",
-                        action='store_true', default=True,
+                        type=str2bool, default=True,
                         help="Whether to lower case the input text. True for uncased models, False for cased models.")
     parser.add_argument("--local_rank",
                         type=int,
