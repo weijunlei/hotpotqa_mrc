@@ -1355,7 +1355,6 @@ class BertForQuestionAnsweringQANetAttentionWeight(BertModel):
             return start_logits, end_logits, sent_logits
 
 
-
 class ElectraForQuestionAnsweringQANet(ElectraModel):
     def __init__(self, config):
         super(ElectraForQuestionAnsweringQANet, self).__init__(config)

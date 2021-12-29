@@ -503,6 +503,17 @@ def run_train(rank=0, world_size=1):
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos, start_positions, end_positions, sent_lbs, sent_weight = batch
+                inputs = {
+                    "input_ids": batch[0],
+                    "attention_mask": batch[1],
+                    "token_type_ids": batch[2],
+                    "sent_mask": batch[3],
+                    "pq_end_pos": batch[5],
+                    "start_positions": batch[6],
+                    "end_positions": batch[7],
+                    "sent_lbs": batch[8],
+                    "sent_weight": batch[9]
+                }
                 if len(input_ids.shape) < 2:
                     input_ids = input_ids.unsqueeze(0)
                     segment_ids = segment_ids.unsqueeze(0)
