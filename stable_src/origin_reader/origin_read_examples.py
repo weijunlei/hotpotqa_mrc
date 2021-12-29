@@ -38,8 +38,8 @@ def process_single_data(data):
     context = ""
     qas_id = data['_id']
     question = data['question']
-    answer = data['answer']
-    sup = data['supporting_facts']
+    answer = data.get('answer', '')
+    sup = data.get('supporting_facts', [])
     length = len(context)
     sent_cls = []
     start_position = None
@@ -246,7 +246,7 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training):
     # 增加squad 的支撑段落
     for data in datas:
         get_id = data['_id']
-        if data['level'] == 'squad':
+        if 'level' in data and data['level'] == 'squad':
             sp_dict[get_id] = [0, ]
     # 转换后的examples
     examples = []

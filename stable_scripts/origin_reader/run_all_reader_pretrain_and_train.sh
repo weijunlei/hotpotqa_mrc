@@ -1,25 +1,20 @@
 #!/bin/bash
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="0"
-date
-echo "start to sleep!"
-sleep 5h
-echo "sleep done!"
-date
+export CUDA_VISIBLE_DEVICES="3,2"
 BERT_MODEL=google/electra-large-discriminator
-MODEL_NAME=ElectraForQuestionAnsweringQANet
-PRETRAIN_LOG=20211225_electra_large_dynamic_weight_bs12_pre_trained_train_test
+MODEL_NAME=ElectraForQuestionAnsweringQANetTrueCoAttention
+PRETRAIN_LOG=2021_true_co_cross_electra_large_bs12_pretrain
 PRETRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_labeled_data_squad.json
-PRETRAIN_DEV_FILE=../../data/hotpot_data/hotpot_labeled_data_squad.json
-PRETRAIN_CACHE=../../data/cache/20211225_electra_large_dynamic_weight_bs12_pre_trained_train_test
-PRETRAIN_DIR=../../data/checkpoints/20211225_electra_large_dynamic_weight_bs12_pre_trained_train_test
+PRETRAIN_DEV_FILE=../../data/hotpot_data/hotpot_dev_labeled_data_v3.json
+PRETRAIN_CACHE=../../data/cache/2021_true_co_cross_electra_large_bs12_pretrain
+PRETRAIN_DIR=../../data/checkpoints/2021_true_co_cross_electra_large_bs12_pretrain
 
 # truly train setting
-TRAIN_DIR=../../data/checkpoints/20211225_electra_large_dynamic_weight_bs12_pre_trained_train_test_step
+TRAIN_DIR=../../data/checkpoints/2021_true_co_cross_electra_large_bs12_pretrain_step
 TRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_train_labeled_data_v3.json
 TRAIN_DEV_FILE=../../data/hotpot_data/hotpot_dev_labeled_data_v3.json
-TRAIN_LOG=20211225_electra_large_dynamic_weight_bs12_pre_trained_train_test_step
-TRAIN_CACHE=../../data/cache/20211225_electra_large_dynamic_weight_bs12_pre_trained_train_test_step
+TRAIN_LOG=2021_true_co_cross_electra_large_bs12_pretrain_step
+TRAIN_CACHE=../../data/cache/2021_true_co_cross_electra_large_bs12_pretrain_step
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
                # BertForQuestionAnsweringThreeSameCoAttention,

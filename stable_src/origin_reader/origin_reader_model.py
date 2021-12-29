@@ -64,7 +64,7 @@ from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, 
     BertForQuestionAnsweringQANetAttentionWeight, AlbertForQuestionAnsweringQANet, \
     ElectraForQuestionAnsweringQANetAttentionWeight, BertForQuestionAnsweringQANetTrueCoAttention, \
     BertForQuestionAnsweringQANetTwoCrossAttention, ElectraForQuestionAnsweringQANetTrueCoAttention, \
-    ElectraForQuestionAnsweringTwoCrossAttention
+    ElectraForQuestionAnsweringTwoCrossAttention, ElectraForQuestionAnsweringTwoFakeCrossAttention
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
@@ -88,7 +88,8 @@ model_dict = {
     'BertForQuestionAnsweringQANetTrueCoAttention': BertForQuestionAnsweringQANetTrueCoAttention,
     'BertForQuestionAnsweringQANetTwoCrossAttention': BertForQuestionAnsweringQANetTwoCrossAttention,
     'ElectraForQuestionAnsweringQANetTrueCoAttention': ElectraForQuestionAnsweringQANetTrueCoAttention,
-    'ElectraForQuestionAnsweringTwoCrossAttention': ElectraForQuestionAnsweringTwoCrossAttention
+    'ElectraForQuestionAnsweringTwoCrossAttention': ElectraForQuestionAnsweringTwoCrossAttention,
+    'ElectraForQuestionAnsweringTwoFakeCrossAttention': ElectraForQuestionAnsweringTwoFakeCrossAttention,
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'

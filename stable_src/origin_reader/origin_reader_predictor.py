@@ -298,10 +298,6 @@ def run_predict(rank=0, world_size=1):
         torch.cuda.manual_seed_all(args.seed)
     # 梯度积累设置
     args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
-    if not os.path.exists(args.train_file):
-        raise ValueError("train file not exists! please set train file!")
-    if not args.overwrite_result and os.path.exists(args.output_dir) and os.listdir(args.output_dir):
-        raise ValueError("Output directory () already exists and is not empty.")
     if rank == 0 and not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
     # 设置分词器和模型

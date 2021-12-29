@@ -34,7 +34,7 @@ from first_hop_data_helper import (HotpotQAExample,
                                        read_hotpotqa_examples,
                                        convert_examples_to_features)
 from first_hop_selector import dev_feature_getter, write_predictions
-from first_selector_config import get_config
+from first_selector_predictor_config import get_config
 sys.path.append("../pretrain_model")
 from changed_model import BertForParagraphClassification, BertForRelatedSentence, \
     ElectraForParagraphClassification, ElectraForRelatedSentence, \

@@ -261,17 +261,8 @@ def run_predict(args):
     max_len = 0
 
     data = json.load(open(args.dev_file, 'r', encoding='utf-8'))
-    # data = data[:100]
-    first_hop_dict = {}
     first_best_paragraph_file = "{}/{}".format(args.first_predict_result_path, args.best_paragraph_file)
     first_best_paragraph = json.load(open(first_best_paragraph_file, 'r', encoding='utf-8'))
-    for info in data:
-        title = info['context'][first_best_paragraph[info['_id']]][0]
-        first_hop_dict[info['_id']] = 0
-        for supporting_fact in info['supporting_facts']:
-            if title == supporting_fact[0]:
-                first_hop_dict[info['_id']] = 1
-                break
 
     for start_idx in range(len(start_idxs)):
         logger.info("start idx: {} all idx length: {}".format(start_idx, len(start_idxs)))
