@@ -64,7 +64,8 @@ from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, 
     BertForQuestionAnsweringQANetAttentionWeight, AlbertForQuestionAnsweringQANet, \
     ElectraForQuestionAnsweringQANetAttentionWeight, BertForQuestionAnsweringQANetTrueCoAttention, \
     BertForQuestionAnsweringQANetTwoCrossAttention, ElectraForQuestionAnsweringQANetTrueCoAttention, \
-    ElectraForQuestionAnsweringTwoCrossAttention, ElectraForQuestionAnsweringTwoFakeCrossAttention
+    ElectraForQuestionAnsweringTwoCrossAttention, ElectraForQuestionAnsweringTwoFakeCrossAttention, \
+    ElectraForQuestionAnsweringQANetDouble
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
@@ -90,6 +91,7 @@ model_dict = {
     'ElectraForQuestionAnsweringQANetTrueCoAttention': ElectraForQuestionAnsweringQANetTrueCoAttention,
     'ElectraForQuestionAnsweringTwoCrossAttention': ElectraForQuestionAnsweringTwoCrossAttention,
     'ElectraForQuestionAnsweringTwoFakeCrossAttention': ElectraForQuestionAnsweringTwoFakeCrossAttention,
+    'ElectraForQuestionAnsweringQANetDouble': ElectraForQuestionAnsweringQANetDouble,
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
@@ -281,7 +283,7 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
             }
             if isinstance(d_example_indices, torch.Tensor) and len(d_example_indices.shape) == 0:
                 d_example_indices = d_example_indices.unsqueeze(0)
-            if len(inputs["input_ids"].shape < 2):
+            if len(inputs["input_ids"].shape) < 2:
                 for k, v in inputs.items():
                     if len(v.shape) < 2:
                         inputs[k] = v.unsqueeze(0)
@@ -597,9 +599,8 @@ def run_train(rank=0, world_size=1):
                             f.write(model_to_save.config.to_json_string())
                         logger.info('saving step: {} model'.format(global_step))
             # 内存清除
-            del train_features, input_ids, input_mask, segment_ids
-            del start_positions, end_positions, sent_lbs, sent_mask
-            del sent_weight, train_data, train_dataloader
+            del train_features, inputs
+            del train_data, train_dataloader
             gc.collect()
 
     # 保存最后的模型
