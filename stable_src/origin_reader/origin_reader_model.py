@@ -44,7 +44,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 import pickle
 import gc
-from transformers import ElectraTokenizer, BertTokenizer, RobertaTokenizer, AlbertTokenizer
+from transformers import ElectraTokenizer, BertTokenizer, RobertaTokenizer, AlbertTokenizer, DebertaTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup, AlbertConfig
 
 from origin_read_examples import read_examples
@@ -65,7 +65,9 @@ from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, 
     ElectraForQuestionAnsweringQANetAttentionWeight, BertForQuestionAnsweringQANetTrueCoAttention, \
     BertForQuestionAnsweringQANetTwoCrossAttention, ElectraForQuestionAnsweringQANetTrueCoAttention, \
     ElectraForQuestionAnsweringTwoCrossAttention, ElectraForQuestionAnsweringTwoFakeCrossAttention, \
-    ElectraForQuestionAnsweringQANetDouble
+    ElectraForQuestionAnsweringQANetDouble, BertForQuestionAnsweringQANetDoubleCan, \
+    ElectraForQuestionAnsweringQANetDoubleCan, ElectraForQuestionAnsweringQANetWithSentWeight, \
+    DebertaForQuestionAnsweringQANet
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
 model_dict = {
@@ -92,6 +94,10 @@ model_dict = {
     'ElectraForQuestionAnsweringTwoCrossAttention': ElectraForQuestionAnsweringTwoCrossAttention,
     'ElectraForQuestionAnsweringTwoFakeCrossAttention': ElectraForQuestionAnsweringTwoFakeCrossAttention,
     'ElectraForQuestionAnsweringQANetDouble': ElectraForQuestionAnsweringQANetDouble,
+    'BertForQuestionAnsweringQANetDoubleCan': BertForQuestionAnsweringQANetDoubleCan,
+    'ElectraForQuestionAnsweringQANetDoubleCan': ElectraForQuestionAnsweringQANetDoubleCan,
+    'ElectraForQuestionAnsweringQANetWithSentWeight': ElectraForQuestionAnsweringQANetWithSentWeight,
+    'DebertaForQuestionAnsweringQANet': DebertaForQuestionAnsweringQANet,
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
@@ -368,6 +374,8 @@ def run_train(rank=0, world_size=1):
     if 'electra' in args.bert_model.lower():
         tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
                                                      do_lower_case=args.do_lower_case)
+    elif 'deberta' in args.bert_model.lower():
+        tokenizers = DebertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     elif 'albert' in args.bert_model.lower():
         cls_token = '[CLS]'
         sep_token = '[SEP]'
