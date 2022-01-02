@@ -1,6 +1,10 @@
 #!/bin/bash
 echo "----------------------------------------------------"
+echo "start train reader model"
 export CUDA_VISIBLE_DEVICES="0"
+CHECKPOINT_PATH=../../data/checkpoints/754/reader_model
+OUTPUT_DIR=../../data/reader/
+TEST_PARAGRAPH=../../data/result/754/second_selector/dev_related.json
 
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
@@ -9,7 +13,6 @@ export CUDA_VISIBLE_DEVICES="0"
                # BertForQuestionAnsweringForwardBest
                # BertSelfAttentionAndCoAttention
                # BertTransformer
-               #  --checkpoint_path ../../data/checkpoints/20211225_electra_large_dynamic_weight_bs12_pre_trained \
                # BertSkipConnectTransformer
                # BertForQuestionAnsweringForwardWithEntity
                # BertForQuestionAnsweringForwardWithEntityOneMask
@@ -17,23 +20,19 @@ export CUDA_VISIBLE_DEVICES="0"
                # ElectraForQuestionAnsweringThreeCrossAttention
                # google/electra-large-discriminator
                # ElectraForQuestionAnsweringQANet
-cd ../../deberta_stable_src/origin_reader
-python -u origin_reader_model.py \
-  --bert_model microsoft/deberta-v3-large \
-  --output_dir ../../data/checkpoints/20211231_deberta_bs_8_1e \
-  --model_name DebertaForQuestionAnsweringQANet \
-  --log_prefix 20211231_deberta_bs_8_1e \
+cd ../../electra_src/origin_reader
+python -u origin_reader_predictor.py \
+  --bert_model google/electra-large-discriminator \
+  --checkpoint_dir $CHECKPOINT_PATH \
+  --output_dir $OUTPUT_DIR \
+  --predict_file reader_predict.json \
+  --model_name ElectraForQuestionAnsweringQANet \
+  --log_prefix 20211221_electra_predict_test \
   --overwrite_result True \
-  --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
-  --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
-  --train_supporting_para_file ../../data/hotpot_data/train_golden.json \
-  --dev_supporting_para_file ../../data/selector/20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting_result/dev_related.json \
-  --feature_cache_path ../../data/cache/20211231_deberta_bs_8_1e \
-  --train_batch_size 8 \
+  --test_file ../../data/hotpot_data/hotpot_dev_distractor_v1.json \
+  --test_supporting_para_file $TEST_PARAGRAPH \
+  --feature_cache_path ../../data/cache/reader_test \
   --gradient_accumulation_steps 1 \
   --local_rank -1 \
-  --learning_rate 1e-5 \
-  --val_batch_size 32 \
-  --save_model_step 500 \
-  --num_train_epochs 3.0
+  --val_batch_size 12
 echo "----------------------------------------------------"

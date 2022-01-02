@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="0"
+export CUDA_VISIBLE_DEVICES="2"
 
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
@@ -20,9 +20,9 @@ export CUDA_VISIBLE_DEVICES="0"
 cd ../../deberta_stable_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model microsoft/deberta-v3-large \
-  --output_dir ../../data/checkpoints/20211231_deberta_bs_8_1e \
+  --output_dir ../../data/checkpoints/20211231_deberta_bs_8_2e \
   --model_name DebertaForQuestionAnsweringQANet \
-  --log_prefix 20211231_deberta_bs_8_1e \
+  --log_prefix 20211231_deberta_bs_8_2e \
   --overwrite_result True \
   --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
   --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
@@ -32,7 +32,7 @@ python -u origin_reader_model.py \
   --train_batch_size 8 \
   --gradient_accumulation_steps 1 \
   --local_rank -1 \
-  --learning_rate 1e-5 \
+  --learning_rate 2e-5 \
   --val_batch_size 32 \
   --save_model_step 500 \
   --num_train_epochs 3.0

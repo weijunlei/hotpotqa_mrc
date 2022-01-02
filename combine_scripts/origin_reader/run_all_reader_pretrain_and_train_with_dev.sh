@@ -1,20 +1,25 @@
 #!/bin/bash
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="2,0"
-BERT_MODEL=microsoft/deberta-v3-large
-MODEL_NAME=DebertaForQuestionAnsweringQANet
-PRETRAIN_LOG=20211231_deberta_qanet_split_pretrain
+export CUDA_VISIBLE_DEVICES="2"
+date
+echo "start to sleep!"
+sleep 6h
+echo "sleep done!"
+date
+BERT_MODEL=google/electra-large-discriminator
+MODEL_NAME=ElectraForQuestionAnsweringQANet
+PRETRAIN_LOG=20211225_electra_large_dynamic_weight_bs12_pre_trained_dev_test
 PRETRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_labeled_data_squad.json
-PRETRAIN_DEV_FILE=../../data/hotpot_data/hotpot_dev_labeled_data_v3.json
-PRETRAIN_CACHE=../../data/cache/20211231_deberta_qanet_split_pretrain
-PRETRAIN_DIR=../../data/checkpoints/20211231_deberta_qanet_split_pretrain
+PRETRAIN_DEV_FILE=../../data/hotpot_data/hotpot_labeled_dev_data_squad.json
+PRETRAIN_CACHE=../../data/cache/20211225_electra_large_dynamic_weight_bs12_pre_trained_dev_test
+PRETRAIN_DIR=../../data/checkpoints/20211225_electra_large_dynamic_weight_bs12_pre_trained_dev_test
 
 # truly train setting
-TRAIN_DIR=../../data/checkpoints/20211231_deberta_qanet_split_pretrain_step
+TRAIN_DIR=../../data/checkpoints/20211225_electra_large_dynamic_weight_bs12_pre_trained_dev_test_step
 TRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_train_labeled_data_v3.json
 TRAIN_DEV_FILE=../../data/hotpot_data/hotpot_dev_labeled_data_v3.json
-TRAIN_LOG=20211231_deberta_qanet_split_pretrain_step
-TRAIN_CACHE=../../data/cache/20211231_deberta_qanet_split_pretrain_step
+TRAIN_LOG=20211225_electra_large_dynamic_weight_bs12_pre_trained_dev_test_step
+TRAIN_CACHE=../../data/cache/20211225_electra_large_dynamic_weight_bs12_pre_trained_dev_test_step
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
                # BertForQuestionAnsweringThreeSameCoAttention,
@@ -29,7 +34,7 @@ TRAIN_CACHE=../../data/cache/20211231_deberta_qanet_split_pretrain_step
                # ElectraForQuestionAnsweringThreeCrossAttention
                # google/electra-large-discriminator
                # ElectraForQuestionAnsweringQANet
-cd ../../deberta_stable_src/origin_reader
+cd ../../stable_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model $BERT_MODEL \
   --output_dir  $PRETRAIN_DIR \
@@ -41,12 +46,12 @@ python -u origin_reader_model.py \
   --train_supporting_para_file ../../data/hotpot_data/train_golden.json \
   --dev_supporting_para_file ../../data/selector/20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting_result/dev_related.json \
   --feature_cache_path $PRETRAIN_CACHE \
-  --train_batch_size 16 \
+  --train_batch_size 12 \
   --gradient_accumulation_steps 1 \
   --local_rank -1 \
-  --learning_rate 1e-5 \
-  --val_batch_size 32 \
-  --save_model_step 5000 \
+  --learning_rate 2e-5 \
+  --val_batch_size 128 \
+  --save_model_step 1000 \
   --num_train_epochs 3.0
 echo "----------------------------------------------------"
 echo "pretrain done!"
@@ -64,11 +69,11 @@ python -u origin_reader_model.py \
   --train_supporting_para_file ../../data/hotpot_data/train_golden.json \
   --dev_supporting_para_file ../../data/selector/20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting_result/dev_related.json \
   --feature_cache_path $TRAIN_CACHE \
-  --train_batch_size 16 \
+  --train_batch_size 12 \
   --gradient_accumulation_steps 1 \
   --local_rank -1 \
-  --learning_rate 1e-5 \
-  --val_batch_size 32 \
+  --learning_rate 2e-5 \
+  --val_batch_size 128 \
   --save_model_step 500 \
   --num_train_epochs 3.0
 echo "----------------------------------------------------"

@@ -54,7 +54,7 @@ from lazy_dataloader import LazyLoadTensorDataset
 from config import get_config
 
 sys.path.append("../pretrain_model")
-from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, ElectraForQuestionAnsweringForwardBest, \
+from changed_model_reader import ElectraForQuestionAnsweringForwardWithEntity, ElectraForQuestionAnsweringForwardBest, \
     ElectraForQuestionAnsweringMatchAttention, ElectraForQuestionAnsweringCrossAttention, \
     ElectraForQuestionAnsweringBiAttention, ElectraForQuestionAnsweringCrossAttentionOnReader,\
     ElectraForQuestionAnsweringThreeCrossAttention, \
