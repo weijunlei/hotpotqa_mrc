@@ -1,5 +1,5 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="2,0"
+export CUDA_VISIBLE_DEVICES="2"
 echo "start train first hop selector..."
 cd ../../combine_src/selector
 # ElectraForRelatedSentence
@@ -7,11 +7,11 @@ cd ../../combine_src/selector
 # bert-base-uncased
 # google/electra-base-discriminator
 BERT_MODEL=google/electra-base-discriminator
-OUTPUT_NAME=20211225_first_hop_electra_cross_attention_2e_paragraph_selector_24
-LOG_PREFIX=20211225_first_hop_electra_cross_attention_2e_paragraph_selector_24
-CACHE_NAME=20211225_first_hop_electra_cross_attention_2e_paragraph_selector_24
-MODEL_NAME=ElectraForParagraphClassificationCrossAttention
-PREDICT_NAME=20211225_first_hop_electra_cross_attention_2e_paragraph_selector_24_result
+OUTPUT_NAME=20220102_first_hop_test
+LOG_PREFIX=20220102_first_hop_test
+CACHE_NAME=20220102_first_hop_test
+MODEL_NAME=ElectraForParagraphClassification
+PREDICT_NAME=20220102_first_hop_test_result
 python -u first_hop_selector.py \
     --bert_model $BERT_MODEL \
     --over_write_result True \
@@ -25,7 +25,7 @@ python -u first_hop_selector.py \
     --use_file_cache True \
     --max_seq_length 512 \
     --learning_rate 2e-5 \
-    --train_batch_size 24 \
+    --train_batch_size 12 \
     --val_batch_size 32 \
     --save_model_step 5000 \
     --num_train_epochs 3.0

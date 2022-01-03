@@ -2,9 +2,9 @@
 echo "----------------------------------------------------"
 echo "start train reader model"
 export CUDA_VISIBLE_DEVICES="0"
-CHECKPOINT_PATH=../../data/checkpoints/754/reader_model
-OUTPUT_DIR=../../data/reader/
-TEST_PARAGRAPH=../../data/result/754/second_selector/dev_related.json
+CHECKPOINT_PATH=/data1/jptang1/leiwj/data_transform/bs12_squad_model/model
+OUTPUT_DIR=/data1/jptang1/leiwj/data_transform/bs12_squad_model/model
+TEST_PARAGRAPH=../../data/selector/20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting_result/dev_related.json
 
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
@@ -20,7 +20,7 @@ TEST_PARAGRAPH=../../data/result/754/second_selector/dev_related.json
                # ElectraForQuestionAnsweringThreeCrossAttention
                # google/electra-large-discriminator
                # ElectraForQuestionAnsweringQANet
-cd ../../electra_src/origin_reader
+cd ../../stable_src/origin_reader
 python -u origin_reader_predictor.py \
   --bert_model google/electra-large-discriminator \
   --checkpoint_dir $CHECKPOINT_PATH \

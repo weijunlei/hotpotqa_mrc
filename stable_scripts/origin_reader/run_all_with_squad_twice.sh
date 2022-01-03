@@ -1,20 +1,20 @@
 #!/bin/bash
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="2,3"
+export CUDA_VISIBLE_DEVICES="3,2"
 BERT_MODEL=google/electra-large-discriminator
 MODEL_NAME=ElectraForQuestionAnsweringQANet
-PRETRAIN_LOG=20220101_qanet_bs16_lr_15e_pretrain_save_5000_pretrain
+PRETRAIN_LOG=20220103_with_squad_pretrain
 PRETRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_labeled_data_squad.json
 PRETRAIN_DEV_FILE=../../data/hotpot_data/hotpot_dev_labeled_data_v3.json
-PRETRAIN_CACHE=../../data/cache/20220101_qanet_bs16_lr_15e_pretrain_save_5000_pretrain
-PRETRAIN_DIR=../../data/checkpoints/20220101_qanet_bs16_lr_15e_pretrain_save_5000_pretrain
+PRETRAIN_CACHE=../../data/cache/20220103_with_squad_pretrain
+PRETRAIN_DIR=../../data/checkpoints/20220103_with_squad_pretrain
 
 # truly train setting
-TRAIN_DIR=../../data/checkpoints/20220101_qanet_bs16_lr_15e_pretrain_save_5000_pretrain_step
-TRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_train_labeled_data_v3.json
+TRAIN_DIR=../../data/checkpoints/20220103_with_squad_pretrain_step_with_squad
+TRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_train_labeled_data_with_squad.json
 TRAIN_DEV_FILE=../../data/hotpot_data/hotpot_dev_labeled_data_v3.json
-TRAIN_LOG=20220101_qanet_bs16_lr_15e_pretrain_save_5000_pretrain_step
-TRAIN_CACHE=../../data/cache/20220101_qanet_bs16_lr_15e_pretrain_save_5000_pretrain_step
+TRAIN_LOG=20220103_with_squad_pretrain_step_with_squad
+TRAIN_CACHE=../../data/cache/20220103_with_squad_pretrain_step_with_squad
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
                # BertForQuestionAnsweringThreeSameCoAttention,
@@ -41,7 +41,7 @@ python -u origin_reader_model.py \
   --train_supporting_para_file ../../data/hotpot_data/train_golden.json \
   --dev_supporting_para_file ../../data/selector/20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting_result/dev_related.json \
   --feature_cache_path $PRETRAIN_CACHE \
-  --train_batch_size 16 \
+  --train_batch_size 12 \
   --gradient_accumulation_steps 1 \
   --local_rank -1 \
   --learning_rate 1.5e-5 \
@@ -64,7 +64,7 @@ python -u origin_reader_model.py \
   --train_supporting_para_file ../../data/hotpot_data/train_golden.json \
   --dev_supporting_para_file ../../data/selector/20211217_second_hop_electra_base_just_paragraph_selector_12_value_setting_result/dev_related.json \
   --feature_cache_path $TRAIN_CACHE \
-  --train_batch_size 16 \
+  --train_batch_size 12 \
   --warmup_proportion 0.1 \
   --gradient_accumulation_steps 1 \
   --local_rank -1 \
