@@ -198,6 +198,7 @@ def run_predict(args):
     unk_token = '[UNK]'
     pad_token = '[PAD]'
     if 'electra' in args.bert_model.lower():
+        unk_token = '[CLS]'
         if not args.no_network:
             tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
                                                          do_lower_case=args.do_lower_case)

@@ -1,7 +1,8 @@
 import json
-from tqdm import tqdm
-import multiprocessing
 import random
+from tqdm import tqdm
+from sys import getsizeof
+import multiprocessing
 from multiprocessing import Pool
 
 
@@ -42,7 +43,7 @@ class HotpotInputFeatures(object):
                  input_mask,
                  segment_ids,
                  cls_mask,
-                 pq_end_pos,
+                 pq_end_pos=None,
                  cls_label=None,
                  cls_weight=None,
                  is_related=None,
@@ -62,66 +63,59 @@ class HotpotInputFeatures(object):
         self.roll_back = roll_back
 
 
-def read_second_hotpotqa_examples(args,
-                                  input_file,
-                                  best_paragraph_file,
-                                  related_paragraph_file,
-                                  # new_context_file,
-                                  is_training: str = 'train',
-                                  not_related_sample_rate: float = 0.25):
+def read_hotpotqa_examples(input_file,
+                           is_training: str = 'train',
+                           not_related_sample_rate: float = 0.25):
     """ 获取原始数据 """
     data = json.load(open(input_file, 'r'))
-    best_paragraph = json.load(open(best_paragraph_file, 'r'))
-    related_paragraph = json.load(open(related_paragraph_file, 'r'))
-    # new_context = json.load(open(new_context_file, 'r'))
     # 测试流程通过情况
     # data = data[:100]
     examples = []
     related_num = 0
     not_related_num = 0
 
-    for info in tqdm(data, desc="reading examples..."):
+    for info in data:
         context = info['context']
         question = info['question']
+        input_labels = info["labels"][0]
+        label_title, _, _ = input_labels
+
         if is_training == 'test':
             supporting_facts = []
         else:
             supporting_facts = info['supporting_facts']
         supporting_facts_dict = set(['{}${}'.format(x[0], x[1]) for x in supporting_facts])
-        qas_id = info['_id']
-        # TODO: check content test
-        # question = new_context[qas_id]
-        best_paragraph_idx = best_paragraph[qas_id]
-        best_paragraph_content = ''
-        for sent_idx, sent in enumerate(context[best_paragraph_idx][1]):
-            best_paragraph_content += sent + ' '
-        best_paragraph_content = best_paragraph_content.strip()
-        question = question + best_paragraph_content
         for idx, paragraph in enumerate(context):
-            if idx == best_paragraph_idx:
-                continue
             labels = []
             title, sentences = paragraph
             related = False
+            has_ans = False
             for sent_idx, sent in enumerate(sentences):
                 if '{}${}'.format(title, sent_idx) in supporting_facts_dict:
                     labels.append(1)
                     related = True
+                    if title == label_title or (isinstance(label_title, int) and label_title < 0):
+                        has_ans = True
                 else:
                     labels.append(0)
-            # 去除非相关的paragraph
+            # 控制训练时的负样本采样比例
             if is_training == 'train' and not related and random.random() > not_related_sample_rate:
                 continue
             if related:
                 related_num += 1
             else:
                 not_related_num += 1
+            paragraph_label = 0
+            if related:
+                paragraph_label = 1
+            if related and has_ans:
+                paragraph_label = 2
             example = HotpotQAExample(
-                qas_id='{}_{}'.format(qas_id, idx),
+                qas_id='{}_{}'.format(info['_id'], idx),
                 question_tokens=question,
                 context_tokens=paragraph,
                 sentences_label=labels,
-                paragraph_label=related
+                paragraph_label=paragraph_label
             )
             examples.append(example)
     print("dataset type: {} related num:{} not related num: {} related / not: {} sample rate: {}".format(
@@ -143,12 +137,10 @@ global_unk_token = None
 global_pad_token = None
 
 
-def second_example_process(data):
-    """ 将打个example转化为预训练模型可处理的特征 """
+def single_example_process(data):
+    """ 将单个example 转化为features """
     example, example_index = data
     features = []
-    related_sent_num = 0
-    not_related_sent_num = 0
     global global_tokenizer
     global global_max_seq_length
     global global_is_training
@@ -157,9 +149,7 @@ def second_example_process(data):
     global global_unk_token
     global global_pad_token
     query_tokens = global_tokenizer.tokenize(example.question_tokens)
-    # 当query+第一段结果长度大于512时的处理方法
-    if len(query_tokens) >= 400:
-        query_tokens = query_tokens[:300]
+    related_sent_num = not_related_sent_num = 0
     # special tokens ['CLS'] ['SEP'] ['SEP']
     max_context_length = global_max_seq_length - len(query_tokens) - 3
     cur_context_length = 0
@@ -169,9 +159,9 @@ def second_example_process(data):
     query_end_idx = len(all_tokens) - 1
     cls_mask = [1] + [0] * (len(all_tokens) - 1)
     if global_is_training == 'train' or global_is_training == 'dev':
-        cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
+        cls_label = [example.paragraph_label] + [0] * (len(all_tokens) - 1)
     else:
-        cls_label = [0] + [0] * (len(all_tokens) - 1)
+        cls_label = [0] * len(all_tokens)
     cls_weight = [1] + [0] * (len(all_tokens) - 1)
     sent_idx = 0
     pre_sent1_length = None
@@ -192,11 +182,13 @@ def second_example_process(data):
             """ 超出长度往后延两句 """
             context_end_idx = len(all_tokens)
             pq_end_pos = [query_end_idx, context_end_idx]
-            all_tokens += [global_sep_token, ]
+            all_tokens += [global_sep_token]
             tmp_len = len(all_tokens)
-            while (len(all_tokens)) < global_max_seq_length:
+            while len(all_tokens) < global_max_seq_length:
                 all_tokens.append(global_pad_token)
+            # 换成变量替代
             input_ids = global_tokenizer.convert_tokens_to_ids(all_tokens)
+            # input_ids = global_tokenizer.convert_tokens_to_ids(all_tokens) + [0] * (global_max_seq_length - tmp_len)
             query_ids = [0] * query_length + [1] * (tmp_len - query_length) + [0] * (global_max_seq_length - tmp_len)
             input_mask = [1] * tmp_len + [0] * (global_max_seq_length - tmp_len)
             cls_mask += [1] + [0] * (global_max_seq_length - tmp_len)
@@ -207,7 +199,7 @@ def second_example_process(data):
                     roll_back = 2
                 elif pre_sent1_length + len(sentence_tokens) + 1 <= max_context_length:
                     roll_back = 1
-            elif pre_sent1_length is not None and pre_sent1_length + len(sentence_tokens) + 1 <= max_context_length:
+            elif not pre_sent1_length and pre_sent1_length + len(sentence_tokens) + 1 <= max_context_length:
                 roll_back = 1
             sent_idx -= roll_back
             # 判断是否有支撑句，若无则新判别为非支撑段落
@@ -238,37 +230,36 @@ def second_example_process(data):
             unique_id += 1
             # 还原到未添加context前
             cur_context_length = 0
-            all_tokens = [global_cls_token, ] + query_tokens + [global_sep_token, ]
+            all_tokens = [global_cls_token] + query_tokens + [global_sep_token]
             query_end_idx = len(all_tokens) - 1
             cls_mask = [1] + [0] * (len(all_tokens) - 1)
-            cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
+            cls_label = [example.paragraph_label] + [0] * (len(all_tokens) - 1)
             cls_weight = [1] + [0] * (len(all_tokens) - 1)
         else:
-            all_tokens += sentence_tokens  # unk
-            cls_mask += [0] * (len(sentence_tokens))
-            cls_label += [0] * (len(sentence_tokens))
-            cls_weight += [0] * (len(sentence_tokens))
-            cur_context_length += len(sentence_tokens)
+            all_tokens += [global_unk_token] + sentence_tokens  # unk
+            cls_mask += [1] + [0] * len(sentence_tokens)
+            cls_label += [sent_label] + [0] * len(sentence_tokens)
+            cls_weight += [1 if sent_label else 0.2] + [0] * len(sentence_tokens)
+            cur_context_length += len(sentence_tokens) + 1
             sent_idx += 1
         pre_sent2_length = pre_sent1_length
         pre_sent1_length = len(sentence_tokens) + 1
     context_end_idx = len(all_tokens)
     pq_end_pos = [query_end_idx, context_end_idx]
-    all_tokens += [global_sep_token, ]
+    all_tokens += [global_sep_token]
     cls_mask += [1]
     cls_label += [0]
     cls_weight += [0]
     tmp_len = len(all_tokens)
+    # 设置变量命名input_ids
     while len(all_tokens) < global_max_seq_length:
         all_tokens.append(global_pad_token)
     input_ids = global_tokenizer.convert_tokens_to_ids(all_tokens)
-    # input_ids = global_tokenizer.convert_tokens_to_ids(all_tokens) + [0] * (global_max_seq_length - tmp_len)
     query_ids = [0] * query_length + [1] * (tmp_len - query_length) + [0] * (global_max_seq_length - tmp_len)
     input_mask = [1] * tmp_len + [0] * (global_max_seq_length - tmp_len)
     cls_mask += [0] * (global_max_seq_length - tmp_len)
     cls_label += [0] * (global_max_seq_length - tmp_len)
     cls_weight += [0] * (global_max_seq_length - tmp_len)
-    # 二次判别看是否删除掉了支撑句
     # real_related = int(bool(sum(cls_label) - cls_label[0]))
     # if real_related != cls_label[0]:
     #     cls_label[0] = real_related
@@ -297,18 +288,19 @@ def second_example_process(data):
     result["features"] = features
     result["related_sent_num"] = related_sent_num
     result["not_related_sent_num"] = not_related_sent_num
+    del example
     return result
 
 
-def convert_examples_to_second_features(examples,
-                                        tokenizer,
-                                        max_seq_length,
-                                        is_training,
-                                        cls_token=None,
-                                        sep_token=None,
-                                        unk_token=None,
-                                        pad_token=None
-                                        ):
+def convert_examples_to_features(examples,
+                                 tokenizer,
+                                 max_seq_length,
+                                 is_training,
+                                 cls_token=None,
+                                 sep_token=None,
+                                 unk_token=None,
+                                 pad_token=None
+                                 ):
     """ 将实例转化为特征 """
     global global_tokenizer
     global global_max_seq_length
@@ -327,11 +319,10 @@ def convert_examples_to_second_features(examples,
     features = []
     related_sent_num = 0
     not_related_sent_num = 0
-    get_qas_id = {}
     pool_size = max(1, multiprocessing.cpu_count() // 4)
     pool = Pool(pool_size)
     datas = [(example, example_index) for example_index, example in enumerate(examples)]
-    for result in tqdm(pool.imap(func=second_example_process, iterable=datas),
+    for result in tqdm(pool.imap(func=single_example_process, iterable=datas),
                        total=len(datas),
                        desc="Convert examples to features..."):
         features.extend(result["features"])

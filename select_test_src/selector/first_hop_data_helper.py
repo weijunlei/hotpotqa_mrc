@@ -192,9 +192,10 @@ def single_example_process(data):
                 roll_back = 1
             sent_idx -= roll_back
             # 判断是否有支撑句，若无则新判别为非支撑段落
-            real_related = int(bool(sum(cls_label) - cls_label[0]))
-            if real_related != cls_label[0]:
-                cls_label[0] = real_related
+            # real_related = int(bool(sum(cls_label) - cls_label[0]))
+            # 去除判断
+            # if real_related != cls_label[0]:
+            #     cls_label[0] = real_related
             assert len(cls_mask) == global_max_seq_length
             assert len(cls_label) == global_max_seq_length
             assert len(cls_weight) == global_max_seq_length
@@ -212,7 +213,7 @@ def single_example_process(data):
                                           pq_end_pos=pq_end_pos,
                                           cls_label=cls_label,
                                           cls_weight=cls_weight,
-                                          is_related=real_related,
+                                          is_related=example.paragraph_label,
                                           roll_back=roll_back
                                           )
             features.append(feature)
@@ -225,11 +226,11 @@ def single_example_process(data):
             cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
             cls_weight = [1] + [0] * (len(all_tokens) - 1)
         else:
-            all_tokens += [global_unk_token] + sentence_tokens  # unk
-            cls_mask += [1] + [0] * len(sentence_tokens)
-            cls_label += [sent_label] + [0] * len(sentence_tokens)
-            cls_weight += [1 if sent_label else 0.2] + [0] * len(sentence_tokens)
-            cur_context_length += len(sentence_tokens) + 1
+            all_tokens += sentence_tokens  # unk
+            cls_mask += [0] * len(sentence_tokens)
+            cls_label += [0] * len(sentence_tokens)
+            cls_weight += [0] * len(sentence_tokens)
+            cur_context_length += len(sentence_tokens)
             sent_idx += 1
         pre_sent2_length = pre_sent1_length
         pre_sent1_length = len(sentence_tokens) + 1
@@ -249,9 +250,9 @@ def single_example_process(data):
     cls_mask += [0] * (global_max_seq_length - tmp_len)
     cls_label += [0] * (global_max_seq_length - tmp_len)
     cls_weight += [0] * (global_max_seq_length - tmp_len)
-    real_related = int(bool(sum(cls_label) - cls_label[0]))
-    if real_related != cls_label[0]:
-        cls_label[0] = real_related
+    # real_related = int(bool(sum(cls_label) - cls_label[0]))
+    # if real_related != cls_label[0]:
+    #     cls_label[0] = real_related
     assert len(cls_mask) == global_max_seq_length
     assert len(cls_label) == global_max_seq_length
     assert len(cls_weight) == global_max_seq_length
@@ -269,7 +270,7 @@ def single_example_process(data):
                                   pq_end_pos=pq_end_pos,
                                   cls_label=cls_label,
                                   cls_weight=cls_weight,
-                                  is_related=real_related,
+                                  is_related=example.paragraph_label,
                                   roll_back=0
                                   )
     features.append(feature)

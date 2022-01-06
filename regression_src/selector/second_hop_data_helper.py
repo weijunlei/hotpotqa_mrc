@@ -83,6 +83,8 @@ def read_second_hotpotqa_examples(args,
     for info in tqdm(data, desc="reading examples..."):
         context = info['context']
         question = info['question']
+        input_labels = info["labels"][0]
+        label_title, _, _ = input_labels
         if is_training == 'test':
             supporting_facts = []
         else:
@@ -103,15 +105,23 @@ def read_second_hotpotqa_examples(args,
             labels = []
             title, sentences = paragraph
             related = False
+            has_ans = False
             for sent_idx, sent in enumerate(sentences):
                 if '{}${}'.format(title, sent_idx) in supporting_facts_dict:
                     labels.append(1)
                     related = True
+                    if (isinstance(label_title, str) and title == label_title) or (isinstance(label_title, int) and label_title < 0):
+                        has_ans = True
                 else:
                     labels.append(0)
             # 去除非相关的paragraph
             if is_training == 'train' and not related and random.random() > not_related_sample_rate:
                 continue
+            paragraph_label = 0
+            if related:
+                paragraph_label = 1
+            if related and has_ans:
+                paragraph_label = 2
             if related:
                 related_num += 1
             else:
@@ -121,7 +131,7 @@ def read_second_hotpotqa_examples(args,
                 question_tokens=question,
                 context_tokens=paragraph,
                 sentences_label=labels,
-                paragraph_label=related
+                paragraph_label=paragraph_label
             )
             examples.append(example)
     print("dataset type: {} related num:{} not related num: {} related / not: {} sample rate: {}".format(
@@ -169,7 +179,7 @@ def second_example_process(data):
     query_end_idx = len(all_tokens) - 1
     cls_mask = [1] + [0] * (len(all_tokens) - 1)
     if global_is_training == 'train' or global_is_training == 'dev':
-        cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
+        cls_label = [example.paragraph_label] + [0] * (len(all_tokens) - 1)
     else:
         cls_label = [0] + [0] * (len(all_tokens) - 1)
     cls_weight = [1] + [0] * (len(all_tokens) - 1)
@@ -241,14 +251,14 @@ def second_example_process(data):
             all_tokens = [global_cls_token, ] + query_tokens + [global_sep_token, ]
             query_end_idx = len(all_tokens) - 1
             cls_mask = [1] + [0] * (len(all_tokens) - 1)
-            cls_label = [1 if example.paragraph_label else 0] + [0] * (len(all_tokens) - 1)
+            cls_label = [example.paragraph_label] + [0] * (len(all_tokens) - 1)
             cls_weight = [1] + [0] * (len(all_tokens) - 1)
         else:
-            all_tokens += sentence_tokens  # unk
-            cls_mask += [0] * (len(sentence_tokens))
-            cls_label += [0] * (len(sentence_tokens))
-            cls_weight += [0] * (len(sentence_tokens))
-            cur_context_length += len(sentence_tokens)
+            all_tokens += [global_unk_token, ] + sentence_tokens  # unk
+            cls_mask += [1] + [0] * (len(sentence_tokens) + 0)
+            cls_label += [sent_label] + [0] * (len(sentence_tokens) + 0)
+            cls_weight += [1 if sent_label else 0.2] + [0] * (len(sentence_tokens) + 0)
+            cur_context_length += len(sentence_tokens) + 1
             sent_idx += 1
         pre_sent2_length = pre_sent1_length
         pre_sent1_length = len(sentence_tokens) + 1
