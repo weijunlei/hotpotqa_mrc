@@ -11,29 +11,29 @@ OUTPUT_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12
 LOG_PREFIX=20211219_first_hop_electra_large_1e_paragraph_selector_12
 CACHE_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12
 MODEL_NAME=ElectraForParagraphClassification
-PREDICT_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12_origin_result
-#python -u first_hop_selector.py \
-#    --bert_model $BERT_MODEL \
-#    --over_write_result True \
-#    --output_dir ../../data/checkpoints/selector/$OUTPUT_NAME \
-#    --log_path ../../log \
-#    --log_prefix $LOG_PREFIX \
-#    --feature_cache_path ../../data/cache/selector/$CACHE_NAME \
-#    --model_name $MODEL_NAME \
-#    --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
-#    --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
-#    --use_file_cache True \
-#    --max_seq_length 512 \
-#    --learning_rate 1e-5 \
-#    --train_batch_size 12 \
-#    --val_batch_size 32 \
-#    --save_model_step 1000 \
-#    --num_train_epochs 3.0
-#echo "train first hop selector done!"
-#echo "----------------------------------------------------"
-#echo "start send email"
-#cd ../../src/preprocess
-#python send_email.py $OUTPUT_NAME train完成
+PREDICT_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12_result
+python -u first_hop_selector.py \
+    --bert_model $BERT_MODEL \
+    --over_write_result True \
+    --output_dir ../../data/checkpoints/selector/$OUTPUT_NAME \
+    --log_path ../../log \
+    --log_prefix $LOG_PREFIX \
+    --feature_cache_path ../../data/cache/selector/$CACHE_NAME \
+    --model_name $MODEL_NAME \
+    --train_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
+    --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
+    --use_file_cache True \
+    --max_seq_length 512 \
+    --learning_rate 1e-5 \
+    --train_batch_size 12 \
+    --val_batch_size 32 \
+    --save_model_step 10000 \
+    --num_train_epochs 3.0
+echo "train first hop selector done!"
+echo "----------------------------------------------------"
+echo "start send email"
+cd ../../src/preprocess
+python send_email.py $OUTPUT_NAME train完成
 
 echo "----------------------------------------------------"
 echo "start predict first hop result..."
@@ -50,7 +50,7 @@ python -u first_hop_selector_predictor.py \
     --related_paragraph_file dev_related_paragraph.json \
     --new_context_file dev_new_context.json \
     --max_seq_length 512 \
-    --val_batch_size 512
+    --val_batch_size 256
 echo "predict dev first hop result done!"
 echo "start send email"
 cd ../../src/preprocess
@@ -68,7 +68,7 @@ python -u first_hop_selector_predictor.py \
     --related_paragraph_file train_related_paragraph.json \
     --new_context_file train_new_context.json \
     --max_seq_length 512 \
-    --val_batch_size 512
+    --val_batch_size 256
 echo "predict train first hop result done!"
 
 
@@ -79,11 +79,11 @@ echo "----------------------------------------------------"
 # BertForRelatedSentence
 # BertForParagraphClassification
 # google/electra-base-discriminator
-OUTPUT_NAME=20211219_second_hop_electra_large_1e_paragraph_selector_12_origin
-CACHE_NAME=20211219_second_hop_electra_large_1e_paragraph_selector_12_origin
-LOG_PREFIX=20211219_second_hop_electra_large_1e_paragraph_selector_12_origin
-FIRST_PREDICT_PATH=20211219_first_hop_electra_large_1e_paragraph_selector_12_origin_result
-SECOND_PREDICT_PATH=20211219_second_hop_electra_large_1e_paragraph_selector_12_origin_result
+OUTPUT_NAME=20211219_second_hop_electra_large_1e_paragraph_selector_12
+CACHE_NAME=20211219_second_hop_electra_large_1e_paragraph_selector_12
+LOG_PREFIX=20211219_second_hop_electra_large_1e_paragraph_selector_12
+FIRST_PREDICT_PATH=20211219_first_hop_electra_large_1e_paragraph_selector_12_result
+SECOND_PREDICT_PATH=20211219_second_hop_electra_large_1e_paragraph_selector_12_result
 
 echo "start train second hop selector..."
 cd ../../src/selector
@@ -108,7 +108,7 @@ python -u second_hop_selector.py \
     --max_seq_length 512 \
     --train_batch_size 12 \
     --val_batch_size 128 \
-    --save_model_step 1000 \
+    --save_model_step 10000 \
     --num_train_epochs 3.0
 echo "----------------------------------------------------"
 echo "train second hop selector done!"

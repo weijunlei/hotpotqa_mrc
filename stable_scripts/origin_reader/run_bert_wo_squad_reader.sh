@@ -38,3 +38,6 @@ python -u origin_reader_model.py \
   --save_model_step 1000 \
   --num_train_epochs 3.0
 echo "----------------------------------------------------"
+
+
+

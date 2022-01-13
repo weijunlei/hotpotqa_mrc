@@ -1,14 +1,16 @@
 #!/bin/bash
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="0,2"
+export CUDA_VISIBLE_DEVICES="1,0"
 BERT_MODEL=google/electra-large-discriminator
+
+
 # truly train setting
-MODEL_NAME=ElectraForQuestionAnsweringTwoCrossAttention
-TRAIN_DIR=../../data/checkpoints/20220106_two_true_cross_attention
+MODEL_NAME=ElectraForQuestionAnsweringQANetWoCro
+TRAIN_DIR=../../data/checkpoints/20220107_wo_one_lxy_cross_attention
 TRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_train_labeled_data_v3.json
 TRAIN_DEV_FILE=../../data/hotpot_data/hotpot_dev_labeled_data_v3.json
-TRAIN_LOG=20220106_two_true_cross_attention
-TRAIN_CACHE=../../data/cache/20220106_two_true_cross_attention
+TRAIN_LOG=20220107_wo_one_lxy_cross_attention
+TRAIN_CACHE=../../data/cache/20220107_wo_one_lxy_cross_attention
 cd ../../stable_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model $BERT_MODEL \
@@ -32,13 +34,12 @@ python -u origin_reader_model.py \
 echo "----------------------------------------------------"
 
 echo "train done!"
-
-MODEL_NAME=ElectraForQuestionAnsweringTwoFakeCrossAttention
-TRAIN_DIR=../../data/checkpoints/20220106_two_fake_cross_attention
+MODEL_NAME=ElectraForQuestionAnsweringQANetWoLN
+TRAIN_DIR=../../data/checkpoints/20220107_wo_one_true_cross_attention
 TRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_train_labeled_data_v3.json
 TRAIN_DEV_FILE=../../data/hotpot_data/hotpot_dev_labeled_data_v3.json
-TRAIN_LOG=20220106_two_fake_cross_attention
-TRAIN_CACHE=../../data/cache/20220106_two_fake_cross_attention
+TRAIN_LOG=20220107_wo_one_true_cross_attention
+TRAIN_CACHE=../../data/cache/20220107_wo_one_true_cross_attention
 python -u origin_reader_model.py \
   --bert_model $BERT_MODEL \
   --output_dir $TRAIN_DIR \

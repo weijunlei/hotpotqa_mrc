@@ -44,8 +44,6 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 import pickle
 import gc
-from transformers import ElectraTokenizer, BertTokenizer, RobertaTokenizer, AlbertTokenizer, DebertaTokenizer
-from transformers import AdamW, get_linear_schedule_with_warmup, AlbertConfig
 
 from origin_read_examples import read_examples
 from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
@@ -54,116 +52,57 @@ from lazy_dataloader import LazyLoadTensorDataset
 from config import get_config
 
 sys.path.append("../pretrain_model")
-from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, ElectraForQuestionAnsweringForwardBest, \
-    ElectraForQuestionAnsweringMatchAttention, ElectraForQuestionAnsweringCrossAttention, \
-    ElectraForQuestionAnsweringBiAttention, ElectraForQuestionAnsweringCrossAttentionOnReader,\
-    ElectraForQuestionAnsweringThreeCrossAttention, \
-    ElectraForQuestionAnsweringCrossAttentionOnSent, ElectraForQuestionAnsweringForwardBestWithNoise, \
-    ElectraForQuestionAnsweringCrossAttentionWithDP, AlbertForQuestionAnsweringCrossAttention, \
-    AlbertForQuestionAnsweringForwardBest, ElectraForQuestionAnsweringQANet, BertForQuestionAnsweringQANet, \
-    BertForQuestionAnsweringQANetAttentionWeight, AlbertForQuestionAnsweringQANet, \
-    ElectraForQuestionAnsweringQANetAttentionWeight, BertForQuestionAnsweringQANetTrueCoAttention, \
-    BertForQuestionAnsweringQANetTwoCrossAttention, ElectraForQuestionAnsweringQANetTrueCoAttention, \
-    ElectraForQuestionAnsweringTwoCrossAttention, ElectraForQuestionAnsweringTwoFakeCrossAttention, \
-    ElectraForQuestionAnsweringQANetDouble, BertForQuestionAnsweringQANetDoubleCan, \
-    ElectraForQuestionAnsweringQANetDoubleCan, ElectraForQuestionAnsweringQANetWithSentWeight, \
-    DebertaForQuestionAnsweringQANet, ElectraForQuestionAnsweringDivideNet, \
-    ElectraForQuestionAnsweringSelfAttention, ElectraForQuestionAnsweringFFN, \
-    ElectraForQuestionAnsweringCoAttention, ElectraForQuestionAnsweringQANetWoCro, \
-    ElectraForQuestionAnsweringQANetWoLN
+from changed_model import BertForQuestionAnsweringCoAttention, BertForQuestionAnsweringThreeCoAttention, \
+    BertForQuestionAnsweringThreeSameCoAttention, BertForQuestionAnsweringForward, BertForQuestionAnsweringForwardBest,\
+    BertSelfAttentionAndCoAttention, BertTransformer, BertSkipConnectTransformer
 from optimization import BertAdam, warmup_linear
+from tokenization import (BasicTokenizer, BertTokenizer, whitespace_tokenize)
 # 自定义好的模型
 model_dict = {
-    'ElectraForQuestionAnsweringForwardBest': ElectraForQuestionAnsweringForwardBest,
-    'ElectraForQuestionAnsweringForwardWithEntity': ElectraForQuestionAnsweringForwardWithEntity,
-    'ElectraForQuestionAnsweringMatchAttention': ElectraForQuestionAnsweringMatchAttention,
-    'ElectraForQuestionAnsweringCrossAttention': ElectraForQuestionAnsweringCrossAttention,
-    'ElectraForQuestionAnsweringBiAttention': ElectraForQuestionAnsweringBiAttention,
-    'ElectraForQuestionAnsweringCrossAttentionOnReader': ElectraForQuestionAnsweringCrossAttentionOnReader,
-    'ElectraForQuestionAnsweringThreeCrossAttention': ElectraForQuestionAnsweringThreeCrossAttention,
-    'ElectraForQuestionAnsweringCrossAttentionOnSent': ElectraForQuestionAnsweringCrossAttentionOnSent,
-    'ElectraForQuestionAnsweringForwardBestWithNoise': ElectraForQuestionAnsweringForwardBestWithNoise,
-    'ElectraForQuestionAnsweringCrossAttentionWithDP': ElectraForQuestionAnsweringCrossAttentionWithDP,
-    'AlbertForQuestionAnsweringCrossAttention': AlbertForQuestionAnsweringCrossAttention,
-    'AlbertForQuestionAnsweringForwardBest': AlbertForQuestionAnsweringForwardBest,
-    'ElectraForQuestionAnsweringQANet': ElectraForQuestionAnsweringQANet,
-    'BertForQuestionAnsweringQANet': BertForQuestionAnsweringQANet,
-    'BertForQuestionAnsweringQANetAttentionWeight': BertForQuestionAnsweringQANetAttentionWeight,
-    'AlbertForQuestionAnsweringQANet': AlbertForQuestionAnsweringQANet,
-    'ElectraForQuestionAnsweringQANetAttentionWeight': ElectraForQuestionAnsweringQANetAttentionWeight,
-    'BertForQuestionAnsweringQANetTrueCoAttention': BertForQuestionAnsweringQANetTrueCoAttention,
-    'BertForQuestionAnsweringQANetTwoCrossAttention': BertForQuestionAnsweringQANetTwoCrossAttention,
-    'ElectraForQuestionAnsweringQANetTrueCoAttention': ElectraForQuestionAnsweringQANetTrueCoAttention,
-    'ElectraForQuestionAnsweringTwoCrossAttention': ElectraForQuestionAnsweringTwoCrossAttention,
-    'ElectraForQuestionAnsweringTwoFakeCrossAttention': ElectraForQuestionAnsweringTwoFakeCrossAttention,
-    'ElectraForQuestionAnsweringQANetDouble': ElectraForQuestionAnsweringQANetDouble,
-    'BertForQuestionAnsweringQANetDoubleCan': BertForQuestionAnsweringQANetDoubleCan,
-    'ElectraForQuestionAnsweringQANetDoubleCan': ElectraForQuestionAnsweringQANetDoubleCan,
-    'ElectraForQuestionAnsweringQANetWithSentWeight': ElectraForQuestionAnsweringQANetWithSentWeight,
-    'DebertaForQuestionAnsweringQANet': DebertaForQuestionAnsweringQANet,
-    'ElectraForQuestionAnsweringDivideNet': ElectraForQuestionAnsweringDivideNet,
-    'ElectraForQuestionAnsweringSelfAttention': ElectraForQuestionAnsweringSelfAttention,
-    'ElectraForQuestionAnsweringFFN': ElectraForQuestionAnsweringFFN,
-    'ElectraForQuestionAnsweringCoAttention': ElectraForQuestionAnsweringCoAttention,
-    'ElectraForQuestionAnsweringQANetWoCro': ElectraForQuestionAnsweringQANetWoCro,
-    'ElectraForQuestionAnsweringQANetWoLN': ElectraForQuestionAnsweringQANetWoLN
+    'BertForQuestionAnsweringCoAttention': BertForQuestionAnsweringCoAttention,
+    'BertForQuestionAnsweringThreeCoAttention': BertForQuestionAnsweringThreeCoAttention,
+    'BertForQuestionAnsweringThreeSameCoAttention': BertForQuestionAnsweringThreeSameCoAttention,
+    'BertForQuestionAnsweringForward': BertForQuestionAnsweringForward,
+    'BertForQuestionAnsweringForwardBest': BertForQuestionAnsweringForwardBest,
+    'BertSelfAttentionAndCoAttention': BertSelfAttentionAndCoAttention,
+    'BertSkipConnectTransformer': BertSkipConnectTransformer,
+    'BertTransformer': BertTransformer,
 }
-os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = '5678'
+
 logger = None
+os.environ['MASTER_ADDR'] = 'localhost'
+os.environ['MASTER_PORT'] = '12355'
 
 
-def logger_config(log_path, log_prefix='lwj', write2console=True):
+def logger_config(log_path, log_prefix='lwj'):
     """
     日志配置
     :param log_path: 输出的日志路径
     :param log_prefix: 记录中的日志前缀
-    :param write2console: 是否输出到命令行
     :return:
     """
-    global logger
     logger = logging.getLogger(log_prefix)
     logger.setLevel(level=logging.DEBUG)
     handler = logging.FileHandler(log_path, encoding='UTF-8')
     handler.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
-    if write2console:
-        # console相当于控制台输出，handler文件输出。获取流句柄并设置日志级别，第二层过滤
-        console = logging.StreamHandler()
-        console.setLevel(logging.DEBUG)
-        logger.addHandler(console)
+    # console相当于控制台输出，handler文件输出。获取流句柄并设置日志级别，第二层过滤
+    console = logging.StreamHandler()
+    console.setLevel(logging.DEBUG)
     # 为logger对象添加句柄
     logger.addHandler(handler)
-
+    logger.addHandler(console)
     return logger
 
 
-def get_dev_data(args,
-                 tokenizer,
-                 logger=None,
-                 cls_token='',
-                 sep_token='',
-                 unk_token='',
-                 pad_token='',
-                 ):
+def get_dev_data(args, tokenizer, logger=None):
     """ 获取验证集数据 """
-    cached_dev_example_file = '{}/dev_example_file_{}_{}_{}_{}'.format(args.feature_cache_path,
-                                                                       args.bert_model.split('/')[-1],
-                                                                       str(args.max_seq_length),
-                                                                       str(args.doc_stride),
-                                                                       args.feature_suffix)
-    if os.path.exists(cached_dev_example_file):
-        with open(cached_dev_example_file, "rb") as reader:
-            dev_examples = pickle.load(reader)
-    else:
-        dev_examples = read_examples(
-            input_file=args.dev_file,
-            supporting_para_file=args.dev_supporting_para_file,
-            tokenizer=tokenizer,
-            is_training=False)
-        with open(cached_dev_example_file, "wb") as writer:
-            pickle.dump(dev_examples, writer)
+    dev_examples = read_examples(
+        input_file=args.dev_file,
+        supporting_para_file=args.dev_supporting_para_file,
+        tokenizer=tokenizer,
+        is_training=False)
     logger.info('dev examples: {}'.format(len(dev_examples)))
     cached_dev_features_file = '{}/dev_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
                                                                       args.bert_model.split('/')[-1],
@@ -179,61 +118,44 @@ def get_dev_data(args,
             tokenizer=tokenizer,
             max_seq_length=args.max_seq_length,
             doc_stride=args.doc_stride,
-            is_training=True,
-            cls_token=cls_token,
-            sep_token=sep_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-        )
+            is_training=True)
         if args.local_rank == -1 or torch.distributed.get_rank() == 0:
-            logger.info(" Saving dev features into cached file %s", cached_dev_features_file)
+            logger.info("  Saving dev features into cached file %s", cached_dev_features_file)
             with open(cached_dev_features_file, "wb") as writer:
                 pickle.dump(dev_features, writer)
     logger.info('dev feature_num: {}'.format(len(dev_features)))
     dev_data = LazyLoadTensorDataset(dev_features, is_training=False)
+    # if args.local_rank == -1:
     dev_sampler = RandomSampler(dev_data)
+    # else:
+    #     dev_sampler = DistributedSampler(dev_data)
     dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.val_batch_size)
     return dev_examples, dev_dataloader, dev_features
 
 
-def get_train_data(args,
-                   tokenizer,
-                   logger=None,
-                   cls_token='',
-                   sep_token='',
-                   unk_token='',
-                   pad_token='',
-                   ):
+def get_train_data(args, tokenizer, logger=None):
     """ 获取训练数据 """
-    cached_train_example_file = '{}/train_example_file_{}_{}_{}_{}'.format(args.feature_cache_path,
-                                                                           args.bert_model.split('/')[-1],
-                                                                           str(args.max_seq_length),
-                                                                           str(args.doc_stride),
-                                                                           args.feature_suffix)
     cached_train_features_file = '{}/train_feature_file_{}_{}_{}_{}'.format(args.feature_cache_path,
                                                                             args.bert_model.split('/')[-1],
                                                                             str(args.max_seq_length),
                                                                             str(args.doc_stride),
                                                                             args.feature_suffix)
+    if not os.path.exists(args.feature_cache_path):
+        os.makedirs(args.feature_cache_path)
     tmp_cache_file = cached_train_features_file + '_' + str(0)
-    logger.info("creating examples from origin file to {}".format(args.train_file))
-    if os.path.exists(cached_train_example_file):
-        logger.info("read examples from cache file: {}".format(cached_train_example_file))
-        with open(cached_train_example_file, "rb") as reader:
-            train_examples = pickle.load(reader)
-    else:
-        logger.info("read examples from origin file")
+    if not os.path.exists(tmp_cache_file):
+        logger.info("creating examples from origin file to {}".format(args.train_file))
         train_examples = read_examples(
             input_file=args.train_file,
             supporting_para_file=args.train_supporting_para_file,
             tokenizer=tokenizer,
             is_training=True)
-        with open(cached_train_example_file, "wb") as writer:
-            logger.info("saving {} examples to file: {}".format(len(train_examples), cached_train_example_file))
-            pickle.dump(train_examples, writer)
-    # 当数据配置不变时可以设置为定值
-    example_num = len(train_examples)
-    random.shuffle(train_examples)
+        # 当数据配置不变时可以设置为定值
+        example_num = len(train_examples)  # 89899
+        random.shuffle(train_examples)
+    else:
+        logger.info("get examples from cache file {}".format(args.train_file))
+        example_num = 89541
     logger.info("train example num: {}".format(example_num))
     max_train_num = 10000
     start_idxs = list(range(0, example_num, max_train_num))
@@ -256,14 +178,9 @@ def get_train_data(args,
                 tokenizer=tokenizer,
                 max_seq_length=args.max_seq_length,
                 doc_stride=args.doc_stride,
-                is_training=True,
-                cls_token=cls_token,
-                sep_token=sep_token,
-                unk_token=unk_token,
-                pad_token=pad_token
-            )
+                is_training=True)
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
-                logger.info("Saving train features into cached file {}".format(new_cache_file))
+                logger.info("Saving train features into cached file {}".format(cached_train_features_file))
                 with open(new_cache_file, "wb") as writer:
                     pickle.dump(train_features, writer)
         total_feature_num += len(train_features)
@@ -281,28 +198,20 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                                        ["unique_id", "start_logit", "end_logit", "sent_logit"])
 
     with torch.no_grad():
-        for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Dev Iteration")):
-            d_example_indices = d_batch[-1]
+        for d_step, d_batch in enumerate(tqdm(dev_dataloader, desc="Iteration")):
+            d_example_indices = d_batch[-1].squeeze()
             if n_gpu == 1:
                 d_batch = tuple(
                     t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
             else:
                 d_batch = d_batch[:-1]
-            # input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos = d_batch
-            inputs = {
-                "input_ids": d_batch[0],
-                "attention_mask": d_batch[1],
-                "token_type_ids": d_batch[2],
-                "sent_mask": d_batch[3],
-                "pq_end_pos": d_batch[5],
-            }
-            if isinstance(d_example_indices, torch.Tensor) and len(d_example_indices.shape) == 0:
-                d_example_indices = d_example_indices.unsqueeze(0)
-            if len(inputs["input_ids"].shape) < 2:
-                for k, v in inputs.items():
-                    if len(v.shape) < 2:
-                        inputs[k] = v.unsqueeze(0)
-            dev_start_logits, dev_end_logits, dev_sent_logits = model(**inputs)
+            d_all_input_ids, d_all_input_mask, d_all_segment_ids, \
+            d_all_cls_mask, d_all_content_len = d_batch
+            dev_start_logits, dev_end_logits, dev_sent_logits = model(d_all_input_ids,
+                                                                      d_all_input_mask,
+                                                                      d_all_segment_ids,
+                                                                      # word_sim_matrix=d_word_sim_matrix,
+                                                                      sent_mask=d_all_cls_mask)
             for idx, example_index in enumerate(d_example_indices):
                 dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
                 dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
@@ -328,7 +237,7 @@ def run_train(rank=0, world_size=1):
     if os.path.exists(new_model_path):
         args.bert_model = new_model_path
     # 配置日志文件
-    if rank == 0 and not os.path.exists(args.log_path):
+    if not os.path.exists(args.log_path):
         os.makedirs(args.log_path)
     log_path = os.path.join(args.log_path, 'log_{}_{}_{}_{}_{}_{}.log'.format(args.log_prefix,
                                                                               args.bert_model.split('/')[-1],
@@ -372,50 +281,14 @@ def run_train(rank=0, world_size=1):
         raise ValueError("train file not exists! please set train file!")
     if not args.overwrite_result and os.path.exists(args.output_dir) and os.listdir(args.output_dir):
         raise ValueError("Output directory () already exists and is not empty.")
-    if rank == 0 and not os.path.exists(args.output_dir):
+    if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-    # 设置分词器和模型
-    cls_token = '[CLS]'
-    sep_token = '[SEP]'
-    unk_token = '[UNK]'
-    pad_token = '[PAD]'
-    config = None
-    if 'electra' in args.bert_model.lower():
-        tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
-                                                     do_lower_case=args.do_lower_case)
-    elif 'deberta' in args.bert_model.lower():
-        tokenizers = DebertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    elif 'albert' in args.bert_model.lower():
-        cls_token = '[CLS]'
-        sep_token = '[SEP]'
-        pad_token = '<pad>'
-        unk_token = '<unk>'
-        config_class = AlbertConfig()
-        config = config_class.from_pretrained(args.bert_model)
 
-        tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    elif 'roberta' in args.bert_model.lower():
-        cls_token = '<s>'
-        sep_token = '</s>'
-        unk_token = '<unk>'
-        pad_token = '<pad>'
-        tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    elif 'bert' in args.bert_model.lower():
-        tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+
     train_examples = None
     num_train_optimization_steps = None
-    if args.checkpoint_path is None:
-        logger.info("start model from pretrained model!")
-        if config is None:
-            model = model_dict[args.model_name].from_pretrained(args.bert_model)
-        else:
-            model = model_dict[args.model_name].from_pretrained(args.bert_model, config=config)
-    else:
-        logger.info("start model from trained model")
-        if config is None:
-            model = model_dict[args.model_name].from_pretrained(args.checkpoint_path)
-        else:
-            model = model_dict[args.model_name].from_pretrained(args.checkpoint_path, config=config)
+    model = model_dict[args.model_name].from_pretrained(args.bert_model)
     # 半精度和并行化使用设置
     if args.fp16:
         model.half()
@@ -448,15 +321,7 @@ def run_train(rank=0, world_size=1):
     global_step = 0
     logger.info("start read example...")
     # 获取训练集数据
-    if rank == 0 and not os.path.exists(args.feature_cache_path):
-        os.makedirs(args.feature_cache_path)
-    total_feature_num, start_idxs, cached_train_features_file = get_train_data(args,
-                                                                               tokenizer=tokenizer,
-                                                                               logger=logger,
-                                                                               cls_token=cls_token,
-                                                                               sep_token=sep_token,
-                                                                               unk_token=unk_token,
-                                                                               pad_token=pad_token)
+    total_feature_num, start_idxs, cached_train_features_file = get_train_data(args, tokenizer=tokenizer, logger=logger)
     model.train()
     num_train_optimization_steps = int(
         total_feature_num / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
@@ -479,12 +344,6 @@ def run_train(rank=0, world_size=1):
         else:
             optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
     else:
-        # optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-        # if args.warmup_steps == -1:
-        #     args.warmup_steps = num_train_optimization_steps * args.warmup_proportion
-        # scheduler = get_linear_schedule_with_warmup(optimizer,
-        #                                             num_warmup_steps=args.warmup_steps,
-        #                                             num_training_steps=num_train_optimization_steps)
         optimizer = BertAdam(optimizer_grouped_parameters,
                              lr=args.learning_rate,
                              warmup=args.warmup_proportion,
@@ -508,45 +367,25 @@ def run_train(rank=0, world_size=1):
 
             train_dataloader = DataLoader(train_data,
                                           sampler=train_sampler,
-                                          batch_size=args.train_batch_size)
-            for step, batch in enumerate(tqdm(train_dataloader,
-                                              desc="Data:{}/{} Epoch:{}/{} Iteration".format(ind,
-                                                                                             len(start_idxs),
-                                                                                             epoch_idx,
-                                                                                             args.num_train_epochs))):
+                                          batch_size=args.train_batch_size,
+                                          num_workers=4)
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
-                # input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos, start_positions, end_positions, sent_lbs, sent_weight = batch
-                inputs = {
-                    "input_ids": batch[0],
-                    "attention_mask": batch[1],
-                    "token_type_ids": batch[2],
-                    "sent_mask": batch[3],
-                    "pq_end_pos": batch[5],
-                    "start_positions": batch[6],
-                    "end_positions": batch[7],
-                    "sent_lbs": batch[8],
-                    "sent_weight": batch[9]
-                }
-                if len(inputs["input_ids"].shape) < 2:
-                    for k, v in inputs.items():
-                        if len(inputs[k].shape) < 2:
-                            inputs[k] = inputs[k].unsqueeze(0)
-                loss, _, _, _ = model(**inputs)
-                # loss, _, _, _ = model(input_ids,
-                #                       input_mask,
-                #                       segment_ids,
-                #                       # word_sim_matrix=word_sim_matrix,
-                #                       pq_end_pos=pq_end_pos,
-                #                       start_positions=start_positions,
-                #                       end_positions=end_positions,
-                #                       sent_mask=sent_mask,
-                #                       sent_lbs=sent_lbs,
-                #                       sent_weight=sent_weight)
+                input_ids, input_mask, segment_ids, sent_mask, content_len, start_positions, end_positions, sent_lbs, sent_weight = batch
+                loss, _, _, _ = model(input_ids,
+                                      input_mask,
+                                      segment_ids,
+                                      # word_sim_matrix=word_sim_matrix,
+                                      start_positions=start_positions,
+                                      end_positions=end_positions,
+                                      sent_mask=sent_mask,
+                                      sent_lbs=sent_lbs,
+                                      sent_weight=sent_weight)
                 if n_gpu > 1:
                     loss = loss.sum()  # mean() to average on multi-gpu.
-                # logger.debug("step = %d, train_loss=%f", global_step, loss)
+                logger.debug("step = %d, train_loss=%f", global_step, loss)
                 print_loss += loss
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
@@ -555,7 +394,6 @@ def run_train(rank=0, world_size=1):
                     logger.info(
                         "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, ind, global_step,
                                                                                        print_loss))
-                    # logger.info("learning rate: {}".format(scheduler.get_lr()[0]))
                     print_loss = 0
                 if args.fp16:
                     optimizer.backward(loss)
@@ -571,22 +409,12 @@ def run_train(rank=0, world_size=1):
                             param_group['lr'] = lr_this_step
                     optimizer.step()
                     optimizer.zero_grad()
-                    # optimizer.step()
-                    # scheduler.step()
-                    # model.zero_grad()
                     global_step += 1
                 # 保存以及验证模型结果
-                if (global_step) % args.save_model_step == 0 and (step) % args.gradient_accumulation_steps == 0:
+                if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
                     # 获取验证集数据
                     if rank == 0:
-                        dev_examples, dev_dataloader, dev_features = get_dev_data(args,
-                                                                                  tokenizer=tokenizer,
-                                                                                  logger=logger,
-                                                                                  cls_token=cls_token,
-                                                                                  sep_token=sep_token,
-                                                                                  unk_token=unk_token,
-                                                                                  pad_token=pad_token
-                                                                                  )
+                        dev_examples, dev_dataloader, dev_features = get_dev_data(args, tokenizer=tokenizer, logger=logger)
                         ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
                                                                                         dev_dataloader,
                                                                                         n_gpu,
@@ -601,7 +429,7 @@ def run_train(rank=0, world_size=1):
                         del dev_examples, dev_dataloader, dev_features
                         gc.collect()
                     logger.info("max_f1: {}".format(max_f1))
-                    if rank == 0 and joint_f1 > max_f1:
+                    if joint_f1 > max_f1 and rank == 0:
                         logger.info("get better model in step: {} with joint f1: {}".format(global_step, joint_f1))
                         max_f1 = joint_f1
                         model_to_save = model.module if hasattr(model,
@@ -609,44 +437,21 @@ def run_train(rank=0, world_size=1):
                         output_model_file = os.path.join(args.output_dir, 'pytorch_model_best.bin')
                         # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
                         torch.save(model_to_save.state_dict(), output_model_file)
-                        output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
-                        torch.save(model_to_save.state_dict(), output_model_file)
                         output_config_file = os.path.join(args.output_dir, 'config.json')
                         with open(output_config_file, 'w') as f:
                             f.write(model_to_save.config.to_json_string())
                         logger.info('saving step: {} model'.format(global_step))
             # 内存清除
-            del train_features, inputs
-            del train_data, train_dataloader
+            del train_features, input_ids, input_mask, segment_ids
+            del start_positions, end_positions, sent_lbs, sent_mask
+            del sent_weight, train_data, train_dataloader
             gc.collect()
-
     # 保存最后的模型
-    logger.info("t_total: {} global steps: {}".format(num_train_optimization_steps, global_step))
     if rank == 0:
-        dev_examples, dev_dataloader, dev_features = get_dev_data(args,
-                                                                  tokenizer=tokenizer,
-                                                                  logger=logger,
-                                                                  cls_token=cls_token,
-                                                                  sep_token=sep_token,
-                                                                  unk_token=unk_token,
-                                                                  pad_token=pad_token
-                                                                  )
-        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
-                                                                        dev_dataloader,
-                                                                        n_gpu,
-                                                                        device,
-                                                                        dev_features,
-                                                                        tokenizer,
-                                                                        dev_examples)
-        logger.info("final step: {}".format(global_step))
-        logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
-            ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
-        ))
-        del dev_examples, dev_dataloader, dev_features
-        gc.collect()
         model_to_save = model.module if hasattr(model,
                                                 'module') else model  # Only save the model it-self
-        output_model_file = os.path.join(args.output_dir, 'pytorch_model_last.bin')
+        output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
+        # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
         torch.save(model_to_save.state_dict(), output_model_file)
         output_config_file = os.path.join(args.output_dir, 'config.json')
         with open(output_config_file, 'w') as f:
@@ -655,12 +460,11 @@ def run_train(rank=0, world_size=1):
 
 
 if __name__ == "__main__":
-    use_ddp = False
+    use_ddp = True
     if not use_ddp:
         run_train()
     else:
-        torch.multiprocessing.set_start_method('spawn')
-        world_size = 8
+        world_size = 2
         processes = []
         for rank in range(world_size):
             p = Process(target=run_train, args=(rank, world_size))

@@ -1,5 +1,5 @@
 echo "----------------------------------------------------"
-export CUDA_VISIBLE_DEVICES="0"
+export CUDA_VISIBLE_DEVICES="1"
 echo "start train first hop selector..."
 cd ../../src/selector
 # ElectraForRelatedSentence
@@ -11,7 +11,7 @@ OUTPUT_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12
 LOG_PREFIX=20211219_first_hop_electra_large_1e_paragraph_selector_12
 CACHE_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12
 MODEL_NAME=ElectraForParagraphClassification
-PREDICT_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12_origin_result
+PREDICT_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12_result
 #python -u first_hop_selector.py \
 #    --bert_model $BERT_MODEL \
 #    --over_write_result True \
@@ -35,41 +35,41 @@ PREDICT_NAME=20211219_first_hop_electra_large_1e_paragraph_selector_12_origin_re
 #cd ../../src/preprocess
 #python send_email.py $OUTPUT_NAME train完成
 
-echo "----------------------------------------------------"
-echo "start predict first hop result..."
-cd ../../src/selector
-echo "start predict dev first hop result !"
-cd ../../src/selector
-python -u first_hop_selector_predictor.py \
-    --bert_model $BERT_MODEL \
-    --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \
-    --model_name $MODEL_NAME \
-    --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
-    --predict_result_path ../../data/selector/$PREDICT_NAME/ \
-    --best_paragraph_file dev_best_paragraph.json \
-    --related_paragraph_file dev_related_paragraph.json \
-    --new_context_file dev_new_context.json \
-    --max_seq_length 512 \
-    --val_batch_size 512
-echo "predict dev first hop result done!"
-echo "start send email"
-cd ../../src/preprocess
-python send_email.py 20211213_first_hop_related_paragraph_selector predict完成
-echo "----------------------------------------------------"
-echo "start predict train first hop result !"
-cd ../../src/selector
-python -u first_hop_selector_predictor.py \
-    --bert_model $BERT_MODEL \
-    --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \
-    --model_name $MODEL_NAME \
-    --dev_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
-    --predict_result_path ../../data/selector/$PREDICT_NAME/ \
-    --best_paragraph_file train_best_paragraph.json \
-    --related_paragraph_file train_related_paragraph.json \
-    --new_context_file train_new_context.json \
-    --max_seq_length 512 \
-    --val_batch_size 512
-echo "predict train first hop result done!"
+#echo "----------------------------------------------------"
+#echo "start predict first hop result..."
+#cd ../../src/selector
+#echo "start predict dev first hop result !"
+#cd ../../src/selector
+#python -u first_hop_selector_predictor.py \
+#    --bert_model $BERT_MODEL \
+#    --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \
+#    --model_name $MODEL_NAME \
+#    --dev_file ../../data/hotpot_data/hotpot_dev_labeled_data_v3.json \
+#    --predict_result_path ../../data/selector/$PREDICT_NAME/ \
+#    --best_paragraph_file dev_best_paragraph.json \
+#    --related_paragraph_file dev_related_paragraph.json \
+#    --new_context_file dev_new_context.json \
+#    --max_seq_length 512 \
+#    --val_batch_size 512
+#echo "predict dev first hop result done!"
+#echo "start send email"
+#cd ../../src/preprocess
+#python send_email.py 20211213_first_hop_related_paragraph_selector predict完成
+#echo "----------------------------------------------------"
+#echo "start predict train first hop result !"
+#cd ../../src/selector
+#python -u first_hop_selector_predictor.py \
+#    --bert_model $BERT_MODEL \
+#    --checkpoint_path ../../data/checkpoints/selector/$OUTPUT_NAME \
+#    --model_name $MODEL_NAME \
+#    --dev_file ../../data/hotpot_data/hotpot_train_labeled_data_v3.json \
+#    --predict_result_path ../../data/selector/$PREDICT_NAME/ \
+#    --best_paragraph_file train_best_paragraph.json \
+#    --related_paragraph_file train_related_paragraph.json \
+#    --new_context_file train_new_context.json \
+#    --max_seq_length 512 \
+#    --val_batch_size 512
+#echo "predict train first hop result done!"
 
 
 
@@ -79,11 +79,11 @@ echo "----------------------------------------------------"
 # BertForRelatedSentence
 # BertForParagraphClassification
 # google/electra-base-discriminator
-OUTPUT_NAME=20211219_second_hop_electra_large_1e_paragraph_selector_12_origin
-CACHE_NAME=20211219_second_hop_electra_large_1e_paragraph_selector_12_origin
-LOG_PREFIX=20211219_second_hop_electra_large_1e_paragraph_selector_12_origin
-FIRST_PREDICT_PATH=20211219_first_hop_electra_large_1e_paragraph_selector_12_origin_result
-SECOND_PREDICT_PATH=20211219_second_hop_electra_large_1e_paragraph_selector_12_origin_result
+OUTPUT_NAME=20211219_second_hop_electra_large_1e_paragraph_selector_12
+CACHE_NAME=20211219_second_hop_electra_large_1e_paragraph_selector_12
+LOG_PREFIX=20211219_second_hop_electra_large_1e_paragraph_selector_12
+FIRST_PREDICT_PATH=20211219_first_hop_electra_large_1e_paragraph_selector_12_result
+SECOND_PREDICT_PATH=20211219_second_hop_electra_large_1e_paragraph_selector_12_result
 
 echo "start train second hop selector..."
 cd ../../src/selector
