@@ -47,7 +47,6 @@ def convert_examples_to_features(examples,
             token_to_orig_map = {}
             token_is_max_context = {}
             segment_ids = [0, 0, 0]
-            matrix = [0, 0, 0]
 
             for i in range(doc_span.length):
                 split_token_index = doc_span.start + i
@@ -55,13 +54,11 @@ def convert_examples_to_features(examples,
                 is_max_context = _check_is_max_context(doc_spans, doc_span_index,split_token_index)
                 token_is_max_context[len(tokens)] = is_max_context
                 tokens.append(all_doc_tokens[split_token_index])
-                matrix.append(example.subwords_to_matrix[split_token_index])
                 segment_ids.append(0)
             content_len = len(tokens)
             context_end_index = content_len
             tokens.append(sep_token)
             segment_ids.append(0)
-            matrix.append(0)
 
             for query_token in query_tokens:
                 tokens.append(query_token)
@@ -69,7 +66,6 @@ def convert_examples_to_features(examples,
             doc_end_index = len(tokens)
             tokens.append(sep_token)
             segment_ids.append(1)
-            matrix += [0] * len(query_tokens) + [-1]
             pq_end_pos = [context_end_index, doc_end_index]
             input_mask = [1] * len(tokens)
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
@@ -80,12 +76,10 @@ def convert_examples_to_features(examples,
                 tokens.append(pad_token)
                 input_mask.append(0)
                 segment_ids.append(0)
-                matrix.append(-1)
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
-            assert len(matrix) == max_seq_length
 
             start_position_f = None
             end_position_f = None
@@ -109,9 +103,9 @@ def convert_examples_to_features(examples,
                         end_position_f = 0
                 sent_mask = [0] * max_seq_length
                 sent_lbs = [0] * max_seq_length
-                sent_weight = [0]*max_seq_length
+                sent_weight = [0] * max_seq_length
                 for ind_cls, orig_cls in enumerate(example.sent_cls):
-                    if orig_cls>=doc_start and orig_cls<doc_end:
+                    if doc_start <= orig_cls < doc_end:
                         sent_mask[orig_cls-doc_start+3] = 1
                         if example.sent_lbs[ind_cls] == 1:
                             sent_lbs[orig_cls-doc_start+3] = 1
@@ -138,11 +132,6 @@ def convert_examples_to_features(examples,
                     pq_end_pos=pq_end_pos
                     ))
             unique_id += 1
-    # print(datetime.datetime.now())
-    # word_sim_matrixs = word_sim_matrix_generator(features, max_seq_length)
-    # for feature, word_sim_matrix in zip(features, word_sim_matrixs):
-    #     feature.word_sim_matrix = word_sim_matrix
-    # print(datetime.datetime.now())
     return features
 
 
@@ -186,7 +175,6 @@ def convert_dev_examples_to_features(examples,
             token_to_orig_map = {}
             token_is_max_context = {}
             segment_ids = [0, 0, 0]
-            matrix = [0, 0, 0]
 
             for i in range(doc_span.length):
                 split_token_index = doc_span.start + i
@@ -195,12 +183,10 @@ def convert_dev_examples_to_features(examples,
                 token_is_max_context[len(tokens)] = is_max_context
                 tokens.append(all_doc_tokens[split_token_index])
                 segment_ids.append(0)
-                matrix.append(example.subwords_to_matrix[split_token_index])
             content_len = len(tokens)
             context_end_index = content_len
             tokens.append(sep_token)
             segment_ids.append(0)
-            matrix.append(-1)
 
             for token in query_tokens:
                 tokens.append(token)
@@ -208,7 +194,6 @@ def convert_dev_examples_to_features(examples,
             doc_end_index = len(tokens)
             tokens.append(sep_token)
             segment_ids.append(1)
-            matrix += [0] * len(query_tokens) + [-1]
             pq_end_pos = [context_end_index, doc_end_index]
 
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
@@ -220,12 +205,10 @@ def convert_dev_examples_to_features(examples,
                 tokens.append(pad_token)
                 input_mask.append(0)
                 segment_ids.append(0)
-                matrix.append(-1)
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
-            assert len(matrix) == max_seq_length
             sent_mask = [0] * max_seq_length
             doc_start = doc_span.start
             doc_end = doc_span.start + doc_span.length
@@ -248,9 +231,4 @@ def convert_dev_examples_to_features(examples,
                     pq_end_pos=pq_end_pos,
                 ))
             unique_id += 1
-    # print(datetime.datetime.now())
-    # word_sim_matrixs = word_sim_matrix_generator(features, max_seq_length)
-    # for feature, word_sim_matrix in zip(features, word_sim_matrixs):
-    #     feature.word_sim_matrix = word_sim_matrix
-    # print(datetime.datetime.now())
     return features

@@ -44,8 +44,8 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 import pickle
 import gc
-from transformers import ElectraTokenizer, BertTokenizer, RobertaTokenizer, AlbertTokenizer, AlbertConfig
-from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import ElectraTokenizer, BertTokenizer, RobertaTokenizer, AlbertTokenizer, DebertaTokenizer
+from transformers import AdamW, get_linear_schedule_with_warmup, AlbertConfig
 
 from origin_read_examples import read_examples
 from origin_convert_example2features import convert_examples_to_features, convert_dev_examples_to_features
@@ -61,36 +61,60 @@ from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, 
     ElectraForQuestionAnsweringCrossAttentionOnSent, ElectraForQuestionAnsweringForwardBestWithNoise, \
     ElectraForQuestionAnsweringCrossAttentionWithDP, AlbertForQuestionAnsweringCrossAttention, \
     AlbertForQuestionAnsweringForwardBest, ElectraForQuestionAnsweringQANet, BertForQuestionAnsweringQANet, \
-    BertForQuestionAnsweringQANetAttentionWeight, AlbertForQuestionAnsweringQANet
+    BertForQuestionAnsweringQANetAttentionWeight, AlbertForQuestionAnsweringQANet, \
+    ElectraForQuestionAnsweringQANetAttentionWeight, BertForQuestionAnsweringQANetTrueCoAttention, \
+    BertForQuestionAnsweringQANetTwoCrossAttention, ElectraForQuestionAnsweringQANetTrueCoAttention, \
+    ElectraForQuestionAnsweringTwoCrossAttention, ElectraForQuestionAnsweringTwoFakeCrossAttention, \
+    ElectraForQuestionAnsweringQANetDouble, BertForQuestionAnsweringQANetDoubleCan, \
+    ElectraForQuestionAnsweringQANetDoubleCan, ElectraForQuestionAnsweringQANetWithSentWeight, \
+    DebertaForQuestionAnsweringQANet, ElectraForQuestionAnsweringDivideNet, \
+    ElectraForQuestionAnsweringSelfAttention, ElectraForQuestionAnsweringFFN, \
+    ElectraForQuestionAnsweringCoAttention, ElectraForQuestionAnsweringQANetWoCro, \
+    ElectraForQuestionAnsweringQANetWoLN, AlbertForQuestionAnsweringForwardBestWithMask
 from optimization import BertAdam, warmup_linear
 # 自定义好的模型
-# model_dict = {
-#     'ElectraForQuestionAnsweringForwardBest': ElectraForQuestionAnsweringForwardBest,
-#     'ElectraForQuestionAnsweringForwardWithEntity': ElectraForQuestionAnsweringForwardWithEntity,
-#     'ElectraForQuestionAnsweringMatchAttention': ElectraForQuestionAnsweringMatchAttention,
-#     'ElectraForQuestionAnsweringCrossAttention': ElectraForQuestionAnsweringCrossAttention,
-#     'ElectraForQuestionAnsweringBiAttention': ElectraForQuestionAnsweringBiAttention,
-#     'ElectraForQuestionAnsweringCrossAttentionOnReader': ElectraForQuestionAnsweringCrossAttentionOnReader,
-#     'ElectraForQuestionAnsweringThreeCrossAttention': ElectraForQuestionAnsweringThreeCrossAttention,
-#     'ElectraForQuestionAnsweringCrossAttentionOnSent': ElectraForQuestionAnsweringCrossAttentionOnSent,
-#     'ElectraForQuestionAnsweringForwardBestWithNoise': ElectraForQuestionAnsweringForwardBestWithNoise,
-#     'ElectraForQuestionAnsweringCrossAttentionWithDP': ElectraForQuestionAnsweringCrossAttentionWithDP,
-#     'AlbertForQuestionAnsweringCrossAttention': AlbertForQuestionAnsweringCrossAttention,
-#     'AlbertForQuestionAnsweringForwardBest': AlbertForQuestionAnsweringForwardBest,
-#     'ElectraForQuestionAnsweringQANet': ElectraForQuestionAnsweringQANet,
-#     'BertForQuestionAnsweringQANet': BertForQuestionAnsweringQANet,
-#     'BertForQuestionAnsweringQANetAttentionWeight': BertForQuestionAnsweringQANetAttentionWeight,
-#     'AlbertForQuestionAnsweringQANet': AlbertForQuestionAnsweringQANet
-# }
 model_dict = {
-    'AlbertForQuestionAnsweringQANet': (AlbertConfig, AlbertForQuestionAnsweringQANet)
+    'ElectraForQuestionAnsweringForwardBest': ElectraForQuestionAnsweringForwardBest,
+    'ElectraForQuestionAnsweringForwardWithEntity': ElectraForQuestionAnsweringForwardWithEntity,
+    'ElectraForQuestionAnsweringMatchAttention': ElectraForQuestionAnsweringMatchAttention,
+    'ElectraForQuestionAnsweringCrossAttention': ElectraForQuestionAnsweringCrossAttention,
+    'ElectraForQuestionAnsweringBiAttention': ElectraForQuestionAnsweringBiAttention,
+    'ElectraForQuestionAnsweringCrossAttentionOnReader': ElectraForQuestionAnsweringCrossAttentionOnReader,
+    'ElectraForQuestionAnsweringThreeCrossAttention': ElectraForQuestionAnsweringThreeCrossAttention,
+    'ElectraForQuestionAnsweringCrossAttentionOnSent': ElectraForQuestionAnsweringCrossAttentionOnSent,
+    'ElectraForQuestionAnsweringForwardBestWithNoise': ElectraForQuestionAnsweringForwardBestWithNoise,
+    'ElectraForQuestionAnsweringCrossAttentionWithDP': ElectraForQuestionAnsweringCrossAttentionWithDP,
+    'AlbertForQuestionAnsweringCrossAttention': AlbertForQuestionAnsweringCrossAttention,
+    'AlbertForQuestionAnsweringForwardBest': AlbertForQuestionAnsweringForwardBest,
+    'ElectraForQuestionAnsweringQANet': ElectraForQuestionAnsweringQANet,
+    'BertForQuestionAnsweringQANet': BertForQuestionAnsweringQANet,
+    'BertForQuestionAnsweringQANetAttentionWeight': BertForQuestionAnsweringQANetAttentionWeight,
+    'AlbertForQuestionAnsweringQANet': AlbertForQuestionAnsweringQANet,
+    'ElectraForQuestionAnsweringQANetAttentionWeight': ElectraForQuestionAnsweringQANetAttentionWeight,
+    'BertForQuestionAnsweringQANetTrueCoAttention': BertForQuestionAnsweringQANetTrueCoAttention,
+    'BertForQuestionAnsweringQANetTwoCrossAttention': BertForQuestionAnsweringQANetTwoCrossAttention,
+    'ElectraForQuestionAnsweringQANetTrueCoAttention': ElectraForQuestionAnsweringQANetTrueCoAttention,
+    'ElectraForQuestionAnsweringTwoCrossAttention': ElectraForQuestionAnsweringTwoCrossAttention,
+    'ElectraForQuestionAnsweringTwoFakeCrossAttention': ElectraForQuestionAnsweringTwoFakeCrossAttention,
+    'ElectraForQuestionAnsweringQANetDouble': ElectraForQuestionAnsweringQANetDouble,
+    'BertForQuestionAnsweringQANetDoubleCan': BertForQuestionAnsweringQANetDoubleCan,
+    'ElectraForQuestionAnsweringQANetDoubleCan': ElectraForQuestionAnsweringQANetDoubleCan,
+    'ElectraForQuestionAnsweringQANetWithSentWeight': ElectraForQuestionAnsweringQANetWithSentWeight,
+    'DebertaForQuestionAnsweringQANet': DebertaForQuestionAnsweringQANet,
+    'ElectraForQuestionAnsweringDivideNet': ElectraForQuestionAnsweringDivideNet,
+    'ElectraForQuestionAnsweringSelfAttention': ElectraForQuestionAnsweringSelfAttention,
+    'ElectraForQuestionAnsweringFFN': ElectraForQuestionAnsweringFFN,
+    'ElectraForQuestionAnsweringCoAttention': ElectraForQuestionAnsweringCoAttention,
+    'ElectraForQuestionAnsweringQANetWoCro': ElectraForQuestionAnsweringQANetWoCro,
+    'ElectraForQuestionAnsweringQANetWoLN': ElectraForQuestionAnsweringQANetWoLN,
+    'AlbertForQuestionAnsweringForwardBestWithMask': AlbertForQuestionAnsweringForwardBestWithMask,
 }
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
 logger = None
 
 
-def logger_config(log_path, log_prefix='test', write2console=True):
+def logger_config(log_path, log_prefix='lwj', write2console=True):
     """
     日志配置
     :param log_path: 输出的日志路径
@@ -212,7 +236,7 @@ def get_train_data(args,
     example_num = len(train_examples)
     random.shuffle(train_examples)
     logger.info("train example num: {}".format(example_num))
-    max_train_num = 100000
+    max_train_num = 10000
     start_idxs = list(range(0, example_num, max_train_num))
     end_idxs = [x + max_train_num for x in start_idxs]
     end_idxs[-1] = example_num
@@ -265,25 +289,21 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
                     t.squeeze(0).to(device) for t in d_batch[:-1])  # multi-gpu does scattering it-self
             else:
                 d_batch = d_batch[:-1]
-            input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos = d_batch
+            # input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos = d_batch
+            inputs = {
+                "input_ids": d_batch[0],
+                "attention_mask": d_batch[1],
+                "token_type_ids": d_batch[2],
+                "sent_mask": d_batch[3],
+                "pq_end_pos": d_batch[5],
+            }
             if isinstance(d_example_indices, torch.Tensor) and len(d_example_indices.shape) == 0:
                 d_example_indices = d_example_indices.unsqueeze(0)
-            if len(input_ids.shape) < 2:
-                input_ids = input_ids.unsqueeze(0)
-                segment_ids = segment_ids.unsqueeze(0)
-                input_mask = input_mask.unsqueeze(0)
-                pq_end_pos = pq_end_pos.unsqueeze(0)
-                if sent_mask is not None and len(sent_mask.shape) < 2:
-                    # start_positions = start_positions.unsqueeze(0)
-                    # end_positions = end_positions.unsqueeze(0)
-                    sent_mask = sent_mask.unsqueeze(0)
-                    # sent_lbs = sent_lbs.unsqueeze(0)
-                    # sent_weight = sent_weight.unsqueeze(0)
-            dev_start_logits, dev_end_logits, dev_sent_logits = model(input_ids,
-                                                                      input_mask,
-                                                                      segment_ids,
-                                                                      pq_end_pos=pq_end_pos,
-                                                                      sent_mask=sent_mask)
+            if len(inputs["input_ids"].shape) < 2:
+                for k, v in inputs.items():
+                    if len(v.shape) < 2:
+                        inputs[k] = v.unsqueeze(0)
+            dev_start_logits, dev_end_logits, dev_sent_logits = model(**inputs)
             for idx, example_index in enumerate(d_example_indices):
                 dev_start_logit = dev_start_logits[idx].detach().cpu().tolist()
                 dev_end_logit = dev_end_logits[idx].detach().cpu().tolist()
@@ -360,14 +380,20 @@ def run_train(rank=0, world_size=1):
     sep_token = '[SEP]'
     unk_token = '[UNK]'
     pad_token = '[PAD]'
+    config = None
     if 'electra' in args.bert_model.lower():
         tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
                                                      do_lower_case=args.do_lower_case)
+    elif 'deberta' in args.bert_model.lower():
+        tokenizers = DebertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     elif 'albert' in args.bert_model.lower():
         cls_token = '[CLS]'
         sep_token = '[SEP]'
         pad_token = '<pad>'
-        unk_token = '<unk>'
+        unk_token = '<s>'
+        config_class = AlbertConfig()
+        config = config_class.from_pretrained(args.bert_model)
+
         tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     elif 'roberta' in args.bert_model.lower():
         cls_token = '<s>'
@@ -379,14 +405,18 @@ def run_train(rank=0, world_size=1):
         tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     train_examples = None
     num_train_optimization_steps = None
-    config_class, model_class = model_dict[args.model_name]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.bert_model,
-                                          cache_dir=args.cache_dir if args.cache_dir else None)
-    model = model_class.from_pretrained(args.bert_model,
-                                        from_tf=bool('.ckpt' in args.model_name),
-                                        config=config,
-                                        cache_dir=args.cache_dir if args.cache_dir else None)
-    # model = model_dict[args.model_name].from_pretrained(args.bert_model)
+    if args.checkpoint_path is None:
+        logger.info("start model from pretrained model!")
+        if config is None:
+            model = model_dict[args.model_name].from_pretrained(args.bert_model)
+        else:
+            model = model_dict[args.model_name].from_pretrained(args.bert_model, config=config)
+    else:
+        logger.info("start model from trained model")
+        if config is None:
+            model = model_dict[args.model_name].from_pretrained(args.checkpoint_path)
+        else:
+            model = model_dict[args.model_name].from_pretrained(args.checkpoint_path, config=config)
     # 半精度和并行化使用设置
     if args.fp16:
         model.half()
@@ -450,13 +480,16 @@ def run_train(rank=0, world_size=1):
         else:
             optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
     else:
-        # optimizer = BertAdam(optimizer_grouped_parameters,
-        #                      lr=args.learning_rate,
-        #                      warmup=args.warmup_proportion,
-        #                      t_total=num_train_optimization_steps)
-        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps,
-                                                    num_training_steps=num_train_optimization_steps)
+        # optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+        # if args.warmup_steps == -1:
+        #     args.warmup_steps = num_train_optimization_steps * args.warmup_proportion
+        # scheduler = get_linear_schedule_with_warmup(optimizer,
+        #                                             num_warmup_steps=args.warmup_steps,
+        #                                             num_training_steps=num_train_optimization_steps)
+        optimizer = BertAdam(optimizer_grouped_parameters,
+                             lr=args.learning_rate,
+                             warmup=args.warmup_proportion,
+                             t_total=num_train_optimization_steps)
         logger.info("t_total: {}".format(num_train_optimization_steps))
 
     max_f1 = 0
@@ -485,30 +518,35 @@ def run_train(rank=0, world_size=1):
                 if n_gpu == 1:
                     batch = tuple(t.squeeze(0).to(device) for t in batch)  # multi-gpu does scattering it-self
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos, start_positions, end_positions, sent_lbs, sent_weight = batch
-                if len(input_ids.shape) < 2:
-                    input_ids = input_ids.unsqueeze(0)
-                    segment_ids = segment_ids.unsqueeze(0)
-                    input_mask = input_mask.unsqueeze(0)
-                    pq_end_pos = pq_end_pos.unsqueeze(0)
-                    if start_positions is not None and len(start_positions.shape) < 2:
-                        start_positions = start_positions.unsqueeze(0)
-                        end_positions = end_positions.unsqueeze(0)
-                        sent_mask = sent_mask.unsqueeze(0)
-                        sent_lbs = sent_lbs.unsqueeze(0)
-                        sent_weight = sent_weight.unsqueeze(0)
-                loss, _, _, _ = model(input_ids,
-                                      input_mask,
-                                      segment_ids,
-                                      # word_sim_matrix=word_sim_matrix,
-                                      pq_end_pos=pq_end_pos,
-                                      start_positions=start_positions,
-                                      end_positions=end_positions,
-                                      sent_mask=sent_mask,
-                                      sent_lbs=sent_lbs,
-                                      sent_weight=sent_weight)
+                # input_ids, input_mask, segment_ids, sent_mask, content_len, pq_end_pos, start_positions, end_positions, sent_lbs, sent_weight = batch
+                inputs = {
+                    "input_ids": batch[0],
+                    "attention_mask": batch[1],
+                    "token_type_ids": batch[2],
+                    "sent_mask": batch[3],
+                    "pq_end_pos": batch[5],
+                    "start_positions": batch[6],
+                    "end_positions": batch[7],
+                    "sent_lbs": batch[8],
+                    "sent_weight": batch[9]
+                }
+                if len(inputs["input_ids"].shape) < 2:
+                    for k, v in inputs.items():
+                        if len(inputs[k].shape) < 2:
+                            inputs[k] = inputs[k].unsqueeze(0)
+                loss, _, _, _ = model(**inputs)
+                # loss, _, _, _ = model(input_ids,
+                #                       input_mask,
+                #                       segment_ids,
+                #                       # word_sim_matrix=word_sim_matrix,
+                #                       pq_end_pos=pq_end_pos,
+                #                       start_positions=start_positions,
+                #                       end_positions=end_positions,
+                #                       sent_mask=sent_mask,
+                #                       sent_lbs=sent_lbs,
+                #                       sent_weight=sent_weight)
                 if n_gpu > 1:
-                    loss = loss.mean()  # mean() to average on multi-gpu.
+                    loss = loss.sum()  # mean() to average on multi-gpu.
                 # logger.debug("step = %d, train_loss=%f", global_step, loss)
                 print_loss += loss
                 if args.gradient_accumulation_steps > 1:
@@ -518,6 +556,7 @@ def run_train(rank=0, world_size=1):
                     logger.info(
                         "epoch:{:3d},data:{:3d},global_step:{:8d},loss:{:8.3f}".format(epoch_idx, ind, global_step,
                                                                                        print_loss))
+                    # logger.info("learning rate: {}".format(scheduler.get_lr()[0]))
                     print_loss = 0
                 if args.fp16:
                     optimizer.backward(loss)
@@ -532,12 +571,13 @@ def run_train(rank=0, world_size=1):
                         for param_group in optimizer.param_groups:
                             param_group['lr'] = lr_this_step
                     optimizer.step()
-                    scheduler.step()
-                    model.zero_grad()
-                    # optimizer.zero_grad()
+                    optimizer.zero_grad()
+                    # optimizer.step()
+                    # scheduler.step()
+                    # model.zero_grad()
                     global_step += 1
                 # 保存以及验证模型结果
-                if (global_step + 1) % args.save_model_step == 0 and (step + 1) % args.gradient_accumulation_steps == 0:
+                if (global_step) % args.save_model_step == 0 and (step) % args.gradient_accumulation_steps == 0:
                     # 获取验证集数据
                     if rank == 0:
                         dev_examples, dev_dataloader, dev_features = get_dev_data(args,
@@ -570,14 +610,15 @@ def run_train(rank=0, world_size=1):
                         output_model_file = os.path.join(args.output_dir, 'pytorch_model_best.bin')
                         # output_model_file = os.path.join(args.output_dir, 'pytorch_model_{}.bin'.format(global_step))
                         torch.save(model_to_save.state_dict(), output_model_file)
+                        output_model_file = os.path.join(args.output_dir, 'pytorch_model.bin')
+                        torch.save(model_to_save.state_dict(), output_model_file)
                         output_config_file = os.path.join(args.output_dir, 'config.json')
                         with open(output_config_file, 'w') as f:
                             f.write(model_to_save.config.to_json_string())
                         logger.info('saving step: {} model'.format(global_step))
             # 内存清除
-            del train_features, input_ids, input_mask, segment_ids
-            del start_positions, end_positions, sent_lbs, sent_mask
-            del sent_weight, train_data, train_dataloader
+            del train_features, inputs
+            del train_data, train_dataloader
             gc.collect()
 
     # 保存最后的模型
@@ -620,7 +661,7 @@ if __name__ == "__main__":
         run_train()
     else:
         torch.multiprocessing.set_start_method('spawn')
-        world_size = 2
+        world_size = 8
         processes = []
         for rank in range(world_size):
             p = Process(target=run_train, args=(rank, world_size))
