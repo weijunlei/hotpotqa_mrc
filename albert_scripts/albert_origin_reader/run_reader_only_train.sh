@@ -1,16 +1,16 @@
 #!/bin/bash
 echo "----------------------------------------------------"
 # albert-xxlarge-v2
-export CUDA_VISIBLE_DEVICES="0,1"
+export CUDA_VISIBLE_DEVICES="1"
 BERT_MODEL=albert-xxlarge-v2
 MODEL_NAME=AlbertForQuestionAnsweringForwardBestWithMask
 
 # truly train setting
-TRAIN_DIR=../../data/checkpoints/20220116_albert_xxlarge_forward_best_only_train
+TRAIN_DIR=../../data/checkpoints/20220118_albert_xxlarge_forward_best_only_train
 TRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_train_labeled_data_v3.json
 TRAIN_DEV_FILE=../../data/hotpot_data/hotpot_dev_labeled_data_v3.json
-TRAIN_LOG=20220116_albert_xxlarge_forward_best_only_train
-TRAIN_CACHE=../../data/cache/20220116_albert_xxlarge_forward_best_only_train
+TRAIN_LOG=20220118_albert_xxlarge_forward_best_only_train
+TRAIN_CACHE=../../data/cache/20220118_albert_xxlarge_forward_best_only_train
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
                # BertForQuestionAnsweringThreeSameCoAttention,

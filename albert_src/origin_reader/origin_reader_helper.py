@@ -18,35 +18,26 @@ class HotpotQAExample(object):
 
     def __init__(self,
                  qas_id,
-                 question_text,
-                 orig_tokens,
-                 doc_tokens,
                  question_tokens,
+                 sentence_masks,
+                 doc_tokens,
+                 origin_answer_text,
+                 question_text,
                  sub_to_orig_index,
-                 orig_answer_text=None,
                  start_position=None,
                  end_position=None,
-                 sent_cls=None,
-                 sent_lbs=None,
-                 full_sents_mask=None,
-                 full_sents_lbs=None,
-                 mask_matrix=None,
-                 subwords_to_matrix=None):
+                 sentence_labels=None,
+                 ):
         self.qas_id = qas_id
         self.question_text = question_text
-        self.orig_tokens = orig_tokens
+        self.sentence_masks = sentence_masks
         self.sub_to_orig_index = sub_to_orig_index
+        self.origin_answer_text = origin_answer_text
         self.doc_tokens = doc_tokens
         self.question_tokens = question_tokens
-        self.orig_answer_text = orig_answer_text
         self.start_position = start_position
         self.end_position = end_position
-        self.sent_cls = sent_cls
-        self.sent_lbs = sent_lbs
-        self.full_sents_mask = full_sents_mask
-        self.full_sents_lbs = full_sents_lbs
-        self.mask_matrix = mask_matrix
-        self.subwords_to_matrix = subwords_to_matrix
+        self.sentence_labels = sentence_labels
 
     def __str__(self):
         return self.__repr__()

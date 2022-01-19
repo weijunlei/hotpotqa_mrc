@@ -147,6 +147,7 @@ def get_dev_data(args,
                  sep_token='',
                  unk_token='',
                  pad_token='',
+                 sentence_token='',
                  ):
     """ 获取验证集数据 """
     cached_dev_example_file = '{}/dev_example_file_{}_{}_{}_{}'.format(args.feature_cache_path,
@@ -162,7 +163,9 @@ def get_dev_data(args,
             input_file=args.dev_file,
             supporting_para_file=args.dev_supporting_para_file,
             tokenizer=tokenizer,
-            is_training=False)
+            is_training=False,
+            sentence_token=sentence_token
+        )
         with open(cached_dev_example_file, "wb") as writer:
             pickle.dump(dev_examples, writer)
     logger.info('dev examples: {}'.format(len(dev_examples)))
@@ -204,6 +207,7 @@ def get_train_data(args,
                    sep_token='',
                    unk_token='',
                    pad_token='',
+                   sentence_token='',
                    ):
     """ 获取训练数据 """
     cached_train_example_file = '{}/train_example_file_{}_{}_{}_{}'.format(args.feature_cache_path,
@@ -228,7 +232,9 @@ def get_train_data(args,
             input_file=args.train_file,
             supporting_para_file=args.train_supporting_para_file,
             tokenizer=tokenizer,
-            is_training=True)
+            is_training=True,
+            sentence_token=sentence_token
+        )
         with open(cached_train_example_file, "wb") as writer:
             logger.info("saving {} examples to file: {}".format(len(train_examples), cached_train_example_file))
             pickle.dump(train_examples, writer)
@@ -384,25 +390,38 @@ def run_train(rank=0, world_size=1):
     if 'electra' in args.bert_model.lower():
         tokenizer = ElectraTokenizer.from_pretrained(args.bert_model,
                                                      do_lower_case=args.do_lower_case)
+        cls_token = tokenizer.cls_token
+        sep_token = tokenizer.sep_token
+        pad_token = tokenizer.pad_token
+        unk_token = tokenizer.unk_token
+        sentence_token = '<e>'
     elif 'deberta' in args.bert_model.lower():
-        tokenizers = DebertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        tokenizer = DebertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        cls_token = tokenizer.cls_token
+        sep_token = tokenizer.sep_token
+        pad_token = tokenizer.pad_token
+        unk_token = tokenizer.unk_token
     elif 'albert' in args.bert_model.lower():
-        cls_token = '[CLS]'
-        sep_token = '[SEP]'
-        pad_token = '<pad>'
-        unk_token = '<s>'
+        tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        cls_token = tokenizer.cls_token
+        sep_token = tokenizer.sep_token
+        pad_token = tokenizer.pad_token
+        unk_token = tokenizer.unk_token
+        sentence_token = '<unk>'
         config_class = AlbertConfig()
         config = config_class.from_pretrained(args.bert_model)
-
-        tokenizer = AlbertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     elif 'roberta' in args.bert_model.lower():
-        cls_token = '<s>'
-        sep_token = '</s>'
-        unk_token = '<unk>'
-        pad_token = '<pad>'
         tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        cls_token = tokenizer.cls_token
+        sep_token = tokenizer.sep_token
+        pad_token = tokenizer.pad_token
+        unk_token = tokenizer.unk_token
     elif 'bert' in args.bert_model.lower():
         tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+        cls_token = tokenizer.cls_token
+        sep_token = tokenizer.sep_token
+        pad_token = tokenizer.pad_token
+        unk_token = tokenizer.unk_token
     train_examples = None
     num_train_optimization_steps = None
     if args.checkpoint_path is None:
@@ -457,7 +476,9 @@ def run_train(rank=0, world_size=1):
                                                                                cls_token=cls_token,
                                                                                sep_token=sep_token,
                                                                                unk_token=unk_token,
-                                                                               pad_token=pad_token)
+                                                                               pad_token=pad_token,
+                                                                               sentence_token=sentence_token
+                                                                               )
     model.train()
     num_train_optimization_steps = int(
         total_feature_num / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
@@ -586,7 +607,8 @@ def run_train(rank=0, world_size=1):
                                                                                   cls_token=cls_token,
                                                                                   sep_token=sep_token,
                                                                                   unk_token=unk_token,
-                                                                                  pad_token=pad_token
+                                                                                  pad_token=pad_token,
+                                                                                  sentence_token=sentence_token
                                                                                   )
                         ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
                                                                                         dev_dataloader,
