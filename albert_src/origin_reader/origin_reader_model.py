@@ -44,7 +44,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 import pickle
 import gc
-from transformers import ElectraTokenizer, BertTokenizer, RobertaTokenizer, AlbertTokenizer, DebertaTokenizer
+from transformers import ElectraTokenizer, BertTokenizer, RobertaTokenizer, AlbertTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup, AlbertConfig
 
 from origin_read_examples import read_examples
@@ -67,7 +67,7 @@ from changed_model_roberta import ElectraForQuestionAnsweringForwardWithEntity, 
     ElectraForQuestionAnsweringTwoCrossAttention, ElectraForQuestionAnsweringTwoFakeCrossAttention, \
     ElectraForQuestionAnsweringQANetDouble, BertForQuestionAnsweringQANetDoubleCan, \
     ElectraForQuestionAnsweringQANetDoubleCan, ElectraForQuestionAnsweringQANetWithSentWeight, \
-    DebertaForQuestionAnsweringQANet, ElectraForQuestionAnsweringDivideNet, \
+    ElectraForQuestionAnsweringDivideNet, \
     ElectraForQuestionAnsweringSelfAttention, ElectraForQuestionAnsweringFFN, \
     ElectraForQuestionAnsweringCoAttention, ElectraForQuestionAnsweringQANetWoCro, \
     ElectraForQuestionAnsweringQANetWoLN, AlbertForQuestionAnsweringForwardBestWithMask
@@ -100,7 +100,6 @@ model_dict = {
     'BertForQuestionAnsweringQANetDoubleCan': BertForQuestionAnsweringQANetDoubleCan,
     'ElectraForQuestionAnsweringQANetDoubleCan': ElectraForQuestionAnsweringQANetDoubleCan,
     'ElectraForQuestionAnsweringQANetWithSentWeight': ElectraForQuestionAnsweringQANetWithSentWeight,
-    'DebertaForQuestionAnsweringQANet': DebertaForQuestionAnsweringQANet,
     'ElectraForQuestionAnsweringDivideNet': ElectraForQuestionAnsweringDivideNet,
     'ElectraForQuestionAnsweringSelfAttention': ElectraForQuestionAnsweringSelfAttention,
     'ElectraForQuestionAnsweringFFN': ElectraForQuestionAnsweringFFN,

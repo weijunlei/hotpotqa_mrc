@@ -14,28 +14,28 @@ def get_config():
     """ 模型配置 """
     parser = argparse.ArgumentParser()
     ## Required parameters
-    parser.add_argument("--bert_model", default='roberta-large', type=str,
+    parser.add_argument("--bert_model", default='albert-xxlarge-v2', type=str,
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
                              "bert-base-multilingual-cased, bert-base-chinese.")
-    parser.add_argument("--output_dir", default='../../data/checkpoints/qa_base_20211022_with_entity_wo_question_entity_dim_10_wi_context_mask', type=str,
+    parser.add_argument("--output_dir", default='../../data/checkpoints/20220118_albert_xxlarge_forward_best_only_train', type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
     parser.add_argument("--checkpoint_path", default=None, type=str)
     parser.add_argument("--warmup_steps", default=-1, type=int)
-    parser.add_argument("--model_name", type=str, default='RobertaForQuestionAnsweringForwardBest',
+    parser.add_argument("--model_name", type=str, default='AlbertForQuestionAnsweringForwardBestWithMask',
                         help="must be BertForQuestionAnsweringCoAttention"
                              "\BertForQuestionAnsweringThreeCoAttention"
                              "\BertForQuestionAnsweringThreeSameCoAttention"
                              "\BertForQuestionAnsweringForward")
-    parser.add_argument("--train_file", default='../../data/hotpot_data/hotpot_train_labeled_data_v3_with_entity_label.json', type=str,
+    parser.add_argument("--train_file", default='../../data/hotpot_data/hotpot_train_labeled_data_v3.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     # 设置是否重新写入结果
     # parser.add_argument("--overwrite_result", dest='overwrite_result', action='store_true')
     # parser.add_argument("--no-over_write_result", dest='overwrite_result', action='store_false')
     parser.add_argument("--overwrite_result", type=str2bool, default=True)
-    parser.add_argument("--log_prefix", default="qa_base_20211022_with_entity_test", type=str)
+    parser.add_argument("--log_prefix", default="20220118_albert_xxlarge_forward_best_only_train", type=str)
     parser.add_argument("--log_path", default="../../log", type=str)
-    parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_labeled_data_v3_with_entity_label.json', type=str,
+    parser.add_argument("--dev_file", default='../../data/hotpot_data/hotpot_dev_labeled_data_v3.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--train_supporting_para_file",
                         default='../../data/selector/second_hop_related_paragraph_result/train_related.json', type=str,
@@ -43,7 +43,7 @@ def get_config():
     parser.add_argument("--dev_supporting_para_file",
                         default='../../data/selector/second_hop_related_paragraph_result/dev_related.json', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--feature_cache_path", default='../../data/cache/test', type=str,
+    parser.add_argument("--feature_cache_path", default='../../data/cache/20220118_albert_xxlarge_forward_best_only_train', type=str,
                         help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--feature_suffix", default="origin_model", type=str,
                         help="cache feature suffix")

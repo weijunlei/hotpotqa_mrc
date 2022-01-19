@@ -44,6 +44,8 @@ def convert_examples_to_features(examples,
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
             tokens = [cls_token, "yes", "no"]
+            sentence_masks = [0, 0, 0]
+            sentence_labels = [0, 0, 0]
             token_to_orig_map = {}
             token_is_max_context = {}
             segment_ids = [0, 0, 0]
@@ -51,20 +53,28 @@ def convert_examples_to_features(examples,
             for i in range(doc_span.length):
                 split_token_index = doc_span.start + i
                 token_to_orig_map[len(tokens)] = split_token_index
-                is_max_context = _check_is_max_context(doc_spans, doc_span_index,split_token_index)
+                is_max_context = _check_is_max_context(doc_spans, doc_span_index, split_token_index)
                 token_is_max_context[len(tokens)] = is_max_context
                 tokens.append(all_doc_tokens[split_token_index])
+                sentence_masks.append(example.sentence_masks[split_token_index])
+                sentence_labels.append(example.sentence_labels[split_token_index])
                 segment_ids.append(0)
             content_len = len(tokens)
             context_end_index = content_len
             tokens.append(sep_token)
+            sentence_masks.append(0)
+            sentence_labels.append(0)
             segment_ids.append(0)
 
             for query_token in query_tokens:
                 tokens.append(query_token)
+                sentence_masks.append(0)
+                sentence_labels.append(0)
                 segment_ids.append(1)
             doc_end_index = len(tokens)
             tokens.append(sep_token)
+            sentence_masks.append(0)
+            sentence_labels.append(0)
             segment_ids.append(1)
             pq_end_pos = [context_end_index, doc_end_index]
             input_mask = [1] * len(tokens)
@@ -74,12 +84,16 @@ def convert_examples_to_features(examples,
             # Zero-pad up to the sequence length.
             while len(tokens) < max_seq_length:
                 tokens.append(pad_token)
+                sentence_masks.append(0)
+                sentence_labels.append(0)
                 input_mask.append(0)
                 segment_ids.append(0)
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
+            assert len(sentence_masks) == max_seq_length
+            assert len(sentence_labels) == max_seq_length
 
             start_position_f = None
             end_position_f = None
@@ -94,24 +108,17 @@ def convert_examples_to_features(examples,
                 elif example.start_position == -2 and example.end_position == -2:
                     start_position_f = 2
                     end_position_f = 2
+                elif example.start_position == -3 and example.end_position == -3:
+                    start_position_f = 0
+                    end_position_f = 0
                 else:
                     if example.start_position >= doc_start and example.end_position <= doc_end:
-                        start_position_f = example.start_position-doc_start+3
+                        start_position_f = example.start_position - doc_start + 3
                         end_position_f = example.end_position-doc_start+2
                     else:
                         start_position_f = 0
                         end_position_f = 0
-                sent_mask = [0] * max_seq_length
-                sent_lbs = [0] * max_seq_length
                 sent_weight = [0] * max_seq_length
-                for ind_cls, orig_cls in enumerate(example.sent_cls):
-                    if doc_start <= orig_cls < doc_end:
-                        sent_mask[orig_cls-doc_start+3] = 1
-                        if example.sent_lbs[ind_cls] == 1:
-                            sent_lbs[orig_cls-doc_start+3] = 1
-                            sent_weight[orig_cls-doc_start+3] = 1
-                        else:
-                            sent_weight[orig_cls - doc_start + 3] = 0.5
             features.append(
                 InputFeatures(
                     unique_id=unique_id,
@@ -125,8 +132,8 @@ def convert_examples_to_features(examples,
                     segment_ids=segment_ids,
                     start_position=start_position_f,
                     end_position=end_position_f,
-                    sent_mask=sent_mask,
-                    sent_lbs=sent_lbs,
+                    sent_mask=sentence_masks,
+                    sent_lbs=sentence_labels,
                     sent_weight=sent_weight,
                     content_len=content_len,
                     pq_end_pos=pq_end_pos
@@ -172,6 +179,7 @@ def convert_dev_examples_to_features(examples,
             start_offset += min(length, doc_stride)
         for (doc_span_index, doc_span) in enumerate(doc_spans):
             tokens = [cls_token, "yes", "no"]
+            sentence_masks = [0, 0, 0]
             token_to_orig_map = {}
             token_is_max_context = {}
             segment_ids = [0, 0, 0]
@@ -182,17 +190,21 @@ def convert_dev_examples_to_features(examples,
                 is_max_context = _check_is_max_context(doc_spans, doc_span_index, split_token_index)
                 token_is_max_context[len(tokens)] = is_max_context
                 tokens.append(all_doc_tokens[split_token_index])
+                sentence_masks.append(example.sentence_masks[split_token_index])
                 segment_ids.append(0)
             content_len = len(tokens)
             context_end_index = content_len
             tokens.append(sep_token)
+            sentence_masks.append(0)
             segment_ids.append(0)
 
             for token in query_tokens:
                 tokens.append(token)
+                sentence_masks.append(0)
                 segment_ids.append(1)
             doc_end_index = len(tokens)
             tokens.append(sep_token)
+            sentence_masks.append(0)
             segment_ids.append(1)
             pq_end_pos = [context_end_index, doc_end_index]
 
@@ -203,18 +215,17 @@ def convert_dev_examples_to_features(examples,
             # Zero-pad up to the sequence length.
             while len(tokens) < max_seq_length:
                 tokens.append(pad_token)
+                sentence_masks.append(0)
                 input_mask.append(0)
                 segment_ids.append(0)
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
+            assert len(sentence_masks) == max_seq_length
             sent_mask = [0] * max_seq_length
             doc_start = doc_span.start
             doc_end = doc_span.start + doc_span.length
-            for ind_cls, orig_cls in enumerate(example.sent_cls):
-                if orig_cls >= doc_start and orig_cls < doc_end:
-                    sent_mask[orig_cls - doc_start + 3] = 1
             features.append(
                 InputFeatures(
                     unique_id=unique_id,
@@ -226,7 +237,7 @@ def convert_dev_examples_to_features(examples,
                     input_ids=input_ids,
                     input_mask=input_mask,
                     segment_ids=segment_ids,
-                    sent_mask=sent_mask,
+                    sent_mask=sentence_masks,
                     content_len=content_len,
                     pq_end_pos=pq_end_pos,
                 ))
