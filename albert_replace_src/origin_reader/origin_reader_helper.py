@@ -462,12 +462,20 @@ def write_predictions(tokenizer, all_examples, all_features, all_results, n_best
                 if len(output_tokens) == 0 or input_token.startswith("▁"):
                     output_tokens.append(input_token.lstrip("▁"))
                 else:
-                    output_tokens[-1] += input_tokens
+                    output_tokens[-1] += input_token
+            return output_tokens
+        is_albert = False
+        for token in feature.tokens:
+            if "▁" in token:
+                is_albert = True
+                break
         for pred in prelim_predictions:
             feature = features[pred.feature_index]
             if pred.start_index > 0:  # this is a non-null prediction
                 tok_tokens = feature.tokens[pred.start_index:(pred.end_index + 1)]
                 tok_tokens = [tt for tt in tok_tokens if tt != '<unk>']
+                if is_albert:
+                    tok_tokens = _token_helper(tok_tokens)
                 orig_doc_start = example.sub_to_orig_index[feature.token_to_orig_map[pred.start_index]]
                 orig_doc_end = example.sub_to_orig_index[feature.token_to_orig_map[pred.end_index]]
                 orig_tokens = example.orig_tokens[orig_doc_start:(orig_doc_end + 1)]

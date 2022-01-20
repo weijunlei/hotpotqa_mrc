@@ -641,13 +641,15 @@ def run_train(rank=0, world_size=1):
                                                                   unk_token=unk_token,
                                                                   pad_token=pad_token
                                                                   )
-        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
-                                                                        dev_dataloader,
-                                                                        n_gpu,
-                                                                        device,
-                                                                        dev_features,
-                                                                        tokenizer,
-                                                                        dev_examples)
+        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(args=args,
+                                                                        model=model,
+                                                                        dev_dataloader=dev_dataloader,
+                                                                        n_gpu=n_gpu,
+                                                                        device=device,
+                                                                        dev_features=dev_features,
+                                                                        tokenizer=tokenizer,
+                                                                        dev_examples=dev_examples,
+                                                                        step=global_step)
         logger.info("final step: {}".format(global_step))
         logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
             ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
