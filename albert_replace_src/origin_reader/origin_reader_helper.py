@@ -18,38 +18,35 @@ class HotpotQAExample(object):
 
     def __init__(self,
                  qas_id,
-                 question_tokens,
-                 sentence_masks,
-                 doc_tokens,
-                 context,
-                 origin_answer_text,
                  question_text,
+                 orig_tokens,
+                 doc_tokens,
+                 question_tokens,
                  sub_to_orig_index,
-                 all_doc_token_to_add_mark,
-                 add_mark_to_doc_token,
-                 doc_token_lens,
-                 doc_to_char_offset,
-                 full_sents_lbs=None,
+                 orig_answer_text=None,
                  start_position=None,
                  end_position=None,
-                 sentence_labels=None,
-                 ):
+                 sent_cls=None,
+                 sent_lbs=None,
+                 full_sents_mask=None,
+                 full_sents_lbs=None,
+                 mask_matrix=None,
+                 subwords_to_matrix=None):
         self.qas_id = qas_id
         self.question_text = question_text
-        self.sentence_masks = sentence_masks
+        self.orig_tokens = orig_tokens
         self.sub_to_orig_index = sub_to_orig_index
-        self.all_doc_token_to_add_mark = all_doc_token_to_add_mark
-        self.add_mark_to_doc_token = add_mark_to_doc_token
-        self.doc_token_lens = doc_token_lens
-        self.doc_to_char_offset = doc_to_char_offset
-        self.origin_answer_text = origin_answer_text
         self.doc_tokens = doc_tokens
-        self.context = context
         self.question_tokens = question_tokens
-        self.full_sents_lbs=full_sents_lbs
+        self.orig_answer_text = orig_answer_text
         self.start_position = start_position
         self.end_position = end_position
-        self.sentence_labels = sentence_labels
+        self.sent_cls = sent_cls
+        self.sent_lbs = sent_lbs
+        self.full_sents_mask = full_sents_mask
+        self.full_sents_lbs = full_sents_lbs
+        self.mask_matrix = mask_matrix
+        self.subwords_to_matrix = subwords_to_matrix
 
     def __str__(self):
         return self.__repr__()
@@ -377,17 +374,6 @@ def is_whitespace(ch):
     return False
 
 
-def get_origin_context_index(all_doc_token_index, all_doc_token_to_add_mark, add_mark_to_doc_token, doc_token_lens,
-                             doc_to_char_offset, is_end):
-    add_mark_idx = all_doc_token_to_add_mark[all_doc_token_index]
-    doc_idx = add_mark_to_doc_token[add_mark_idx]
-    doc_token_len = doc_token_lens[doc_idx]
-    ch_idx = doc_to_char_offset[doc_idx]
-    if is_end:
-        ch_idx += doc_token_len
-    return ch_idx
-
-
 def write_predictions(tokenizer, all_examples, all_features, all_results, n_best_size=20,
                       max_answer_length=20, do_lower_case=True):
     """Write final predictions to the json file and log-odds of null if needed."""
@@ -410,12 +396,6 @@ def write_predictions(tokenizer, all_examples, all_features, all_results, n_best
     scores_diff_json = collections.OrderedDict()
     sp_preds = {}
     for (example_index, example) in enumerate(all_examples):
-        all_doc_tokens = example.doc_tokens
-        all_doc_token_to_add_mark = example.all_doc_token_to_add_mark
-        add_mark_to_doc_token = example.add_mark_to_doc_token
-        doc_token_lens = example.doc_token_lens
-        doc_to_char_offset = example.doc_to_char_offset
-        example_context = example.context
         features = example_index_to_features[example_index]
         prelim_predictions = []
         # keep track of the minimum score of null start+end of position 0
@@ -442,6 +422,8 @@ def write_predictions(tokenizer, all_examples, all_features, all_results, n_best
                         continue
                     if end_index >= len(feature.tokens):
                         continue
+                    if start_index not in feature.token_to_orig_map:
+                        continue
                     if end_index not in feature.token_to_orig_map:
                         continue
                     if not feature.token_is_max_context.get(start_index, False):
@@ -459,64 +441,84 @@ def write_predictions(tokenizer, all_examples, all_features, all_results, n_best
                             start_logit=result.start_logit[start_index],
                             end_logit=result.end_logit[end_index]))
         # sent cls 是每个句子的标记位
-        origin_sent_indexs = []
-        origin_index2idx = {}
-        for sent_index, sent_mask in enumerate(example.sentence_masks):
-            if sent_mask == 1:
-                origin_index2idx[sent_index] = len(origin_sent_indexs)
-                origin_sent_indexs.append(sent_index)
-        sp_pred = [0 for _ in range(len(origin_sent_indexs))]
-        # for sent_mask_index, sent_mask in enumerate(feature.sent_mask):
-        #     if sent_mask == 1:
-        #         origin_token_index = feature.token_to_orig_map[sent_mask_index] if sent_mask_index in feature.token_to_orig_map else -1
-        #         if origin_token_index in origin_index2idx:
-        #             sp_pred[origin_index2idx[origin_token_index]] = sent_pred_logit[sent_mask_index]
-        sp_idx = 0
-        for sentence_mask_idx, sentence_mask in enumerate(example.sentence_masks):
-            if sentence_mask == 1:
-                sp_pred[sp_idx] = sent_pred_logit[sentence_mask_idx]
-                sp_idx += 1
+        sent_pred_logit = [spl for ind_spl, spl in enumerate(sent_pred_logit) if ind_spl in example.sent_cls]
+        sp_pred = []
+        pointer = 0
+        for fsm in example.full_sents_mask:
+            if fsm == 0:
+                sp_pred.append(0.0)
+            else:
+                sp_pred.append(sent_pred_logit[pointer])
+                pointer += 1
         sp_preds[example.qas_id] = sp_pred
         _NbestPrediction = collections.namedtuple(  # pylint: disable=invalid-name
             "NbestPrediction", ["start", "end", "text", "start_logit", 'end_logit'])
 
         seen_predictions = {}
         nbest = []
+        def _token_helper(input_tokens):
+            output_tokens = []
+            for input_token in input_tokens:
+                if len(output_tokens) == 0 or input_token.startswith("▁"):
+                    output_tokens.append(input_token.lstrip("▁"))
+                else:
+                    output_tokens[-1] += input_tokens
         for pred in prelim_predictions:
             feature = features[pred.feature_index]
             if pred.start_index > 0:  # this is a non-null prediction
-                input_start = feature.token_to_orig_map[pred.start_index]
-                input_end = feature.token_to_orig_map[pred.end_index]
-                back_start = get_origin_context_index(all_doc_token_index=input_start,
-                                                      all_doc_token_to_add_mark=all_doc_token_to_add_mark,
-                                                      add_mark_to_doc_token=add_mark_to_doc_token,
-                                                      doc_token_lens=doc_token_lens,
-                                                      doc_to_char_offset=doc_to_char_offset,
-                                                      is_end=False)
-                back_end = get_origin_context_index(all_doc_token_index=input_end,
-                                                    all_doc_token_to_add_mark=all_doc_token_to_add_mark,
-                                                    add_mark_to_doc_token=add_mark_to_doc_token,
-                                                    doc_token_lens=doc_token_lens,
-                                                    doc_to_char_offset=doc_to_char_offset,
-                                                    is_end=True)
-                final_text = example_context[back_start: back_end]
+                tok_tokens = feature.tokens[pred.start_index:(pred.end_index + 1)]
+                tok_tokens = [tt for tt in tok_tokens if tt != '<unk>']
+                orig_doc_start = example.sub_to_orig_index[feature.token_to_orig_map[pred.start_index]]
+                orig_doc_end = example.sub_to_orig_index[feature.token_to_orig_map[pred.end_index]]
+                orig_tokens = example.orig_tokens[orig_doc_start:(orig_doc_end + 1)]
+                orig_tokens = [ot for ot in orig_tokens if ot != '<unk>']
+
+                tok_text = " ".join(tok_tokens)
+                tok_text = tok_text.replace("##", "")
+                tok_text = tok_text.replace(" ##", "")
+                tok_text = tok_text.replace("##", "")
+                tok_text = tok_text.replace("▁", "")
+                tok_text = tok_text.strip()
+                tok_text = " ".join(tok_text.split())
+                # tok_text=tokenizer.convert_tokens_to_string(tok_tokens)
+
+                orig_text = " ".join(orig_tokens)
+                # orig_text = orig_text.replace("##", "").strip()
+                # orig_text = orig_text.strip()
+                # orig_text = " ".join(orig_text.split())
+                # orig_text=tokenizer.convert_tokens_to_string(orig_tokens)
+
+                final_text = get_final_text(tok_text, orig_text, do_lower_case, False)
+                tok_text_f = ''.join(tok_text.split())
+                final_text_f = ''.join(final_text.split()).lower()
+                start_offset = final_text_f.find(tok_text_f)
+                end_offset = len(final_text_f) - start_offset - len(tok_text_f)
+                if start_offset >= 0:
+                    if end_offset != 0:
+                        final_text = final_text[start_offset:-end_offset]
+                    else:
+                        final_text = final_text[start_offset:]
                 if final_text in seen_predictions:
                     continue
                 seen_predictions[final_text] = True
-                nbest.append(
-                    _NbestPrediction(
-                        start=back_start,
-                        end=back_end,
-                        text=final_text,
-                        start_logit=pred.start_logit,
-                        end_logit=pred.end_logit))
+            else:
+                final_text = ""
+                seen_predictions[final_text] = True
+
+            nbest.append(
+                _NbestPrediction(
+                    start=orig_doc_start,
+                    end=orig_doc_end,
+                    text=final_text,
+                    start_logit=pred.start_logit,
+                    end_logit=pred.end_logit))
 
         # In very rare edge cases we could have no valid predictions. So we
         # just create a nonce prediction in this case to avoid failure.
         # if not nbest:
         #     nbest.append(
         #         _NbestPrediction(start=0, end=0, text="", logit=-1e6))
-        # nbest.append(_NbestPrediction(start=0, end=0, text="", start_logit=result.start_logit[0], end_logit=result.end_logit[0]))
+        # nbest.append(_NbestPrediction(start=0, end=0, text="", logit=result.start_logit[0]+result.end_logit[0]))
         nbest.append(_NbestPrediction(start=1, end=1, text="yes", start_logit=result.start_logit[1],
                                       end_logit=result.end_logit[1]))
         nbest.append(_NbestPrediction(start=2, end=2, text="no", start_logit=result.start_logit[2],
@@ -544,6 +546,7 @@ def write_predictions(tokenizer, all_examples, all_features, all_results, n_best
             nbest_json.append(output)
 
         all_predictions[example.qas_id] = nbest_json[0]
+
     return nbest_json, all_predictions, sp_preds
 
 
@@ -677,7 +680,7 @@ def evaluate(eval_examples, answer_dict, sp_preds):
     ans_f1 = ans_em = sp_f1 = sp_em = joint_f1 = joint_em = total = 0
     for ee in eval_examples:
         pred = answer_dict[ee.qas_id]['text']
-        ans = ee.origin_answer_text
+        ans = ee.orig_answer_text
         total += 1
         # print(pred)
         # print(ans)

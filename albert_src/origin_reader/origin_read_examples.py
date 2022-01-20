@@ -63,10 +63,10 @@ def process_single_data(data):
     answer = data.get('answer', '')
     sup = data.get('supporting_facts', [])
     question_tokens = question_text_process(question, tokenizer=tokenizer_global)
-    full_sentence_labels = []
+    full_sents_lbs = []
     # 获取context文本到token
     has_answer = False
-    answer_text = ''
+    answer_text = data.get('answer', '')
     if is_training_global:
         answer_text = data['answer']
         answer_label = data['labels'][0]
@@ -105,6 +105,10 @@ def process_single_data(data):
                 continue
             if sentence.strip() == '':
                 continue
+            if [title, sent_idx] in sup:
+                full_sents_lbs.append(1)
+            else:
+                full_sents_lbs.append(0)
             sentence_indexs.append(len(context))
             sentence_mask.append(1)
             if first_add and is_training_global and answer_label[1] >= cur_length:
@@ -303,6 +307,7 @@ def process_single_data(data):
         start_position=start_position,
         end_position=end_position,
         sentence_labels=all_sentence_labels,
+        full_sents_lbs=full_sents_lbs,
     )
     all_examples.append(example)
     result = {}
@@ -338,24 +343,24 @@ def read_examples(input_file, supporting_para_file, tokenizer, is_training, sent
     sp_dict_global = sp_dict
     sentence_token_global = sentence_token
     # 多进程处理
-    # pool_size = max(1, multiprocessing.cpu_count() // 1)
-    # pool = Pool(pool_size)
-    # for result in tqdm(pool.imap(func=process_single_data, iterable=datas),
-    #                                           total=len(datas),
-    #                                           desc="process examples..."):
-    #     examples.extend(result['all_examples'])
-    #     no_answer_num += result['no_answer_num']
-    #     diff_num += result['diff_num']
-    #     over_context_num += result['over_context_num']
-    # pool.close()
-    # pool.join()
-    # 单进程处理
-    for data_idx, data in enumerate(tqdm(datas)):
-        result = process_single_data(data=data)
+    pool_size = max(1, multiprocessing.cpu_count() // 2)
+    pool = Pool(pool_size)
+    for result in tqdm(pool.imap(func=process_single_data, iterable=datas),
+                                              total=len(datas),
+                                              desc="process examples..."):
         examples.extend(result['all_examples'])
         no_answer_num += result['no_answer_num']
         diff_num += result['diff_num']
         over_context_num += result['over_context_num']
+    pool.close()
+    pool.join()
+    # 单进程处理
+    # for data_idx, data in enumerate(tqdm(datas)):
+    #     result = process_single_data(data=data)
+    #     examples.extend(result['all_examples'])
+    #     no_answer_num += result['no_answer_num']
+    #     diff_num += result['diff_num']
+    #     over_context_num += result['over_context_num']
     print("all_example: {} no answer num: {} diff num: {} over context num: {}".format(
         len(examples),
         no_answer_num,

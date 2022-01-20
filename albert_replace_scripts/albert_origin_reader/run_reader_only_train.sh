@@ -1,16 +1,21 @@
 #!/bin/bash
 echo "----------------------------------------------------"
 # albert-xxlarge-v2
-export CUDA_VISIBLE_DEVICES="0"
+export CUDA_VISIBLE_DEVICES="0,1"
+#echo "start to sleep"
+#date
+#sleep 2.5h
+#date
+#echo "start to sleep"
 BERT_MODEL=albert-xxlarge-v2
 MODEL_NAME=AlbertForQuestionAnsweringForwardBestWithMask
 
 # truly train setting
-TRAIN_DIR=../../data/checkpoints/20220119_albert_xxlarge_forward_best_only_train
+TRAIN_DIR=../../data/checkpoints/20220120_replace_albert_xxlarge_forward_best_only_train
 TRAIN_TRAIN_FILE=../../data/hotpot_data/hotpot_train_labeled_data_v3.json
 TRAIN_DEV_FILE=../../data/hotpot_data/hotpot_dev_labeled_data_v3.json
-TRAIN_LOG=20220119_albert_xxlarge_forward_best_only_train
-TRAIN_CACHE=../../data/cache/20220119_albert_xxlarge_forward_best_only_train
+TRAIN_LOG=20220120_replace_albert_xxlarge_forward_best_only_train
+TRAIN_CACHE=../../data/cache/20220120_replace_albert_xxlarge_forward_best_only_train
 # model choice BertForQuestionAnsweringCoAttention,
                # BertForQuestionAnsweringThreeCoAttention,
                # BertForQuestionAnsweringThreeSameCoAttention,
@@ -25,7 +30,7 @@ TRAIN_CACHE=../../data/cache/20220119_albert_xxlarge_forward_best_only_train
                # ElectraForQuestionAnsweringThreeCrossAttention
                # google/electra-large-discriminator
                # ElectraForQuestionAnsweringQANet
-cd ../../albert_src/origin_reader
+cd ../../albert_replace_src/origin_reader
 python -u origin_reader_model.py \
   --bert_model $BERT_MODEL \
   --output_dir $TRAIN_DIR \
@@ -37,7 +42,7 @@ python -u origin_reader_model.py \
   --train_supporting_para_file ../../data/selector/20211219_second_hop_electra_large_1e_paragraph_selector_12_result/train_related.json \
   --dev_supporting_para_file ../../data/selector/20211219_second_hop_electra_large_1e_paragraph_selector_12_result/dev_related.json \
   --feature_cache_path $TRAIN_CACHE \
-  --train_batch_size 6 \
+  --train_batch_size 8 \
   --warmup_proportion 0.1 \
   --gradient_accumulation_steps 1 \
   --local_rank -1 \

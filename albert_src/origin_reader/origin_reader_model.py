@@ -279,7 +279,7 @@ def get_train_data(args,
     return total_feature_num, start_idxs, cached_train_features_file
 
 
-def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, dev_examples):
+def dev_evaluate(args, model, dev_dataloader, n_gpu, device, dev_features, tokenizer, dev_examples, step=0):
     """ 模型验证 """
     model.eval()
     all_results = []
@@ -321,6 +321,13 @@ def dev_evaluate(model, dev_dataloader, n_gpu, device, dev_features, tokenizer, 
 
     _, preds, sp_pred = write_predictions(tokenizer, dev_examples, dev_features, all_results)
     ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = evaluate(dev_examples, preds, sp_pred)
+    output_dir = "{}/{}".format(args.output_dir, step)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    with open(os.path.join(output_dir, "preds.json"), "w") as f:
+        json.dump(preds, f)
+    with open(os.path.join(output_dir, "sp_pred.json"), "w") as f:
+        json.dump(sp_pred, f)
     model.train()
     return ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
 
@@ -609,13 +616,16 @@ def run_train(rank=0, world_size=1):
                                                                                   pad_token=pad_token,
                                                                                   sentence_token=sentence_token
                                                                                   )
-                        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(model,
-                                                                                        dev_dataloader,
-                                                                                        n_gpu,
-                                                                                        device,
-                                                                                        dev_features,
-                                                                                        tokenizer,
-                                                                                        dev_examples)
+                        ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em = dev_evaluate(args=args,
+                                                                                        model=model,
+                                                                                        dev_dataloader=dev_dataloader,
+                                                                                        n_gpu=n_gpu,
+                                                                                        device=device,
+                                                                                        dev_features=dev_features,
+                                                                                        tokenizer=tokenizer,
+                                                                                        dev_examples=dev_examples,
+                                                                                        step=global_step
+                                                                                        )
                         logger.info("epoch:{} data: {} step: {}".format(epoch_idx, ind, global_step))
                         logger.info("ans_f1:{} ans_em:{} sp_f1:{} sp_em: {} joint_f1: {} joint_em:{}".format(
                             ans_f1, ans_em, sp_f1, sp_em, joint_f1, joint_em
